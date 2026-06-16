@@ -1,0 +1,778 @@
+2026-06-16 17:13:22,639 [PRODUCER] INFO 已发送第 30 条: sensor=sensor_C value=77.39
+2026-06-16 17:13:32,727 [PRODUCER] INFO 已发送第 31 条: sensor=sensor_E value=13.43
+2026-06-16 17:13:42,810 [PRODUCER] INFO 已发送第 32 条: sensor=sensor_A value=84.41
+2026-06-16 17:13:52,849 [PRODUCER] INFO 已发送第 33 条: sensor=sensor_C value=21.52
+2026-06-16 17:14:02,930 [PRODUCER] INFO 已发送第 34 条: sensor=sensor_D value=44.1
+2026-06-16 17:14:13,008 [PRODUCER] INFO 已发送第 35 条: sensor=sensor_A value=11.37
+2026-06-16 17:14:23,077 [PRODUCER] INFO 已发送第 36 条: sensor=sensor_B value=85.06
+2026-06-16 17:14:33,121 [PRODUCER] INFO 已发送第 37 条: sensor=sensor_C value=94.47
+2026-06-16 17:14:43,182 [PRODUCER] INFO 已发送第 38 条: sensor=sensor_C value=73.01
+2026-06-16 17:14:53,269 [PRODUCER] INFO 已发送第 39 条: sensor=sensor_A value=77.57
+2026-06-16 17:15:03,343 [PRODUCER] INFO 已发送第 40 条: sensor=sensor_B value=36.5
+2026-06-16 17:15:13,373 [PRODUCER] INFO 已发送第 41 条: sensor=sensor_A value=49.92
+2026-06-16 17:15:23,455 [PRODUCER] INFO 已发送第 42 条: sensor=sensor_B value=48.89
+2026-06-16 17:15:33,493 [PRODUCER] INFO 已发送第 43 条: sensor=sensor_A value=52.8
+2026-06-16 17:15:43,529 [PRODUCER] INFO 已发送第 44 条: sensor=sensor_D value=15.63
+2026-06-16 17:15:53,569 [PRODUCER] INFO 已发送第 45 条: sensor=sensor_E value=60.35
+2026-06-16 17:16:03,658 [PRODUCER] INFO 已发送第 46 条: sensor=sensor_D value=92.91
+2026-06-16 17:16:13,747 [PRODUCER] INFO 已发送第 47 条: sensor=sensor_B value=74.09
+2026-06-16 17:16:23,829 [PRODUCER] INFO 已发送第 48 条: sensor=sensor_A value=54.35
+2026-06-16 17:16:33,915 [PRODUCER] INFO 已发送第 49 条: sensor=sensor_E value=79.46
+2026-06-16 17:16:43,959 [PRODUCER] INFO 已发送第 50 条: sensor=sensor_A value=34.25
+2026-06-16 17:16:54,045 [PRODUCER] INFO 已发送第 51 条: sensor=sensor_B value=33.11
+2026-06-16 17:17:04,064 [PRODUCER] INFO 已发送第 52 条: sensor=sensor_B value=20.1
+2026-06-16 17:17:14,142 [PRODUCER] INFO 已发送第 53 条: sensor=sensor_A value=21.47
+2026-06-16 17:17:24,221 [PRODUCER] INFO 已发送第 54 条: sensor=sensor_D value=13.86
+2026-06-16 17:17:34,301 [PRODUCER] INFO 已发送第 55 条: sensor=sensor_C value=43.97
+2026-06-16 17:17:44,366 [PRODUCER] INFO 已发送第 56 条: sensor=sensor_A value=71.35
+2026-06-16 17:17:54,447 [PRODUCER] INFO 已发送第 57 条: sensor=sensor_C value=73.25
+2026-06-16 17:18:04,514 [PRODUCER] INFO 已发送第 58 条: sensor=sensor_C value=13.9
+2026-06-16 17:18:14,573 [PRODUCER] INFO 已发送第 59 条: sensor=sensor_C value=57.86
+2026-06-16 17:18:24,640 [PRODUCER] INFO 已发送第 60 条: sensor=sensor_D value=81.04
+2026-06-16 17:18:34,713 [PRODUCER] INFO 已发送第 61 条: sensor=sensor_D value=23.66
+2026-06-16 17:18:44,791 [PRODUCER] INFO 已发送第 62 条: sensor=sensor_D value=57.71
+2026-06-16 17:18:54,844 [PRODUCER] INFO 已发送第 63 条: sensor=sensor_D value=41.56
+2026-06-16 17:19:04,886 [PRODUCER] INFO 已发送第 64 条: sensor=sensor_D value=48.28
+2026-06-16 17:19:14,935 [PRODUCER] INFO 已发送第 65 条: sensor=sensor_A value=15.59
+2026-06-16 17:19:25,017 [PRODUCER] INFO 已发送第 66 条: sensor=sensor_E value=69.43
+2026-06-16 17:19:35,094 [PRODUCER] INFO 已发送第 67 条: sensor=sensor_A value=29.16
+2026-06-16 17:19:45,168 [PRODUCER] INFO 已发送第 68 条: sensor=sensor_C value=56.02
+2026-06-16 17:19:55,252 [PRODUCER] INFO 已发送第 69 条: sensor=sensor_E value=25.98
+2026-06-16 17:20:05,335 [PRODUCER] INFO 已发送第 70 条: sensor=sensor_B value=23.03
+2026-06-16 17:20:15,428 [PRODUCER] INFO 已发送第 71 条: sensor=sensor_A value=46.22
+2026-06-16 17:20:25,470 [PRODUCER] INFO 已发送第 72 条: sensor=sensor_D value=46.7
+2026-06-16 17:20:35,543 [PRODUCER] INFO 已发送第 73 条: sensor=sensor_E value=33.1
+2026-06-16 17:20:45,624 [PRODUCER] INFO 已发送第 74 条: sensor=sensor_A value=88.44
+2026-06-16 17:20:55,707 [PRODUCER] INFO 已发送第 75 条: sensor=sensor_D value=28.28
+2026-06-16 17:21:05,752 [PRODUCER] INFO 已发送第 76 条: sensor=sensor_D value=77.01
+2026-06-16 17:21:15,777 [PRODUCER] INFO 已发送第 77 条: sensor=sensor_E value=28.65
+2026-06-16 17:21:25,874 [PRODUCER] INFO 已发送第 78 条: sensor=sensor_C value=82.4
+2026-06-16 17:21:35,931 [PRODUCER] INFO 已发送第 79 条: sensor=sensor_C value=97.69
+2026-06-16 17:21:46,007 [PRODUCER] INFO 已发送第 80 条: sensor=sensor_D value=33.38
+2026-06-16 17:21:56,092 [PRODUCER] INFO 已发送第 81 条: sensor=sensor_D value=87.73
+2026-06-16 17:22:06,173 [PRODUCER] INFO 已发送第 82 条: sensor=sensor_A value=12.62
+2026-06-16 17:22:16,253 [PRODUCER] INFO 已发送第 83 条: sensor=sensor_C value=42.88
+2026-06-16 17:22:26,284 [PRODUCER] INFO 已发送第 84 条: sensor=sensor_B value=11.4
+2026-06-16 17:22:36,353 [PRODUCER] INFO 已发送第 85 条: sensor=sensor_B value=98.44
+2026-06-16 17:22:46,461 [PRODUCER] INFO 已发送第 86 条: sensor=sensor_A value=85.74
+2026-06-16 17:22:56,534 [PRODUCER] INFO 已发送第 87 条: sensor=sensor_B value=99.87
+2026-06-16 17:23:06,620 [PRODUCER] INFO 已发送第 88 条: sensor=sensor_C value=83.14
+2026-06-16 17:23:16,712 [PRODUCER] INFO 已发送第 89 条: sensor=sensor_D value=33.87
+2026-06-16 17:23:26,792 [PRODUCER] INFO 已发送第 90 条: sensor=sensor_D value=29.36
+2026-06-16 17:23:36,847 [PRODUCER] INFO 已发送第 91 条: sensor=sensor_E value=87.1
+2026-06-16 17:23:46,925 [PRODUCER] INFO 已发送第 92 条: sensor=sensor_D value=41.7
+2026-06-16 17:23:57,018 [PRODUCER] INFO 已发送第 93 条: sensor=sensor_E value=25.07
+2026-06-16 17:25:34,010 [PRODUCER] INFO Producer 启动中...
+2026-06-16 17:25:34,016 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 17:25:34,016 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 17:25:34,017 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Connection complete.
+2026-06-16 17:25:34,204 [PRODUCER] INFO Broker version identified as 2.5.0
+2026-06-16 17:25:34,204 [PRODUCER] INFO Set configuration api_version=(2, 5, 0) to skip auto check_version requests on startup
+2026-06-16 17:25:34,207 [PRODUCER] INFO 成功连接 Kafka: localhost:9092
+2026-06-16 17:25:34,208 [PRODUCER] INFO 开始发送数据，间隔 10 秒
+2026-06-16 17:25:34,214 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 17:25:34,215 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Connection complete.
+2026-06-16 17:25:34,215 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connected> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. 
+2026-06-16 17:25:34,328 [PRODUCER] INFO 已发送第 1 条: sensor=sensor_A value=58.96
+2026-06-16 17:25:44,410 [PRODUCER] INFO 已发送第 2 条: sensor=sensor_D value=81.28
+2026-06-16 17:25:54,510 [PRODUCER] INFO 已发送第 3 条: sensor=sensor_A value=92.61
+2026-06-16 17:26:04,616 [PRODUCER] INFO 已发送第 4 条: sensor=sensor_C value=54.76
+2026-06-16 17:26:14,705 [PRODUCER] INFO 已发送第 5 条: sensor=sensor_C value=14.78
+2026-06-16 17:26:24,788 [PRODUCER] INFO 已发送第 6 条: sensor=sensor_C value=79.36
+2026-06-16 17:26:34,886 [PRODUCER] INFO 已发送第 7 条: sensor=sensor_B value=45.47
+2026-06-16 17:26:44,933 [PRODUCER] INFO 已发送第 8 条: sensor=sensor_D value=54.57
+2026-06-16 17:26:54,956 [PRODUCER] INFO 已发送第 9 条: sensor=sensor_B value=24.13
+2026-06-16 17:27:05,046 [PRODUCER] INFO 已发送第 10 条: sensor=sensor_C value=15.18
+2026-06-16 17:27:15,142 [PRODUCER] INFO 已发送第 11 条: sensor=sensor_B value=84.29
+2026-06-16 17:27:25,205 [PRODUCER] INFO 已发送第 12 条: sensor=sensor_C value=59.35
+2026-06-16 17:27:35,247 [PRODUCER] INFO 已发送第 13 条: sensor=sensor_B value=34.18
+2026-06-16 17:27:45,372 [PRODUCER] INFO 已发送第 14 条: sensor=sensor_A value=88.05
+2026-06-16 17:27:55,460 [PRODUCER] INFO 已发送第 15 条: sensor=sensor_B value=49.25
+2026-06-16 17:28:05,531 [PRODUCER] INFO 已发送第 16 条: sensor=sensor_D value=92.92
+2026-06-16 17:28:15,619 [PRODUCER] INFO 已发送第 17 条: sensor=sensor_E value=88.47
+2026-06-16 17:28:25,712 [PRODUCER] INFO 已发送第 18 条: sensor=sensor_E value=42.32
+2026-06-16 17:28:35,810 [PRODUCER] INFO 已发送第 19 条: sensor=sensor_D value=34.81
+2026-06-16 17:28:45,905 [PRODUCER] INFO 已发送第 20 条: sensor=sensor_A value=95.72
+2026-06-16 17:28:56,029 [PRODUCER] INFO 已发送第 21 条: sensor=sensor_D value=14.86
+2026-06-16 17:29:06,098 [PRODUCER] INFO 已发送第 22 条: sensor=sensor_D value=51.87
+2026-06-16 17:29:16,156 [PRODUCER] INFO 已发送第 23 条: sensor=sensor_C value=31.65
+2026-06-16 17:29:26,258 [PRODUCER] INFO 已发送第 24 条: sensor=sensor_D value=11.78
+2026-06-16 17:29:36,322 [PRODUCER] INFO 已发送第 25 条: sensor=sensor_B value=66.28
+2026-06-16 17:29:46,414 [PRODUCER] INFO 已发送第 26 条: sensor=sensor_A value=93.22
+2026-06-16 17:29:56,482 [PRODUCER] INFO 已发送第 27 条: sensor=sensor_E value=80.0
+2026-06-16 17:30:06,575 [PRODUCER] INFO 已发送第 28 条: sensor=sensor_C value=13.78
+2026-06-16 17:30:16,684 [PRODUCER] INFO 已发送第 29 条: sensor=sensor_C value=60.33
+2026-06-16 17:30:26,745 [PRODUCER] INFO 已发送第 30 条: sensor=sensor_C value=65.5
+2026-06-16 17:30:36,832 [PRODUCER] INFO 已发送第 31 条: sensor=sensor_E value=64.5
+2026-06-16 17:30:46,895 [PRODUCER] INFO 已发送第 32 条: sensor=sensor_D value=63.43
+2026-06-16 17:30:56,916 [PRODUCER] INFO 已发送第 33 条: sensor=sensor_D value=60.51
+2026-06-16 17:31:07,045 [PRODUCER] INFO 已发送第 34 条: sensor=sensor_D value=58.46
+2026-06-16 17:31:17,149 [PRODUCER] INFO 已发送第 35 条: sensor=sensor_C value=76.91
+2026-06-16 17:31:27,229 [PRODUCER] INFO 已发送第 36 条: sensor=sensor_E value=47.29
+2026-06-16 17:31:37,248 [PRODUCER] INFO 已发送第 37 条: sensor=sensor_A value=49.97
+2026-06-16 17:31:47,383 [PRODUCER] INFO 已发送第 38 条: sensor=sensor_E value=50.77
+2026-06-16 17:31:57,424 [PRODUCER] INFO 已发送第 39 条: sensor=sensor_D value=67.87
+2026-06-16 17:32:07,530 [PRODUCER] INFO 已发送第 40 条: sensor=sensor_D value=77.1
+2026-06-16 17:32:17,617 [PRODUCER] INFO 已发送第 41 条: sensor=sensor_A value=85.63
+2026-06-16 17:32:27,802 [PRODUCER] INFO 已发送第 42 条: sensor=sensor_A value=96.41
+2026-06-16 17:32:37,938 [PRODUCER] INFO 已发送第 43 条: sensor=sensor_E value=42.62
+2026-06-16 17:32:48,025 [PRODUCER] INFO 已发送第 44 条: sensor=sensor_A value=39.38
+2026-06-16 17:32:58,131 [PRODUCER] INFO 已发送第 45 条: sensor=sensor_C value=37.9
+2026-06-16 17:33:08,217 [PRODUCER] INFO 已发送第 46 条: sensor=sensor_A value=56.6
+2026-06-16 17:33:18,326 [PRODUCER] INFO 已发送第 47 条: sensor=sensor_E value=18.68
+2026-06-16 17:33:28,408 [PRODUCER] INFO 已发送第 48 条: sensor=sensor_B value=67.94
+2026-06-16 17:33:38,501 [PRODUCER] INFO 已发送第 49 条: sensor=sensor_A value=24.6
+2026-06-16 17:33:48,573 [PRODUCER] INFO 已发送第 50 条: sensor=sensor_B value=76.76
+2026-06-16 17:33:58,660 [PRODUCER] INFO 已发送第 51 条: sensor=sensor_A value=79.29
+2026-06-16 17:34:08,784 [PRODUCER] INFO 已发送第 52 条: sensor=sensor_E value=39.33
+2026-06-16 17:34:18,855 [PRODUCER] INFO 已发送第 53 条: sensor=sensor_A value=64.32
+2026-06-16 17:34:28,950 [PRODUCER] INFO 已发送第 54 条: sensor=sensor_A value=10.59
+2026-06-16 17:34:39,039 [PRODUCER] INFO 已发送第 55 条: sensor=sensor_E value=84.86
+2026-06-16 17:34:49,081 [PRODUCER] INFO 已发送第 56 条: sensor=sensor_A value=45.85
+2026-06-16 17:34:59,167 [PRODUCER] INFO 已发送第 57 条: sensor=sensor_A value=22.87
+2026-06-16 17:35:09,267 [PRODUCER] INFO 已发送第 58 条: sensor=sensor_A value=93.02
+2026-06-16 17:35:19,371 [PRODUCER] INFO 已发送第 59 条: sensor=sensor_A value=88.64
+2026-06-16 17:35:29,450 [PRODUCER] INFO 已发送第 60 条: sensor=sensor_B value=26.9
+2026-06-16 17:35:39,511 [PRODUCER] INFO 已发送第 61 条: sensor=sensor_C value=33.91
+2026-06-16 17:35:49,598 [PRODUCER] INFO 已发送第 62 条: sensor=sensor_A value=94.55
+2026-06-16 17:35:59,695 [PRODUCER] INFO 已发送第 63 条: sensor=sensor_D value=41.68
+2026-06-16 17:36:09,788 [PRODUCER] INFO 已发送第 64 条: sensor=sensor_C value=66.61
+2026-06-16 17:36:19,881 [PRODUCER] INFO 已发送第 65 条: sensor=sensor_C value=48.01
+2026-06-16 17:36:29,970 [PRODUCER] INFO 已发送第 66 条: sensor=sensor_B value=60.99
+2026-06-16 17:36:40,041 [PRODUCER] INFO 已发送第 67 条: sensor=sensor_A value=11.72
+2026-06-16 17:36:50,123 [PRODUCER] INFO 已发送第 68 条: sensor=sensor_C value=33.6
+2026-06-16 17:37:00,204 [PRODUCER] INFO 已发送第 69 条: sensor=sensor_D value=75.46
+2026-06-16 17:37:10,286 [PRODUCER] INFO 已发送第 70 条: sensor=sensor_C value=13.52
+2026-06-16 17:37:20,302 [PRODUCER] INFO 已发送第 71 条: sensor=sensor_E value=80.98
+2026-06-16 17:37:30,378 [PRODUCER] INFO 已发送第 72 条: sensor=sensor_E value=24.65
+2026-06-16 17:37:40,383 [PRODUCER] INFO 已发送第 73 条: sensor=sensor_A value=99.33
+2026-06-16 17:37:50,447 [PRODUCER] INFO 已发送第 74 条: sensor=sensor_E value=33.46
+2026-06-16 17:38:00,555 [PRODUCER] INFO 已发送第 75 条: sensor=sensor_D value=52.17
+2026-06-16 17:38:10,608 [PRODUCER] INFO 已发送第 76 条: sensor=sensor_E value=89.09
+2026-06-16 17:38:20,739 [PRODUCER] INFO 已发送第 77 条: sensor=sensor_D value=78.06
+2026-06-16 17:38:30,880 [PRODUCER] INFO 已发送第 78 条: sensor=sensor_D value=34.98
+2026-06-16 17:38:40,950 [PRODUCER] INFO 已发送第 79 条: sensor=sensor_E value=98.88
+2026-06-16 17:38:51,035 [PRODUCER] INFO 已发送第 80 条: sensor=sensor_E value=30.26
+2026-06-16 17:39:01,117 [PRODUCER] INFO 已发送第 81 条: sensor=sensor_D value=80.49
+2026-06-16 17:39:11,504 [PRODUCER] INFO 已发送第 82 条: sensor=sensor_D value=41.48
+2026-06-16 17:39:21,565 [PRODUCER] INFO 已发送第 83 条: sensor=sensor_A value=66.37
+2026-06-16 17:39:32,077 [PRODUCER] INFO 已发送第 84 条: sensor=sensor_D value=93.88
+2026-06-16 17:39:42,273 [PRODUCER] INFO 已发送第 85 条: sensor=sensor_D value=29.08
+2026-06-16 17:39:52,355 [PRODUCER] INFO 已发送第 86 条: sensor=sensor_E value=32.75
+2026-06-16 17:40:02,404 [PRODUCER] INFO 已发送第 87 条: sensor=sensor_B value=34.89
+2026-06-16 17:40:13,109 [PRODUCER] INFO 已发送第 88 条: sensor=sensor_D value=35.27
+2026-06-16 17:40:23,228 [PRODUCER] INFO 已发送第 89 条: sensor=sensor_E value=73.13
+2026-06-16 17:40:33,322 [PRODUCER] INFO 已发送第 90 条: sensor=sensor_B value=48.42
+2026-06-16 17:40:43,452 [PRODUCER] INFO 已发送第 91 条: sensor=sensor_A value=87.89
+2026-06-16 17:40:53,549 [PRODUCER] INFO 已发送第 92 条: sensor=sensor_D value=17.06
+2026-06-16 17:41:03,646 [PRODUCER] INFO 已发送第 93 条: sensor=sensor_D value=64.23
+2026-06-16 17:41:13,720 [PRODUCER] INFO 已发送第 94 条: sensor=sensor_D value=26.56
+2026-06-16 17:41:23,811 [PRODUCER] INFO 已发送第 95 条: sensor=sensor_D value=29.3
+2026-06-16 17:41:33,876 [PRODUCER] INFO 已发送第 96 条: sensor=sensor_E value=24.79
+2026-06-16 17:41:43,967 [PRODUCER] INFO 已发送第 97 条: sensor=sensor_E value=14.01
+2026-06-16 17:41:54,056 [PRODUCER] INFO 已发送第 98 条: sensor=sensor_E value=51.76
+2026-06-16 17:42:04,147 [PRODUCER] INFO 已发送第 99 条: sensor=sensor_C value=35.76
+2026-06-16 17:42:14,231 [PRODUCER] INFO 已发送第 100 条: sensor=sensor_E value=81.72
+2026-06-16 17:42:24,307 [PRODUCER] INFO 已发送第 101 条: sensor=sensor_E value=92.37
+2026-06-16 17:42:34,374 [PRODUCER] INFO 已发送第 102 条: sensor=sensor_E value=33.1
+2026-06-16 17:42:44,457 [PRODUCER] INFO 已发送第 103 条: sensor=sensor_C value=12.53
+2026-06-16 17:42:54,537 [PRODUCER] INFO 已发送第 104 条: sensor=sensor_E value=64.37
+2026-06-16 17:43:04,621 [PRODUCER] INFO 已发送第 105 条: sensor=sensor_C value=26.25
+2026-06-16 17:43:14,704 [PRODUCER] INFO 已发送第 106 条: sensor=sensor_A value=24.48
+2026-06-16 17:43:24,794 [PRODUCER] INFO 已发送第 107 条: sensor=sensor_E value=45.95
+2026-06-16 17:43:34,878 [PRODUCER] INFO 已发送第 108 条: sensor=sensor_C value=85.45
+2026-06-16 17:43:44,966 [PRODUCER] INFO 已发送第 109 条: sensor=sensor_C value=94.51
+2026-06-16 17:43:55,069 [PRODUCER] INFO 已发送第 110 条: sensor=sensor_B value=27.61
+2026-06-16 17:44:05,170 [PRODUCER] INFO 已发送第 111 条: sensor=sensor_C value=70.57
+2026-06-16 17:44:15,262 [PRODUCER] INFO 已发送第 112 条: sensor=sensor_D value=72.51
+2026-06-16 17:44:25,344 [PRODUCER] INFO 已发送第 113 条: sensor=sensor_C value=74.41
+2026-06-16 17:44:35,441 [PRODUCER] INFO 已发送第 114 条: sensor=sensor_C value=91.51
+2026-06-16 17:44:45,522 [PRODUCER] INFO 已发送第 115 条: sensor=sensor_C value=16.28
+2026-06-16 17:44:55,584 [PRODUCER] INFO 已发送第 116 条: sensor=sensor_E value=20.0
+2026-06-16 17:45:05,712 [PRODUCER] INFO 已发送第 117 条: sensor=sensor_C value=97.65
+2026-06-16 17:45:15,798 [PRODUCER] INFO 已发送第 118 条: sensor=sensor_C value=46.36
+2026-06-16 17:45:25,882 [PRODUCER] INFO 已发送第 119 条: sensor=sensor_E value=33.34
+2026-06-16 17:45:35,981 [PRODUCER] INFO 已发送第 120 条: sensor=sensor_D value=32.3
+2026-06-16 17:45:46,126 [PRODUCER] INFO 已发送第 121 条: sensor=sensor_D value=80.09
+2026-06-16 17:45:56,206 [PRODUCER] INFO 已发送第 122 条: sensor=sensor_C value=66.79
+2026-06-16 17:46:06,349 [PRODUCER] INFO 已发送第 123 条: sensor=sensor_E value=39.0
+2026-06-16 17:46:16,519 [PRODUCER] INFO 已发送第 124 条: sensor=sensor_D value=88.02
+2026-06-16 17:46:26,619 [PRODUCER] INFO 已发送第 125 条: sensor=sensor_D value=32.18
+2026-06-16 17:46:36,707 [PRODUCER] INFO 已发送第 126 条: sensor=sensor_E value=24.57
+2026-06-16 17:46:46,783 [PRODUCER] INFO 已发送第 127 条: sensor=sensor_D value=31.56
+2026-06-16 17:46:56,808 [PRODUCER] INFO 已发送第 128 条: sensor=sensor_D value=88.25
+2026-06-16 17:47:06,908 [PRODUCER] INFO 已发送第 129 条: sensor=sensor_B value=63.57
+2026-06-16 17:47:16,999 [PRODUCER] INFO 已发送第 130 条: sensor=sensor_E value=22.92
+2026-06-16 17:47:27,081 [PRODUCER] INFO 已发送第 131 条: sensor=sensor_D value=80.8
+2026-06-16 17:47:37,183 [PRODUCER] INFO 已发送第 132 条: sensor=sensor_D value=56.07
+2026-06-16 17:47:47,279 [PRODUCER] INFO 已发送第 133 条: sensor=sensor_D value=92.6
+2026-06-16 17:47:57,350 [PRODUCER] INFO 已发送第 134 条: sensor=sensor_E value=99.18
+2026-06-16 17:48:07,521 [PRODUCER] INFO 已发送第 135 条: sensor=sensor_C value=55.44
+2026-06-16 17:48:17,804 [PRODUCER] INFO 已发送第 136 条: sensor=sensor_C value=20.39
+2026-06-16 17:48:28,022 [PRODUCER] INFO 已发送第 137 条: sensor=sensor_E value=41.96
+2026-06-16 17:48:38,133 [PRODUCER] INFO 已发送第 138 条: sensor=sensor_C value=25.33
+2026-06-16 17:48:48,414 [PRODUCER] INFO 已发送第 139 条: sensor=sensor_D value=74.23
+2026-06-16 17:48:58,550 [PRODUCER] INFO 已发送第 140 条: sensor=sensor_C value=72.56
+2026-06-16 17:49:08,674 [PRODUCER] INFO 已发送第 141 条: sensor=sensor_D value=84.88
+2026-06-16 17:49:18,769 [PRODUCER] INFO 已发送第 142 条: sensor=sensor_C value=59.98
+2026-06-16 17:49:29,136 [PRODUCER] INFO 已发送第 143 条: sensor=sensor_C value=56.74
+2026-06-16 17:49:39,254 [PRODUCER] INFO 已发送第 144 条: sensor=sensor_A value=35.44
+2026-06-16 17:49:49,361 [PRODUCER] INFO 已发送第 145 条: sensor=sensor_E value=21.52
+2026-06-16 17:49:59,590 [PRODUCER] INFO 已发送第 146 条: sensor=sensor_C value=33.55
+2026-06-16 17:50:09,691 [PRODUCER] INFO 已发送第 147 条: sensor=sensor_E value=65.41
+2026-06-16 17:50:19,777 [PRODUCER] INFO 已发送第 148 条: sensor=sensor_B value=80.67
+2026-06-16 17:50:29,881 [PRODUCER] INFO 已发送第 149 条: sensor=sensor_E value=70.53
+2026-06-16 17:50:39,965 [PRODUCER] INFO 已发送第 150 条: sensor=sensor_C value=76.66
+2026-06-16 17:50:50,046 [PRODUCER] INFO 已发送第 151 条: sensor=sensor_E value=43.16
+2026-06-16 17:51:00,135 [PRODUCER] INFO 已发送第 152 条: sensor=sensor_B value=30.21
+2026-06-16 17:51:10,225 [PRODUCER] INFO 已发送第 153 条: sensor=sensor_A value=94.45
+2026-06-16 17:51:20,297 [PRODUCER] INFO 已发送第 154 条: sensor=sensor_D value=59.74
+2026-06-16 17:51:30,381 [PRODUCER] INFO 已发送第 155 条: sensor=sensor_A value=54.53
+2026-06-16 17:51:40,449 [PRODUCER] INFO 已发送第 156 条: sensor=sensor_A value=40.31
+2026-06-16 17:51:50,505 [PRODUCER] INFO 已发送第 157 条: sensor=sensor_B value=17.53
+2026-06-16 17:52:00,571 [PRODUCER] INFO 已发送第 158 条: sensor=sensor_E value=42.46
+2026-06-16 17:52:10,647 [PRODUCER] INFO 已发送第 159 条: sensor=sensor_B value=87.89
+2026-06-16 17:52:20,708 [PRODUCER] INFO 已发送第 160 条: sensor=sensor_E value=24.24
+2026-06-16 17:52:30,784 [PRODUCER] INFO 已发送第 161 条: sensor=sensor_E value=79.33
+2026-06-16 17:52:40,853 [PRODUCER] INFO 已发送第 162 条: sensor=sensor_C value=81.6
+2026-06-16 17:52:50,905 [PRODUCER] INFO 已发送第 163 条: sensor=sensor_B value=39.3
+2026-06-16 17:53:01,014 [PRODUCER] INFO 已发送第 164 条: sensor=sensor_E value=14.0
+2026-06-16 17:53:11,110 [PRODUCER] INFO 已发送第 165 条: sensor=sensor_D value=81.39
+2026-06-16 17:53:21,193 [PRODUCER] INFO 已发送第 166 条: sensor=sensor_D value=73.14
+2026-06-16 17:53:31,261 [PRODUCER] INFO 已发送第 167 条: sensor=sensor_D value=28.69
+2026-06-16 17:53:41,341 [PRODUCER] INFO 已发送第 168 条: sensor=sensor_E value=15.85
+2026-06-16 17:53:51,353 [PRODUCER] INFO 已发送第 169 条: sensor=sensor_B value=55.67
+2026-06-16 17:54:01,444 [PRODUCER] INFO 已发送第 170 条: sensor=sensor_B value=36.58
+2026-06-16 17:54:11,536 [PRODUCER] INFO 已发送第 171 条: sensor=sensor_B value=49.83
+2026-06-16 17:54:21,608 [PRODUCER] INFO 已发送第 172 条: sensor=sensor_B value=88.54
+2026-06-16 17:54:31,683 [PRODUCER] INFO 已发送第 173 条: sensor=sensor_C value=96.93
+2026-06-16 17:54:41,743 [PRODUCER] INFO 已发送第 174 条: sensor=sensor_B value=48.46
+2026-06-16 17:54:51,818 [PRODUCER] INFO 已发送第 175 条: sensor=sensor_C value=90.7
+2026-06-16 17:55:01,892 [PRODUCER] INFO 已发送第 176 条: sensor=sensor_C value=59.96
+2026-06-16 17:55:11,966 [PRODUCER] INFO 已发送第 177 条: sensor=sensor_E value=70.14
+2026-06-16 17:55:22,043 [PRODUCER] INFO 已发送第 178 条: sensor=sensor_D value=76.77
+2026-06-16 17:55:32,123 [PRODUCER] INFO 已发送第 179 条: sensor=sensor_D value=55.63
+2026-06-16 17:55:42,194 [PRODUCER] INFO 已发送第 180 条: sensor=sensor_C value=30.73
+2026-06-16 17:55:52,202 [PRODUCER] INFO 已发送第 181 条: sensor=sensor_E value=97.28
+2026-06-16 17:56:02,240 [PRODUCER] INFO 已发送第 182 条: sensor=sensor_E value=89.95
+2026-06-16 17:56:12,314 [PRODUCER] INFO 已发送第 183 条: sensor=sensor_E value=63.27
+2026-06-16 17:56:22,402 [PRODUCER] INFO 已发送第 184 条: sensor=sensor_A value=92.45
+2026-06-16 17:56:32,488 [PRODUCER] INFO 已发送第 185 条: sensor=sensor_A value=41.99
+2026-06-16 17:56:42,563 [PRODUCER] INFO 已发送第 186 条: sensor=sensor_B value=82.7
+2026-06-16 17:56:52,628 [PRODUCER] INFO 已发送第 187 条: sensor=sensor_B value=50.04
+2026-06-16 17:57:02,740 [PRODUCER] INFO 已发送第 188 条: sensor=sensor_A value=79.51
+2026-06-16 17:57:12,838 [PRODUCER] INFO 已发送第 189 条: sensor=sensor_E value=75.0
+2026-06-16 17:57:22,918 [PRODUCER] INFO 已发送第 190 条: sensor=sensor_D value=27.78
+2026-06-16 17:57:33,009 [PRODUCER] INFO 已发送第 191 条: sensor=sensor_B value=12.97
+2026-06-16 17:57:43,104 [PRODUCER] INFO 已发送第 192 条: sensor=sensor_A value=53.69
+2026-06-16 17:57:53,188 [PRODUCER] INFO 已发送第 193 条: sensor=sensor_D value=77.52
+2026-06-16 17:58:03,244 [PRODUCER] INFO 已发送第 194 条: sensor=sensor_B value=14.76
+2026-06-16 17:58:13,323 [PRODUCER] INFO 已发送第 195 条: sensor=sensor_C value=88.91
+2026-06-16 17:58:23,397 [PRODUCER] INFO 已发送第 196 条: sensor=sensor_C value=89.27
+2026-06-16 17:58:33,414 [PRODUCER] INFO 已发送第 197 条: sensor=sensor_D value=16.77
+2026-06-16 17:58:43,456 [PRODUCER] INFO 已发送第 198 条: sensor=sensor_E value=95.45
+2026-06-16 17:58:53,540 [PRODUCER] INFO 已发送第 199 条: sensor=sensor_D value=56.94
+2026-06-16 17:59:03,648 [PRODUCER] INFO 已发送第 200 条: sensor=sensor_E value=63.8
+2026-06-16 17:59:13,768 [PRODUCER] INFO 已发送第 201 条: sensor=sensor_B value=62.19
+2026-06-16 17:59:23,848 [PRODUCER] INFO 已发送第 202 条: sensor=sensor_B value=61.51
+2026-06-16 17:59:33,929 [PRODUCER] INFO 已发送第 203 条: sensor=sensor_E value=86.44
+2026-06-16 17:59:44,013 [PRODUCER] INFO 已发送第 204 条: sensor=sensor_B value=36.86
+2026-06-16 17:59:54,116 [PRODUCER] INFO 已发送第 205 条: sensor=sensor_D value=90.58
+2026-06-16 18:00:04,198 [PRODUCER] INFO 已发送第 206 条: sensor=sensor_E value=66.35
+2026-06-16 18:00:14,280 [PRODUCER] INFO 已发送第 207 条: sensor=sensor_A value=38.53
+2026-06-16 18:00:24,369 [PRODUCER] INFO 已发送第 208 条: sensor=sensor_B value=79.43
+2026-06-16 18:00:34,455 [PRODUCER] INFO 已发送第 209 条: sensor=sensor_E value=67.02
+2026-06-16 18:00:44,562 [PRODUCER] INFO 已发送第 210 条: sensor=sensor_B value=92.4
+2026-06-16 18:00:54,658 [PRODUCER] INFO 已发送第 211 条: sensor=sensor_C value=54.5
+2026-06-16 18:01:04,777 [PRODUCER] INFO 已发送第 212 条: sensor=sensor_A value=22.01
+2026-06-16 18:01:14,902 [PRODUCER] INFO 已发送第 213 条: sensor=sensor_D value=32.63
+2026-06-16 18:01:24,989 [PRODUCER] INFO 已发送第 214 条: sensor=sensor_A value=34.48
+2026-06-16 18:01:35,067 [PRODUCER] INFO 已发送第 215 条: sensor=sensor_A value=86.72
+2026-06-16 18:01:45,151 [PRODUCER] INFO 已发送第 216 条: sensor=sensor_D value=98.64
+2026-06-16 18:01:55,369 [PRODUCER] INFO 已发送第 217 条: sensor=sensor_C value=44.35
+2026-06-16 18:02:05,483 [PRODUCER] INFO 已发送第 218 条: sensor=sensor_E value=75.3
+2026-06-16 18:02:15,631 [PRODUCER] INFO 已发送第 219 条: sensor=sensor_C value=95.74
+2026-06-16 18:02:26,060 [PRODUCER] INFO 已发送第 220 条: sensor=sensor_B value=30.53
+2026-06-16 18:02:36,213 [PRODUCER] INFO 已发送第 221 条: sensor=sensor_E value=81.16
+2026-06-16 18:02:46,309 [PRODUCER] INFO 已发送第 222 条: sensor=sensor_C value=12.25
+2026-06-16 18:02:56,400 [PRODUCER] INFO 已发送第 223 条: sensor=sensor_E value=12.4
+2026-06-16 18:03:06,466 [PRODUCER] INFO 已发送第 224 条: sensor=sensor_B value=38.76
+2026-06-16 18:03:16,547 [PRODUCER] INFO 已发送第 225 条: sensor=sensor_A value=98.8
+2026-06-16 18:03:26,631 [PRODUCER] INFO 已发送第 226 条: sensor=sensor_B value=42.22
+2026-06-16 18:03:36,691 [PRODUCER] INFO 已发送第 227 条: sensor=sensor_A value=69.3
+2026-06-16 18:03:46,821 [PRODUCER] INFO 已发送第 228 条: sensor=sensor_D value=36.23
+2026-06-16 18:03:56,910 [PRODUCER] INFO 已发送第 229 条: sensor=sensor_B value=92.41
+2026-06-16 18:04:06,964 [PRODUCER] INFO 已发送第 230 条: sensor=sensor_A value=66.45
+2026-06-16 18:04:17,049 [PRODUCER] INFO 已发送第 231 条: sensor=sensor_D value=47.23
+2026-06-16 18:04:27,135 [PRODUCER] INFO 已发送第 232 条: sensor=sensor_B value=85.98
+2026-06-16 18:04:37,226 [PRODUCER] INFO 已发送第 233 条: sensor=sensor_A value=58.67
+2026-06-16 18:06:44,483 [PRODUCER] INFO Producer 启动中...
+2026-06-16 18:06:44,488 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:06:44,489 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:06:44,489 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Connection complete.
+2026-06-16 18:06:44,676 [PRODUCER] INFO Broker version identified as 2.5.0
+2026-06-16 18:06:44,677 [PRODUCER] INFO Set configuration api_version=(2, 5, 0) to skip auto check_version requests on startup
+2026-06-16 18:06:44,682 [PRODUCER] INFO 成功连接 Kafka: localhost:9092
+2026-06-16 18:06:44,682 [PRODUCER] INFO 开始发送数据，间隔 10 秒
+2026-06-16 18:06:44,689 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:06:44,690 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Connection complete.
+2026-06-16 18:06:44,690 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connected> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. 
+2026-06-16 18:06:44,805 [PRODUCER] INFO 已发送第 1 条: sensor=sensor_C value=24.44
+2026-06-16 18:06:54,890 [PRODUCER] INFO 已发送第 2 条: sensor=sensor_E value=40.8
+2026-06-16 18:07:04,997 [PRODUCER] INFO 已发送第 3 条: sensor=sensor_E value=31.5
+2026-06-16 18:07:15,046 [PRODUCER] INFO 已发送第 4 条: sensor=sensor_A value=69.76
+2026-06-16 18:07:25,140 [PRODUCER] INFO 已发送第 5 条: sensor=sensor_A value=74.43
+2026-06-16 18:07:35,232 [PRODUCER] INFO 已发送第 6 条: sensor=sensor_B value=25.56
+2026-06-16 18:07:45,329 [PRODUCER] INFO 已发送第 7 条: sensor=sensor_E value=45.97
+2026-06-16 18:07:55,410 [PRODUCER] INFO 已发送第 8 条: sensor=sensor_B value=56.27
+2026-06-16 18:08:05,509 [PRODUCER] INFO 已发送第 9 条: sensor=sensor_B value=99.05
+2026-06-16 18:08:15,591 [PRODUCER] INFO 已发送第 10 条: sensor=sensor_B value=54.13
+2026-06-16 18:08:25,677 [PRODUCER] INFO 已发送第 11 条: sensor=sensor_A value=99.35
+2026-06-16 18:08:35,754 [PRODUCER] INFO 已发送第 12 条: sensor=sensor_B value=83.37
+2026-06-16 18:08:45,832 [PRODUCER] INFO 已发送第 13 条: sensor=sensor_A value=40.91
+2026-06-16 18:08:55,915 [PRODUCER] INFO 已发送第 14 条: sensor=sensor_A value=21.88
+2026-06-16 18:09:05,996 [PRODUCER] INFO 已发送第 15 条: sensor=sensor_C value=23.82
+2026-06-16 18:09:16,054 [PRODUCER] INFO 已发送第 16 条: sensor=sensor_C value=99.29
+2026-06-16 18:09:26,085 [PRODUCER] INFO 已发送第 17 条: sensor=sensor_D value=51.09
+2026-06-16 18:09:36,178 [PRODUCER] INFO 已发送第 18 条: sensor=sensor_A value=26.89
+2026-06-16 18:09:46,271 [PRODUCER] INFO 已发送第 19 条: sensor=sensor_C value=79.02
+2026-06-16 18:09:56,363 [PRODUCER] INFO 已发送第 20 条: sensor=sensor_E value=93.25
+2026-06-16 18:10:06,461 [PRODUCER] INFO 已发送第 21 条: sensor=sensor_D value=97.64
+2026-06-16 18:10:16,687 [PRODUCER] INFO 已发送第 22 条: sensor=sensor_E value=88.47
+2026-06-16 18:10:26,767 [PRODUCER] INFO 已发送第 23 条: sensor=sensor_A value=41.27
+2026-06-16 18:10:36,844 [PRODUCER] INFO 已发送第 24 条: sensor=sensor_E value=13.8
+2026-06-16 18:10:46,927 [PRODUCER] INFO 已发送第 25 条: sensor=sensor_D value=82.99
+2026-06-16 18:10:57,003 [PRODUCER] INFO 已发送第 26 条: sensor=sensor_C value=81.83
+2026-06-16 18:11:07,078 [PRODUCER] INFO 已发送第 27 条: sensor=sensor_C value=20.02
+2026-06-16 18:11:17,145 [PRODUCER] INFO 已发送第 28 条: sensor=sensor_C value=75.19
+2026-06-16 18:11:27,219 [PRODUCER] INFO 已发送第 29 条: sensor=sensor_B value=70.54
+2026-06-16 18:11:37,301 [PRODUCER] INFO 已发送第 30 条: sensor=sensor_D value=69.26
+2026-06-16 18:11:47,385 [PRODUCER] INFO 已发送第 31 条: sensor=sensor_A value=60.87
+2026-06-16 18:11:57,442 [PRODUCER] INFO 已发送第 32 条: sensor=sensor_D value=72.32
+2026-06-16 18:12:07,512 [PRODUCER] INFO 已发送第 33 条: sensor=sensor_A value=90.38
+2026-06-16 18:12:17,593 [PRODUCER] INFO 已发送第 34 条: sensor=sensor_E value=75.71
+2026-06-16 18:12:27,671 [PRODUCER] INFO 已发送第 35 条: sensor=sensor_A value=64.77
+2026-06-16 18:12:37,705 [PRODUCER] INFO 已发送第 36 条: sensor=sensor_D value=96.23
+2026-06-16 18:12:47,751 [PRODUCER] INFO 已发送第 37 条: sensor=sensor_E value=11.34
+2026-06-16 18:12:57,762 [PRODUCER] INFO 已发送第 38 条: sensor=sensor_A value=38.88
+2026-06-16 18:13:07,823 [PRODUCER] INFO 已发送第 39 条: sensor=sensor_C value=44.46
+2026-06-16 18:13:17,878 [PRODUCER] INFO 已发送第 40 条: sensor=sensor_A value=63.95
+2026-06-16 18:13:27,961 [PRODUCER] INFO 已发送第 41 条: sensor=sensor_E value=11.24
+2026-06-16 18:13:38,016 [PRODUCER] INFO 已发送第 42 条: sensor=sensor_E value=22.88
+2026-06-16 18:13:48,048 [PRODUCER] INFO 已发送第 43 条: sensor=sensor_B value=70.26
+2026-06-16 18:28:36,330 [PRODUCER] INFO Producer 启动中...
+2026-06-16 18:28:36,338 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:28:36,338 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:28:36,338 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:28:36,338 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:36,381 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:28:36,381 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:28:36,381 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:36,431 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:28:36,431 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:28:36,431 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:36,431 [PRODUCER] WARNING Kafka 未就绪，1/10 次重试（5秒后）...
+2026-06-16 18:28:41,460 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:28:41,460 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:28:41,461 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:28:41,461 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:41,509 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:28:41,509 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:28:41,509 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:41,559 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:28:41,559 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:28:41,559 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:41,559 [PRODUCER] WARNING Kafka 未就绪，2/10 次重试（5秒后）...
+2026-06-16 18:28:46,638 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:28:46,638 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:28:46,639 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:28:46,639 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:46,687 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:28:46,687 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:28:46,687 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:46,737 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:28:46,737 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:28:46,737 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:46,737 [PRODUCER] WARNING Kafka 未就绪，3/10 次重试（5秒后）...
+2026-06-16 18:28:51,816 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:28:51,816 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:28:51,817 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:28:51,817 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:51,865 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:28:51,865 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:28:51,865 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:51,915 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:28:51,915 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:28:51,915 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:51,915 [PRODUCER] WARNING Kafka 未就绪，4/10 次重试（5秒后）...
+2026-06-16 18:28:56,994 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:28:56,995 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:28:56,995 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:28:56,996 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:57,043 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:28:57,043 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:28:57,043 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:57,093 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:28:57,093 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:28:57,093 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:28:57,093 [PRODUCER] WARNING Kafka 未就绪，5/10 次重试（5秒后）...
+2026-06-16 18:29:02,172 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:02,173 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:29:02,173 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:02,174 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:02,221 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:02,221 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:02,222 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:02,271 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:29:02,271 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:29:02,271 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:02,271 [PRODUCER] WARNING Kafka 未就绪，6/10 次重试（5秒后）...
+2026-06-16 18:29:07,311 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:07,311 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:29:07,312 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:07,312 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:07,360 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:07,360 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:07,360 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:07,410 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:29:07,410 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:29:07,410 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:07,410 [PRODUCER] WARNING Kafka 未就绪，7/10 次重试（5秒后）...
+2026-06-16 18:29:12,488 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:12,489 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:29:12,490 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:12,490 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:12,537 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:12,538 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:12,538 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:12,587 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:29:12,588 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:29:12,588 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:12,588 [PRODUCER] WARNING Kafka 未就绪，8/10 次重试（5秒后）...
+2026-06-16 18:29:17,600 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:17,601 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:29:17,601 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:17,602 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:17,650 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:17,650 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:17,650 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:17,700 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:29:17,700 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:29:17,700 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:17,700 [PRODUCER] WARNING Kafka 未就绪，9/10 次重试（5秒后）...
+2026-06-16 18:29:22,751 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:22,752 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:29:22,752 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:22,753 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:22,800 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:29:22,800 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 18:29:22,800 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:22,850 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 18:29:22,850 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 18:29:22,850 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 18:29:22,850 [PRODUCER] WARNING Kafka 未就绪，10/10 次重试（5秒后）...
+2026-06-16 18:29:27,926 [PRODUCER] ERROR 无法连接 Kafka，退出
+2026-06-16 18:32:35,736 [PRODUCER] INFO Producer 启动中...
+2026-06-16 18:32:35,739 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:32:35,739 [PRODUCER] INFO Probing node bootstrap-0 broker version
+2026-06-16 18:32:35,739 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Connection complete.
+2026-06-16 18:32:35,863 [PRODUCER] INFO Broker version identified as 2.5.0
+2026-06-16 18:32:35,863 [PRODUCER] INFO Set configuration api_version=(2, 5, 0) to skip auto check_version requests on startup
+2026-06-16 18:32:35,864 [PRODUCER] INFO 成功连接 Kafka: localhost:9092
+2026-06-16 18:32:35,864 [PRODUCER] INFO 开始发送数据，间隔 10 秒
+2026-06-16 18:32:35,869 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 18:32:35,870 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Connection complete.
+2026-06-16 18:32:35,870 [PRODUCER] INFO <BrokerConnection node_id=bootstrap-0 host=localhost:9092 <connected> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. 
+2026-06-16 18:32:35,978 [PRODUCER] INFO 已发送第 1 条: sensor=sensor_D value=12.98
+2026-06-16 18:32:45,994 [PRODUCER] INFO 已发送第 2 条: sensor=sensor_A value=76.83
+2026-06-16 18:32:56,013 [PRODUCER] INFO 已发送第 3 条: sensor=sensor_B value=27.83
+2026-06-16 18:33:06,038 [PRODUCER] INFO 已发送第 4 条: sensor=sensor_D value=25.06
+2026-06-16 18:33:16,060 [PRODUCER] INFO 已发送第 5 条: sensor=sensor_B value=43.73
+2026-06-16 18:33:26,087 [PRODUCER] INFO 已发送第 6 条: sensor=sensor_B value=92.87
+2026-06-16 18:33:36,101 [PRODUCER] INFO 已发送第 7 条: sensor=sensor_D value=59.55
+2026-06-16 18:33:46,110 [PRODUCER] INFO 已发送第 8 条: sensor=sensor_E value=72.01
+2026-06-16 18:33:56,124 [PRODUCER] INFO 已发送第 9 条: sensor=sensor_B value=80.48
+2026-06-16 18:34:06,143 [PRODUCER] INFO 已发送第 10 条: sensor=sensor_D value=96.36
+2026-06-16 18:34:16,164 [PRODUCER] INFO 已发送第 11 条: sensor=sensor_A value=46.81
+2026-06-16 18:34:26,180 [PRODUCER] INFO 已发送第 12 条: sensor=sensor_B value=77.13
+2026-06-16 18:34:36,202 [PRODUCER] INFO 已发送第 13 条: sensor=sensor_B value=15.65
+2026-06-16 18:34:46,215 [PRODUCER] INFO 已发送第 14 条: sensor=sensor_C value=85.09
+2026-06-16 18:34:56,226 [PRODUCER] INFO 已发送第 15 条: sensor=sensor_B value=32.31
+2026-06-16 18:35:06,236 [PRODUCER] INFO 已发送第 16 条: sensor=sensor_A value=10.05
+2026-06-16 18:35:16,255 [PRODUCER] INFO 已发送第 17 条: sensor=sensor_A value=26.42
+2026-06-16 18:35:26,264 [PRODUCER] INFO 已发送第 18 条: sensor=sensor_A value=98.76
+2026-06-16 18:35:36,277 [PRODUCER] INFO 已发送第 19 条: sensor=sensor_B value=95.12
+2026-06-16 18:35:46,292 [PRODUCER] INFO 已发送第 20 条: sensor=sensor_C value=75.43
+2026-06-16 18:35:56,306 [PRODUCER] INFO 已发送第 21 条: sensor=sensor_C value=15.93
+2026-06-16 18:36:06,321 [PRODUCER] INFO 已发送第 22 条: sensor=sensor_B value=55.41
+2026-06-16 18:36:16,329 [PRODUCER] INFO 已发送第 23 条: sensor=sensor_E value=65.55
+2026-06-16 18:36:26,346 [PRODUCER] INFO 已发送第 24 条: sensor=sensor_D value=73.66
+2026-06-16 18:36:36,373 [PRODUCER] INFO 已发送第 25 条: sensor=sensor_B value=31.97
+2026-06-16 18:36:46,393 [PRODUCER] INFO 已发送第 26 条: sensor=sensor_E value=52.03
+2026-06-16 18:36:56,405 [PRODUCER] INFO 已发送第 27 条: sensor=sensor_A value=19.08
+2026-06-16 18:37:06,426 [PRODUCER] INFO 已发送第 28 条: sensor=sensor_E value=45.21
+2026-06-16 18:37:16,445 [PRODUCER] INFO 已发送第 29 条: sensor=sensor_C value=17.05
+2026-06-16 18:37:26,462 [PRODUCER] INFO 已发送第 30 条: sensor=sensor_A value=43.43
+2026-06-16 18:37:36,483 [PRODUCER] INFO 已发送第 31 条: sensor=sensor_C value=83.61
+2026-06-16 18:37:46,502 [PRODUCER] INFO 已发送第 32 条: sensor=sensor_D value=37.65
+2026-06-16 18:37:56,514 [PRODUCER] INFO 已发送第 33 条: sensor=sensor_D value=35.43
+2026-06-16 18:38:06,529 [PRODUCER] INFO 已发送第 34 条: sensor=sensor_B value=71.23
+2026-06-16 18:38:16,538 [PRODUCER] INFO 已发送第 35 条: sensor=sensor_E value=78.08
+2026-06-16 18:38:26,553 [PRODUCER] INFO 已发送第 36 条: sensor=sensor_D value=52.84
+2026-06-16 18:38:36,576 [PRODUCER] INFO 已发送第 37 条: sensor=sensor_A value=16.71
+2026-06-16 18:38:46,585 [PRODUCER] INFO 已发送第 38 条: sensor=sensor_D value=62.36
+2026-06-16 18:38:56,594 [PRODUCER] INFO 已发送第 39 条: sensor=sensor_D value=58.6
+2026-06-16 18:39:06,609 [PRODUCER] INFO 已发送第 40 条: sensor=sensor_A value=25.62
+2026-06-16 18:39:16,622 [PRODUCER] INFO 已发送第 41 条: sensor=sensor_C value=31.01
+2026-06-16 18:39:26,635 [PRODUCER] INFO 已发送第 42 条: sensor=sensor_C value=48.38
+2026-06-16 18:39:36,650 [PRODUCER] INFO 已发送第 43 条: sensor=sensor_C value=58.21
+2026-06-16 18:39:46,667 [PRODUCER] INFO 已发送第 44 条: sensor=sensor_C value=33.91
+2026-06-16 18:39:56,687 [PRODUCER] INFO 已发送第 45 条: sensor=sensor_E value=81.19
+2026-06-16 18:40:06,704 [PRODUCER] INFO 已发送第 46 条: sensor=sensor_A value=59.48
+2026-06-16 18:40:16,721 [PRODUCER] INFO 已发送第 47 条: sensor=sensor_B value=17.09
+2026-06-16 18:40:26,736 [PRODUCER] INFO 已发送第 48 条: sensor=sensor_B value=82.52
+2026-06-16 18:40:36,751 [PRODUCER] INFO 已发送第 49 条: sensor=sensor_B value=13.19
+2026-06-16 18:40:46,764 [PRODUCER] INFO 已发送第 50 条: sensor=sensor_E value=29.97
+2026-06-16 18:40:56,780 [PRODUCER] INFO 已发送第 51 条: sensor=sensor_D value=75.36
+2026-06-16 18:41:06,790 [PRODUCER] INFO 已发送第 52 条: sensor=sensor_E value=67.88
+2026-06-16 18:41:16,803 [PRODUCER] INFO 已发送第 53 条: sensor=sensor_C value=15.64
+2026-06-16 18:41:26,819 [PRODUCER] INFO 已发送第 54 条: sensor=sensor_E value=62.83
+2026-06-16 18:41:36,839 [PRODUCER] INFO 已发送第 55 条: sensor=sensor_D value=74.86
+2026-06-16 18:41:46,853 [PRODUCER] INFO 已发送第 56 条: sensor=sensor_D value=96.71
+2026-06-16 18:41:56,867 [PRODUCER] INFO 已发送第 57 条: sensor=sensor_E value=24.95
+2026-06-16 18:42:06,879 [PRODUCER] INFO 已发送第 58 条: sensor=sensor_C value=49.44
+2026-06-16 18:42:16,886 [PRODUCER] INFO 已发送第 59 条: sensor=sensor_C value=72.88
+2026-06-16 18:42:26,895 [PRODUCER] INFO 已发送第 60 条: sensor=sensor_C value=76.94
+2026-06-16 18:42:36,907 [PRODUCER] INFO 已发送第 61 条: sensor=sensor_A value=50.83
+2026-06-16 18:42:46,915 [PRODUCER] INFO 已发送第 62 条: sensor=sensor_B value=98.62
+2026-06-16 18:42:56,929 [PRODUCER] INFO 已发送第 63 条: sensor=sensor_E value=74.26
+2026-06-16 18:43:06,944 [PRODUCER] INFO 已发送第 64 条: sensor=sensor_C value=62.41
+2026-06-16 18:43:16,955 [PRODUCER] INFO 已发送第 65 条: sensor=sensor_E value=47.72
+2026-06-16 18:43:26,969 [PRODUCER] INFO 已发送第 66 条: sensor=sensor_A value=77.1
+2026-06-16 18:43:36,975 [PRODUCER] INFO 已发送第 67 条: sensor=sensor_A value=96.32
+2026-06-16 18:43:46,988 [PRODUCER] INFO 已发送第 68 条: sensor=sensor_B value=60.26
+2026-06-16 18:43:56,999 [PRODUCER] INFO 已发送第 69 条: sensor=sensor_D value=40.86
+2026-06-16 18:44:07,004 [PRODUCER] INFO 已发送第 70 条: sensor=sensor_B value=80.64
+2026-06-16 18:44:17,015 [PRODUCER] INFO 已发送第 71 条: sensor=sensor_B value=59.54
+2026-06-16 18:44:27,017 [PRODUCER] INFO 已发送第 72 条: sensor=sensor_A value=13.11
+2026-06-16 18:44:37,030 [PRODUCER] INFO 已发送第 73 条: sensor=sensor_C value=81.4
+2026-06-16 18:44:47,038 [PRODUCER] INFO 已发送第 74 条: sensor=sensor_C value=43.02
+2026-06-16 18:44:57,050 [PRODUCER] INFO 已发送第 75 条: sensor=sensor_C value=10.18
+2026-06-16 18:45:07,063 [PRODUCER] INFO 已发送第 76 条: sensor=sensor_C value=73.71
+2026-06-16 18:45:17,075 [PRODUCER] INFO 已发送第 77 条: sensor=sensor_D value=62.47
+2026-06-16 18:45:27,088 [PRODUCER] INFO 已发送第 78 条: sensor=sensor_D value=26.79
+2026-06-16 18:45:37,102 [PRODUCER] INFO 已发送第 79 条: sensor=sensor_A value=62.07
+2026-06-16 18:45:47,116 [PRODUCER] INFO 已发送第 80 条: sensor=sensor_B value=58.74
+2026-06-16 18:45:57,129 [PRODUCER] INFO 已发送第 81 条: sensor=sensor_E value=49.22
+2026-06-16 18:46:07,147 [PRODUCER] INFO 已发送第 82 条: sensor=sensor_C value=47.41
+2026-06-16 18:46:17,160 [PRODUCER] INFO 已发送第 83 条: sensor=sensor_A value=41.42
+2026-06-16 18:46:27,171 [PRODUCER] INFO 已发送第 84 条: sensor=sensor_A value=51.07
+2026-06-16 18:46:37,187 [PRODUCER] INFO 已发送第 85 条: sensor=sensor_A value=80.69
+2026-06-16 18:46:47,201 [PRODUCER] INFO 已发送第 86 条: sensor=sensor_C value=99.53
+2026-06-16 18:46:57,210 [PRODUCER] INFO 已发送第 87 条: sensor=sensor_D value=44.44
+2026-06-16 18:47:07,225 [PRODUCER] INFO 已发送第 88 条: sensor=sensor_A value=37.8
+2026-06-16 18:47:17,234 [PRODUCER] INFO 已发送第 89 条: sensor=sensor_C value=97.63
+2026-06-16 18:47:27,239 [PRODUCER] INFO 已发送第 90 条: sensor=sensor_A value=46.5
+2026-06-16 18:47:37,252 [PRODUCER] INFO 已发送第 91 条: sensor=sensor_C value=31.61
+2026-06-16 18:47:47,260 [PRODUCER] INFO 已发送第 92 条: sensor=sensor_E value=31.67
+2026-06-16 18:47:57,264 [PRODUCER] INFO 已发送第 93 条: sensor=sensor_E value=47.58
+2026-06-16 18:48:07,273 [PRODUCER] INFO 已发送第 94 条: sensor=sensor_C value=96.46
+2026-06-16 18:48:17,284 [PRODUCER] INFO 已发送第 95 条: sensor=sensor_C value=16.76
+2026-06-16 18:48:27,293 [PRODUCER] INFO 已发送第 96 条: sensor=sensor_D value=91.06
+2026-06-16 18:48:37,316 [PRODUCER] INFO 已发送第 97 条: sensor=sensor_D value=29.01
+2026-06-16 18:48:47,338 [PRODUCER] INFO 已发送第 98 条: sensor=sensor_B value=52.48
+2026-06-16 18:48:57,359 [PRODUCER] INFO 已发送第 99 条: sensor=sensor_D value=48.95
+2026-06-16 18:49:07,383 [PRODUCER] INFO 已发送第 100 条: sensor=sensor_C value=80.84
+2026-06-16 18:49:17,415 [PRODUCER] INFO 已发送第 101 条: sensor=sensor_E value=24.17
+2026-06-16 18:49:27,425 [PRODUCER] INFO 已发送第 102 条: sensor=sensor_A value=23.08
+2026-06-16 18:49:37,440 [PRODUCER] INFO 已发送第 103 条: sensor=sensor_D value=21.93
+2026-06-16 18:49:47,459 [PRODUCER] INFO 已发送第 104 条: sensor=sensor_E value=50.52
+2026-06-16 18:49:57,474 [PRODUCER] INFO 已发送第 105 条: sensor=sensor_D value=57.93
+2026-06-16 18:50:07,486 [PRODUCER] INFO 已发送第 106 条: sensor=sensor_E value=85.21
+2026-06-16 18:50:17,492 [PRODUCER] INFO 已发送第 107 条: sensor=sensor_E value=15.86
+2026-06-16 18:50:27,505 [PRODUCER] INFO 已发送第 108 条: sensor=sensor_B value=22.01
+2026-06-16 18:50:37,520 [PRODUCER] INFO 已发送第 109 条: sensor=sensor_A value=93.08
+2026-06-16 18:50:47,535 [PRODUCER] INFO 已发送第 110 条: sensor=sensor_C value=99.81
+2026-06-16 18:50:57,553 [PRODUCER] INFO 已发送第 111 条: sensor=sensor_D value=37.05
+2026-06-16 18:51:07,563 [PRODUCER] INFO 已发送第 112 条: sensor=sensor_A value=54.41
+2026-06-16 18:51:17,578 [PRODUCER] INFO 已发送第 113 条: sensor=sensor_D value=32.13
+2026-06-16 18:51:27,594 [PRODUCER] INFO 已发送第 114 条: sensor=sensor_B value=20.26
+2026-06-16 18:51:37,609 [PRODUCER] INFO 已发送第 115 条: sensor=sensor_A value=90.67
+2026-06-16 18:51:47,620 [PRODUCER] INFO 已发送第 116 条: sensor=sensor_C value=38.57
+2026-06-16 18:51:57,645 [PRODUCER] INFO 已发送第 117 条: sensor=sensor_A value=86.62
+2026-06-16 18:52:07,664 [PRODUCER] INFO 已发送第 118 条: sensor=sensor_D value=74.16
+2026-06-16 18:52:17,684 [PRODUCER] INFO 已发送第 119 条: sensor=sensor_D value=64.48
+2026-06-16 18:52:27,691 [PRODUCER] INFO 已发送第 120 条: sensor=sensor_D value=52.58
+2026-06-16 18:52:37,705 [PRODUCER] INFO 已发送第 121 条: sensor=sensor_B value=81.24
+2026-06-16 18:52:47,727 [PRODUCER] INFO 已发送第 122 条: sensor=sensor_E value=51.86
+2026-06-16 18:52:57,740 [PRODUCER] INFO 已发送第 123 条: sensor=sensor_E value=26.65
+2026-06-16 18:53:07,751 [PRODUCER] INFO 已发送第 124 条: sensor=sensor_C value=15.72
+2026-06-16 18:53:17,765 [PRODUCER] INFO 已发送第 125 条: sensor=sensor_D value=83.16
+2026-06-16 18:53:27,779 [PRODUCER] INFO 已发送第 126 条: sensor=sensor_A value=35.68
+2026-06-16 18:53:37,788 [PRODUCER] INFO 已发送第 127 条: sensor=sensor_E value=44.0
+2026-06-16 18:53:47,807 [PRODUCER] INFO 已发送第 128 条: sensor=sensor_D value=14.14
+2026-06-16 18:53:57,824 [PRODUCER] INFO 已发送第 129 条: sensor=sensor_B value=89.95
+2026-06-16 18:54:07,848 [PRODUCER] INFO 已发送第 130 条: sensor=sensor_E value=31.56
+2026-06-16 18:54:17,857 [PRODUCER] INFO 已发送第 131 条: sensor=sensor_E value=85.74
+2026-06-16 18:54:27,871 [PRODUCER] INFO 已发送第 132 条: sensor=sensor_D value=83.87
+2026-06-16 18:54:37,880 [PRODUCER] INFO 已发送第 133 条: sensor=sensor_B value=38.64
+2026-06-16 18:54:47,891 [PRODUCER] INFO 已发送第 134 条: sensor=sensor_C value=30.94
+2026-06-16 18:54:57,903 [PRODUCER] INFO 已发送第 135 条: sensor=sensor_A value=81.22
+2026-06-16 18:55:07,913 [PRODUCER] INFO 已发送第 136 条: sensor=sensor_B value=66.6
+2026-06-16 18:55:17,922 [PRODUCER] INFO 已发送第 137 条: sensor=sensor_E value=73.87
+2026-06-16 18:55:27,932 [PRODUCER] INFO 已发送第 138 条: sensor=sensor_B value=72.62
+2026-06-16 18:55:37,938 [PRODUCER] INFO 已发送第 139 条: sensor=sensor_A value=56.39
+2026-06-16 18:55:47,951 [PRODUCER] INFO 已发送第 140 条: sensor=sensor_E value=91.37
+2026-06-16 18:55:57,963 [PRODUCER] INFO 已发送第 141 条: sensor=sensor_D value=16.77
+2026-06-16 18:56:07,977 [PRODUCER] INFO 已发送第 142 条: sensor=sensor_D value=71.55
+2026-06-16 18:56:17,986 [PRODUCER] INFO 已发送第 143 条: sensor=sensor_C value=65.97
+2026-06-16 18:56:27,997 [PRODUCER] INFO 已发送第 144 条: sensor=sensor_A value=50.65
+2026-06-16 18:56:38,010 [PRODUCER] INFO 已发送第 145 条: sensor=sensor_D value=65.45
+2026-06-16 18:56:48,022 [PRODUCER] INFO 已发送第 146 条: sensor=sensor_B value=45.08
+2026-06-16 18:56:58,034 [PRODUCER] INFO 已发送第 147 条: sensor=sensor_B value=24.99
+2026-06-16 18:57:08,045 [PRODUCER] INFO 已发送第 148 条: sensor=sensor_A value=76.29
+2026-06-16 18:57:18,092 [PRODUCER] INFO 已发送第 149 条: sensor=sensor_D value=80.95
+2026-06-16 18:57:28,112 [PRODUCER] INFO 已发送第 150 条: sensor=sensor_C value=39.84
+2026-06-16 18:57:38,127 [PRODUCER] INFO 已发送第 151 条: sensor=sensor_C value=65.49
+2026-06-16 18:57:48,137 [PRODUCER] INFO 已发送第 152 条: sensor=sensor_C value=12.46
+2026-06-16 18:57:58,158 [PRODUCER] INFO 已发送第 153 条: sensor=sensor_E value=39.1
+2026-06-16 18:58:08,180 [PRODUCER] INFO 已发送第 154 条: sensor=sensor_C value=46.68
+2026-06-16 18:58:18,192 [PRODUCER] INFO 已发送第 155 条: sensor=sensor_E value=31.53
+2026-06-16 18:58:28,212 [PRODUCER] INFO 已发送第 156 条: sensor=sensor_C value=84.21
+2026-06-16 18:58:38,231 [PRODUCER] INFO 已发送第 157 条: sensor=sensor_B value=91.15
+2026-06-16 18:58:48,250 [PRODUCER] INFO 已发送第 158 条: sensor=sensor_B value=33.35
+2026-06-16 18:58:58,262 [PRODUCER] INFO 已发送第 159 条: sensor=sensor_E value=30.34
+2026-06-16 18:59:08,267 [PRODUCER] INFO 已发送第 160 条: sensor=sensor_B value=50.62
+2026-06-16 18:59:18,305 [PRODUCER] INFO 已发送第 161 条: sensor=sensor_D value=58.97
+2026-06-16 18:59:28,324 [PRODUCER] INFO 已发送第 162 条: sensor=sensor_E value=75.95
+2026-06-16 18:59:38,328 [PRODUCER] INFO 已发送第 163 条: sensor=sensor_E value=89.63
+2026-06-16 18:59:48,339 [PRODUCER] INFO 已发送第 164 条: sensor=sensor_A value=30.77
+2026-06-16 18:59:58,348 [PRODUCER] INFO 已发送第 165 条: sensor=sensor_B value=61.85
+2026-06-16 19:00:08,362 [PRODUCER] INFO 已发送第 166 条: sensor=sensor_A value=78.52
+2026-06-16 19:00:18,374 [PRODUCER] INFO 已发送第 167 条: sensor=sensor_D value=69.94
+2026-06-16 19:00:28,389 [PRODUCER] INFO 已发送第 168 条: sensor=sensor_D value=48.71
+2026-06-16 19:00:38,398 [PRODUCER] INFO 已发送第 169 条: sensor=sensor_C value=88.94
+2026-06-16 19:00:48,404 [PRODUCER] INFO 已发送第 170 条: sensor=sensor_A value=62.24
+2026-06-16 19:00:58,417 [PRODUCER] INFO 已发送第 171 条: sensor=sensor_B value=38.39
+2026-06-16 19:01:08,425 [PRODUCER] INFO 已发送第 172 条: sensor=sensor_C value=19.87
+2026-06-16 19:01:18,440 [PRODUCER] INFO 已发送第 173 条: sensor=sensor_E value=50.4
+2026-06-16 19:01:28,451 [PRODUCER] INFO 已发送第 174 条: sensor=sensor_B value=41.53
+2026-06-16 19:01:38,465 [PRODUCER] INFO 已发送第 175 条: sensor=sensor_C value=12.63
+2026-06-16 19:01:48,478 [PRODUCER] INFO 已发送第 176 条: sensor=sensor_A value=70.09
+2026-06-16 19:01:58,489 [PRODUCER] INFO 已发送第 177 条: sensor=sensor_A value=99.1
+2026-06-16 19:02:08,501 [PRODUCER] INFO 已发送第 178 条: sensor=sensor_D value=98.23
+2026-06-16 19:02:18,510 [PRODUCER] INFO 已发送第 179 条: sensor=sensor_C value=74.95
+2026-06-16 19:02:28,522 [PRODUCER] INFO 已发送第 180 条: sensor=sensor_A value=48.3
+2026-06-16 19:02:38,544 [PRODUCER] INFO 已发送第 181 条: sensor=sensor_D value=15.73
+2026-06-16 19:02:48,558 [PRODUCER] INFO 已发送第 182 条: sensor=sensor_D value=66.23
+2026-06-16 19:02:58,564 [PRODUCER] INFO 已发送第 183 条: sensor=sensor_E value=94.19
+2026-06-16 19:03:08,573 [PRODUCER] INFO 已发送第 184 条: sensor=sensor_C value=94.51
+2026-06-16 19:03:18,579 [PRODUCER] INFO 已发送第 185 条: sensor=sensor_A value=17.0
+2026-06-16 19:03:28,590 [PRODUCER] INFO 已发送第 186 条: sensor=sensor_A value=83.11
+2026-06-16 19:03:38,608 [PRODUCER] INFO 已发送第 187 条: sensor=sensor_C value=21.24
+2026-06-16 19:03:48,618 [PRODUCER] INFO 已发送第 188 条: sensor=sensor_B value=20.74
+2026-06-16 19:03:58,625 [PRODUCER] INFO 已发送第 189 条: sensor=sensor_B value=66.44
+2026-06-16 19:04:08,638 [PRODUCER] INFO 已发送第 190 条: sensor=sensor_D value=59.3
+2026-06-16 19:04:18,647 [PRODUCER] INFO 已发送第 191 条: sensor=sensor_E value=35.85
+2026-06-16 19:04:28,656 [PRODUCER] INFO 已发送第 192 条: sensor=sensor_D value=78.75
+2026-06-16 19:04:38,682 [PRODUCER] INFO 已发送第 193 条: sensor=sensor_E value=96.14
+2026-06-16 19:04:48,706 [PRODUCER] INFO 已发送第 194 条: sensor=sensor_E value=18.84
+2026-06-16 19:04:58,718 [PRODUCER] INFO 已发送第 195 条: sensor=sensor_D value=16.76
+2026-06-16 19:05:08,729 [PRODUCER] INFO 已发送第 196 条: sensor=sensor_D value=77.18
+2026-06-16 19:05:18,741 [PRODUCER] INFO 已发送第 197 条: sensor=sensor_D value=89.6
+2026-06-16 19:05:28,754 [PRODUCER] INFO 已发送第 198 条: sensor=sensor_B value=12.1
+2026-06-16 19:05:38,761 [PRODUCER] INFO 已发送第 199 条: sensor=sensor_D value=37.41
+2026-06-16 19:05:48,774 [PRODUCER] INFO 已发送第 200 条: sensor=sensor_A value=55.11
+2026-06-16 19:05:58,783 [PRODUCER] INFO 已发送第 201 条: sensor=sensor_C value=72.37
+2026-06-16 19:06:08,794 [PRODUCER] INFO 已发送第 202 条: sensor=sensor_D value=65.46
+2026-06-16 19:06:18,823 [PRODUCER] INFO 已发送第 203 条: sensor=sensor_E value=82.46
+2026-06-16 19:06:28,857 [PRODUCER] INFO 已发送第 204 条: sensor=sensor_C value=89.58
+2026-06-16 19:06:38,886 [PRODUCER] INFO 已发送第 205 条: sensor=sensor_D value=96.9
+2026-06-16 19:06:48,898 [PRODUCER] INFO 已发送第 206 条: sensor=sensor_C value=95.67
+2026-06-16 19:06:58,912 [PRODUCER] INFO 已发送第 207 条: sensor=sensor_C value=10.46
+2026-06-16 19:07:08,927 [PRODUCER] INFO 已发送第 208 条: sensor=sensor_C value=61.6
+2026-06-16 19:07:18,938 [PRODUCER] INFO 已发送第 209 条: sensor=sensor_C value=21.58
+2026-06-16 19:07:28,286 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connected> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: Socket EVENT_READ without in-flight-requests
+2026-06-16 19:07:28,288 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:28,341 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:28,342 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:28,342 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:28,342 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:28,499 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 19:07:28,499 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Connection complete.
+2026-06-16 19:07:28,500 [PRODUCER] ERROR <BrokerConnection node_id=1 host=localhost:9092 <connected> [IPv4 ('127.0.0.1', 9092)]>: socket disconnected
+2026-06-16 19:07:28,500 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connected> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: socket disconnected
+2026-06-16 19:07:28,500 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:28,653 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:28,653 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:28,653 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:28,653 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:28,755 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 19:07:28,755 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Connection complete.
+2026-06-16 19:07:28,756 [PRODUCER] ERROR <BrokerConnection node_id=1 host=localhost:9092 <connected> [IPv4 ('127.0.0.1', 9092)]>: socket disconnected
+2026-06-16 19:07:28,756 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connected> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: socket disconnected
+2026-06-16 19:07:28,756 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:28,907 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:28,907 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:28,907 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:28,907 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:28,964 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 19:07:28,964 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 19:07:28,964 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:28,965 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:29,020 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:29,020 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:29,020 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:29,020 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:29,134 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 19:07:29,134 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 19:07:29,134 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:29,134 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:29,247 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:29,247 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:29,247 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:29,247 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:29,436 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 19:07:29,436 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 19:07:29,436 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:29,436 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:29,624 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:29,625 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:29,625 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:29,625 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:29,992 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 19:07:29,992 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 19:07:29,992 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:29,992 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:30,358 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:30,358 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:30,358 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:30,358 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:31,145 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 19:07:31,146 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 19:07:31,146 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:31,146 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:31,930 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:31,930 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:31,931 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:31,931 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:32,742 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: connecting to localhost:9092 [('127.0.0.1', 9092) IPv4]
+2026-06-16 19:07:32,742 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]> returned error 61. Disconnecting.
+2026-06-16 19:07:32,742 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv4 ('127.0.0.1', 9092)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:32,742 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:33,553 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: connecting to localhost:9092 [('::1', 9092, 0, 0) IPv6]
+2026-06-16 19:07:33,554 [PRODUCER] ERROR Connect attempt to <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]> returned error 61. Disconnecting.
+2026-06-16 19:07:33,554 [PRODUCER] INFO <BrokerConnection node_id=1 host=localhost:9092 <connecting> [IPv6 ('::1', 9092, 0, 0)]>: Closing connection. KafkaConnectionError: 61 ECONNREFUSED
+2026-06-16 19:07:33,554 [PRODUCER] WARNING Node 1 connection failed -- refreshing metadata
+2026-06-16 19:07:33,964 [PRODUCER] WARNING Produced messages to topic-partition TopicPartition(topic='sensor-data', partition=0) with base offset -1 log start offset None and error None.
+2026-06-16 19:07:33,965 [PRODUCER] WARNING Expired 1 batches in accumulator
+Traceback (most recent call last):
+  File "/Users/zhangsidong/ai-ops-agent/business/producer.py", line 71, in <module>
+    main()
+  File "/Users/zhangsidong/ai-ops-agent/business/producer.py", line 65, in main
+    future.get(timeout=10)
+  File "/Users/zhangsidong/Library/Python/3.9/lib/python/site-packages/kafka/producer/future.py", line 65, in get
+    raise self.exception # pylint: disable-msg=raising-bad-type
+kafka.errors.KafkaTimeoutError: KafkaTimeoutError: Batch for TopicPartition(topic='sensor-data', partition=0) containing 1 record(s) expired: 5 seconds have passed since batch creation plus linger time
+2026-06-16 19:07:33,971 [PRODUCER] INFO Closing the Kafka producer with 0 secs timeout.
+2026-06-16 19:07:33,971 [PRODUCER] INFO Proceeding to force close the producer since pending requests could not be completed within timeout 0.

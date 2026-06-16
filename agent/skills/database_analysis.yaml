@@ -1,0 +1,26 @@
+name: database_analysis
+description: MySQL 数据库分析，查询数据条数、异常数据、表结构
+triggers:
+  - 数据库
+  - mysql
+  - sql
+  - 表
+  - 查询
+  - 数据条数
+  - sensor_data
+  - 异常数据
+  - 传感器
+  - 读数
+  - 统计
+
+steps: |
+  ## Skill: 数据库分析
+
+  1. **check_port(localhost, 3306)** — 确认 MySQL 端口可达
+  2. **query_database** — `SELECT COUNT(*) as total FROM sensor_data` 查总条数
+  3. **query_database** — `SELECT * FROM sensor_data ORDER BY timestamp DESC LIMIT 10` 查最新10条
+  4. **query_database** — `SELECT sensor_id, COUNT(*) as cnt, MIN(value) as min_val, MAX(value) as max_val, AVG(value) as avg_val FROM sensor_data GROUP BY sensor_id` 按传感器统计
+  5. **query_database** — `SELECT * FROM sensor_data WHERE value < 0 OR value > 100 LIMIT 10` 检查异常读数（超出正常范围）
+  6. 如果端口不通：说明 MySQL 容器可能停止，需要手动 `docker compose start mysql`
+  7. 如果查询报"表不存在"：执行了 db-table 故障注入，重启 consumer 会自动重建表
+  8. 输出【数据库分析报告】：总数据量 / 最新写入时间 / 传感器分布 / 异常数据 / 结论

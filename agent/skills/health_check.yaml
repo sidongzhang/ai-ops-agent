@@ -1,0 +1,29 @@
+name: health_check
+description: 全面系统健康检查，快速掌握整体状态
+triggers:
+  - 健康检查
+  - 系统状态
+  - 全面检查
+  - 整体情况
+  - 都正常吗
+  - 有没有问题
+  - 巡检
+  - 概览
+  - overview
+  - health
+
+steps: |
+  ## Skill: 全面健康检查
+
+  按以下顺序完成检查，不要跳步骤：
+
+  1. **list_services** — 获取所有业务服务 + Docker 容器状态，建立全局视图
+  2. **http_check** — 不传参数，自动检查 Frontend / Prometheus / Webhook 的 HTTP 响应
+  3. **get_system_info** — 主机 CPU、内存、磁盘负载是否正常
+  4. **check_port** — 依次检查关键端口：Kafka(9092)、MySQL(3306)、Redis(6379)
+  5. **query_database** — `SELECT COUNT(*) FROM sensor_data` 确认数据库数据是否在增长
+  6. 综合以上结果输出【健康报告】：
+     - ✅ 正常的服务列表
+     - ❌ 异常的服务及原因
+     - ⚠️ 需要关注的风险点
+     - 建议操作

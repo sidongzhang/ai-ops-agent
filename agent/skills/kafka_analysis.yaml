@@ -1,0 +1,23 @@
+name: kafka_analysis
+description: Kafka 深度分析，包括 topic 详情、消费者 lag、容器健康
+triggers:
+  - kafka
+  - topic
+  - 消息积压
+  - lag
+  - 消费者
+  - 消费组
+  - 队列
+  - 积压
+  - broker
+
+steps: |
+  ## Skill: Kafka 深度分析
+
+  1. **check_port(localhost, 9092)** — 确认 Kafka broker 端口可达
+  2. **get_kafka_status()** — 获取所有 topic 列表 + 消费者 lag 概览
+  3. **get_kafka_status(topic="sensor-data")** — 查看 sensor-data topic 的分区、副本、Leader 详情
+  4. **docker_logs(kafka, 30)** — 查看 Kafka 容器最近日志，是否有错误或警告
+  5. 如果 lag 持续增长：检查 consumer 进程状态和日志
+  6. 如果 Kafka 端口不通：说明容器可能停止，需要用户手动 `docker compose start kafka`
+  7. 输出【Kafka 状态报告】：broker 状态 / topic 情况 / lag 数值 / 建议

@@ -1,0 +1,28 @@
+name: network_diagnosis
+description: 网络连通性诊断，排查端口不通、服务无法互联等问题
+triggers:
+  - 网络
+  - 端口
+  - 连不上
+  - 连接
+  - 超时
+  - connection
+  - 无法访问
+  - 访问不了
+  - timeout
+  - refused
+  - 通不通
+  - 连通
+
+steps: |
+  ## Skill: 网络连通性诊断
+
+  1. **http_check()** — 自动检查所有 HTTP 服务（Frontend/Prometheus/Webhook）
+  2. **check_port(localhost, 9092)** — Kafka broker
+  3. **check_port(localhost, 3306)** — MySQL
+  4. **check_port(localhost, 6379)** — Redis
+  5. **check_port(localhost, 9090)** — Prometheus
+  6. **check_port(localhost, 5001)** — Frontend
+  7. **check_port(localhost, 8080)** — Webhook/飞书Bot
+  8. 对不通的端口：docker_logs(对应容器) 查容器是否崩溃
+  9. 输出【网络诊断报告】：哪些端口通 / 哪些不通 / 对应服务状态 / 修复建议

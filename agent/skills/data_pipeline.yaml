@@ -1,0 +1,31 @@
+name: data_pipeline
+description: 数据链路端到端诊断，排查 producer→Kafka→consumer→MySQL 全链路问题
+triggers:
+  - 数据
+  - 数据停止
+  - 数据没有增长
+  - 写入
+  - 链路
+  - pipeline
+  - producer
+  - consumer
+  - 消费
+  - 生产
+  - 数据量
+  - 记录数
+  - sensor
+
+steps: |
+  ## Skill: 数据链路诊断
+
+  数据链路：Producer → Kafka → Consumer → MySQL。按顺序排查每个环节：
+
+  1. **check_process(producer)** — 确认 producer 进程存活
+  2. **check_process(consumer)** — 确认 consumer 进程存活
+  3. **get_kafka_status()** — 查看 sensor-data topic 存在且 consumer lag 是否积压
+  4. **query_database** — `SELECT COUNT(*) FROM sensor_data` 看总条数；`SELECT * FROM sensor_data ORDER BY timestamp DESC LIMIT 5` 看最新数据时间戳
+  5. 如果 producer 挂了：read_logs(producer) 分析原因 → restart_service(producer)
+  6. 如果 consumer 挂了：read_logs(consumer) 分析原因 → restart_service(consumer)
+  7. 如果 Kafka lag 积压但进程正常：search_logs(consumer, "error") 排查消费报错
+  8. 如果数据库查不到表：说明可能执行了 DROP TABLE，需要重启 consumer 自动重建表
+  9. 修复后再次 query_database 确认数据条数在增长，输出【链路诊断报告】

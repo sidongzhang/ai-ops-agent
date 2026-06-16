@@ -1,0 +1,29 @@
+name: log_investigation
+description: 日志调查，在各服务日志中搜索错误、异常、特定事件
+triggers:
+  - 日志
+  - 报错
+  - 错误
+  - error
+  - exception
+  - 异常
+  - 日志里
+  - 出错
+  - 崩溃
+  - log
+  - 堆栈
+  - traceback
+
+steps: |
+  ## Skill: 日志调查
+
+  1. **search_logs(producer, "error")** — 在 producer 日志搜索 error
+  2. **search_logs(consumer, "error")** — 在 consumer 日志搜索 error
+  3. **search_logs(consumer, "Exception")** — 搜索 Python 异常堆栈
+  4. **search_logs(frontend, "error")** — 检查前端服务报错
+  5. 如果发现连接类错误（Connection refused / Can't connect）：
+     - check_port 验证对应端口连通性
+     - list_services 确认相关服务状态
+  6. 如果发现解析错误（JSON decode / invalid）：可能是 bad-data 故障注入导致乱码消息
+  7. 如果日志量异常大：可能触发了 log-flood 故障，read_logs 查看最后几行确认
+  8. 输出【日志调查报告】：在哪个服务发现了什么错误 / 错误的时间范围 / 推断原因

@@ -1,0 +1,29 @@
+name: performance_analysis
+description: 系统性能分析，排查 CPU 飙高、内存不足、磁盘满等资源瓶颈
+triggers:
+  - 性能
+  - cpu
+  - 内存
+  - 磁盘
+  - 负载
+  - 卡
+  - 慢
+  - 资源
+  - 压力
+  - load
+  - memory
+  - disk
+  - 飙高
+  - 占用
+
+steps: |
+  ## Skill: 性能分析
+
+  1. **get_system_info()** — 获取 CPU 负载、内存、磁盘、进程数的当前快照
+  2. **get_metrics(query="node_load1")** — Prometheus 1分钟平均负载
+  3. **get_metrics(query="100 - (avg by(instance)(rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)")** — 5分钟 CPU 使用率百分比
+  4. **get_metrics(query="node_memory_MemAvailable_bytes")** — 可用内存字节数
+  5. **get_metrics(query="node_filesystem_avail_bytes{mountpoint='/'}")** — 根分区剩余空间
+  6. 如果 CPU > 80%：list_services 找高负载进程，search_logs 排查是否注入了 cpu-flood 故障
+  7. 如果内存紧张：query_redis(INFO memory) 检查 Redis 内存占用
+  8. 输出【性能分析报告】：指标数值 / 是否异常 / 根因推断 / 建议措施
