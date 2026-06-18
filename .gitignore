@@ -1,6 +1,7 @@
 .env
 .venv/
 ops-env/
+agent/chroma_db/
 logs/
 pids/
 __pycache__/
