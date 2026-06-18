@@ -220,8 +220,8 @@ class FeishuClient:
     def __init__(self, app_id: str, app_secret: str):
         self.app_id = app_id
         self.app_secret = app_secret
-        self._token = None
-        self._token_expire = 0
+        self._token: str = ''
+        self._token_expire: float = 0
 
     def _get_token(self) -> str:
         if time.time() < self._token_expire - 60:

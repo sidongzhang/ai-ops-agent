@@ -1,4 +1,6 @@
 .env
+.venv/
+ops-env/
 logs/
 pids/
 __pycache__/
