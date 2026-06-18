@@ -399,13 +399,33 @@ class FeishuClient:
 
     def update_streaming_card(self, message_id: str, text: str,
                               title: str = '🔧 正在处理...', template: str = 'blue'):
-        """流式中间更新：用纯文本内容刷新卡片（每次 on_chunk 回调时调用）"""
-        cleaned = _clean_text_block(text)
+        """兼容旧调用：直接展示纯文本"""
+        plain = re.sub(r'\*{1,3}([^*]+)\*{1,3}', r'\1', text)
+        plain = re.sub(r'^#{1,6}\s+', '', plain, flags=re.MULTILINE)
+        plain = re.sub(r'`([^`]+)`', r'\1', plain)
+        plain = plain.strip() or '⏳ 处理中...'
         card = {
             'config': {'wide_screen_mode': True},
             'header': {'title': {'tag': 'plain_text', 'content': title}, 'template': template},
             'elements': [
-                {'tag': 'div', 'text': {'tag': 'lark_md', 'content': cleaned or '⏳ 处理中...'}},
+                {'tag': 'div', 'text': {'tag': 'plain_text', 'content': plain}},
+            ],
+        }
+        self._patch_card(message_id, card)
+
+    def update_progress_card(self, message_id: str, steps: list,
+                             current: str = '', title: str = '🔧 正在修复中...', template: str = 'blue'):
+        """步骤进度卡：已完成步骤打勾，当前步骤显示 loading"""
+        lines = [f'✅ {s}' for s in steps]
+        if current:
+            lines.append(f'⏳ {current}')
+        content = '\n'.join(lines) if lines else '⏳ 准备中...'
+        card = {
+            'config': {'wide_screen_mode': True},
+            'header': {'title': {'tag': 'plain_text', 'content': title}, 'template': template},
+            'elements': [
+                {'tag': 'div', 'text': {'tag': 'lark_md', 'content': content}},
+                {'tag': 'note', 'elements': [{'tag': 'plain_text', 'content': 'AI Ops Agent · Powered by DeepSeek'}]},
             ],
         }
         self._patch_card(message_id, card)

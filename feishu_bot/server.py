@@ -258,26 +258,31 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
             '请根据以上信息执行修复操作，并给出最终状态报告。'
         )
 
-        # 2. on_step：每调用一个工具就更新卡片显示当前步骤
+        # 2. on_step：每调用工具时更新进度，相同步骤去重
         steps_done: list = []
+        _current_step = ['']
 
         def on_step(name, args):
             label = _STEP_LABELS.get(name, f'⚙️ {name}')
-            steps_done.append(label)
-            content = '\n'.join(f'{s}...' for s in steps_done)
-            feishu.update_streaming_card(stream_msg_id, content, '🔧 正在修复中...', 'blue')
+            # 上一步打勾（去重：不重复添加）
+            prev = _current_step[0]
+            if prev and prev not in steps_done:
+                steps_done.append(prev)
+            _current_step[0] = label
+            feishu.update_progress_card(stream_msg_id, steps_done, label, '🔧 正在修复中...', 'blue')
 
-        # 3. on_chunk：最终结论边生成边刷新卡片
-        _last_update = [0.0]
+        # 3. on_chunk 首次触发 → 工具全部执行完，LLM 开始生成结论
+        _generating = [False]
 
         def on_chunk(text):
-            now = time.time()
-            if now - _last_update[0] < 0.8:
-                return
-            _last_update[0] = now
-            feishu.update_streaming_card(stream_msg_id, text, '✅ 修复结果报告', 'green')
+            if not _generating[0]:
+                _generating[0] = True
+                prev = _current_step[0]
+                if prev and prev not in steps_done:
+                    steps_done.append(prev)
+                feishu.update_progress_card(stream_msg_id, steps_done, '正在生成修复报告...', '🔧 正在修复中...', 'blue')
 
-        logger.info('交由 Agent 执行修复（流式输出）...')
+        logger.info('交由 Agent 执行修复...')
         result = get_agent_response_stream(question, on_chunk=on_chunk, on_step=on_step)
 
         # 4. 最终替换为完整格式化卡片
@@ -305,31 +310,39 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
 # ── 普通消息处理 ──────────────────────────────────────────────────────────────
 
 def _handle(question: str, chat_id: str, message_id: str = ''):
-    import time
     reaction_id = ''
     try:
         if message_id:
             reaction_id = feishu.add_reaction(message_id, next(_reaction_cycle))
 
-        # 立即发占位卡片
         stream_msg_id = feishu.send_processing_card(chat_id, '🤖 AI 运维分析')
 
-        _last_update = [0.0]
+        steps_done: list = []
+        _current_step = ['']
+        _generating = [False]
+
+        def on_step(name, args):
+            label = _STEP_LABELS.get(name, f'⚙️ {name}')
+            prev = _current_step[0]
+            if prev and prev not in steps_done:
+                steps_done.append(prev)
+            _current_step[0] = label
+            feishu.update_progress_card(stream_msg_id, steps_done, label, '🤖 AI 运维分析', 'indigo')
 
         def on_chunk(text):
-            now = time.time()
-            if now - _last_update[0] < 0.8:
-                return
-            _last_update[0] = now
-            feishu.update_streaming_card(stream_msg_id, text, '🤖 AI 运维分析', 'indigo')
+            if not _generating[0]:
+                _generating[0] = True
+                prev = _current_step[0]
+                if prev and prev not in steps_done:
+                    steps_done.append(prev)
+                feishu.update_progress_card(stream_msg_id, steps_done, '正在生成分析报告...', '🤖 AI 运维分析', 'indigo')
 
-        result = get_agent_response_stream(question, on_chunk=on_chunk)
+        result = get_agent_response_stream(question, on_chunk=on_chunk, on_step=on_step)
 
         if message_id and reaction_id:
             feishu.delete_reaction(message_id, reaction_id)
             feishu.add_reaction(message_id, 'CheckMark')
 
-        # 完成后替换为完整格式化卡片
         feishu.finalize_claude_card(stream_msg_id, result)
     except Exception as e:
         logger.error(f'Agent 出错: {e}', exc_info=True)
