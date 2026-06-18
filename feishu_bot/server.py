@@ -9,6 +9,7 @@ import os
 import sys
 import threading
 import logging
+import itertools
 from datetime import datetime
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
@@ -18,7 +19,7 @@ load_dotenv(os.path.join(_ROOT, '.env'))
 
 sys.path.insert(0, os.path.join(_ROOT, 'agent'))
 from feishu_client import FeishuClient
-from agent import get_agent_response, summarize_incident
+from agent import get_agent_response, get_agent_response_stream, summarize_incident
 from tools import execute_tool
 from scheduler import HealthCheckScheduler
 
@@ -40,6 +41,9 @@ feishu = FeishuClient(
 # 防止飞书重试导致同一消息处理两次
 _processed = set()
 _processed_lock = threading.Lock()
+
+# 处理消息时轮流使用的 reaction emoji
+_reaction_cycle = itertools.cycle(['ANGRY', 'Typing', 'OneSecond'])
 
 # 正在修复中的告警卡片 message_id，防止重复点击"立即修复"
 _fix_in_progress: set[str] = set()
@@ -71,6 +75,19 @@ scheduler = HealthCheckScheduler(
     get_chat_id_fn=_get_chat_id,
 )
 scheduler.start()
+
+
+def _warmup():
+    """服务启动时预热 embedding 模型 + 建好向量索引，避免首次请求延迟"""
+    try:
+        sys.path.insert(0, os.path.join(_ROOT, 'agent'))
+        from knowledge_base import get_relevant_context
+        get_relevant_context('预热')
+        logger.info('RAG embedding 模型预热完成')
+    except Exception as e:
+        logger.warning(f'RAG 预热失败（忽略）: {e}')
+
+threading.Thread(target=_warmup, daemon=True).start()
 
 
 # ── Webhook 路由 ──────────────────────────────────────────────────────────────
@@ -201,8 +218,30 @@ def _append_runbook_entry(question: str, result: str):
 
 
 
+_STEP_LABELS = {
+    'list_services':    '🔍 检查服务状态',
+    'check_process':    '🔍 确认进程状态',
+    'read_logs':        '📋 读取日志',
+    'search_logs':      '🔎 搜索异常日志',
+    'restart_service':  '🔧 重启服务',
+    'query_database':   '🗃️ 查询数据库',
+    'get_kafka_status': '📊 检查 Kafka',
+    'http_check':       '🌐 HTTP 检查',
+    'get_system_info':  '💻 获取系统信息',
+    'check_port':       '🔌 检查端口',
+    'docker_logs':      '🐳 读取容器日志',
+    'query_redis':      '🔴 查询 Redis',
+    'get_metrics':      '📈 获取指标',
+}
+
+
 def _do_fix(chat_id: str, alert_message_id: str = ''):
-    """调用 Agent 修复：预先收集现场信息作为上下文，减少 Agent 自己探测的轮次"""
+    """流式修复：立即发占位卡片，边执行边更新，最终替换为完整格式化卡片"""
+    import time
+
+    # 1. 立即发占位卡片，给用户即时反馈
+    stream_msg_id = feishu.send_processing_card(chat_id, '🔧 正在修复中...')
+
     try:
         logger.info('收集现场信息...')
         import concurrent.futures
@@ -219,20 +258,45 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
             '请根据以上信息执行修复操作，并给出最终状态报告。'
         )
 
-        logger.info('交由 Agent 执行修复...')
-        result = get_agent_response(question)
+        # 2. on_step：每调用一个工具就更新卡片显示当前步骤
+        steps_done: list = []
 
+        def on_step(name, args):
+            label = _STEP_LABELS.get(name, f'⚙️ {name}')
+            steps_done.append(label)
+            content = '\n'.join(f'{s}...' for s in steps_done)
+            feishu.update_streaming_card(stream_msg_id, content, '🔧 正在修复中...', 'blue')
+
+        # 3. on_chunk：最终结论边生成边刷新卡片
+        _last_update = [0.0]
+
+        def on_chunk(text):
+            now = time.time()
+            if now - _last_update[0] < 0.8:
+                return
+            _last_update[0] = now
+            feishu.update_streaming_card(stream_msg_id, text, '✅ 修复结果报告', 'green')
+
+        logger.info('交由 Agent 执行修复（流式输出）...')
+        result = get_agent_response_stream(question, on_chunk=on_chunk, on_step=on_step)
+
+        # 4. 最终替换为完整格式化卡片
+        feishu.finalize_fix_card(stream_msg_id, result)
+
+        # 5. 更新原告警卡片状态
         if alert_message_id:
             summary_lines = [l for l in result.splitlines() if l.strip()][:2]
             summary = '\n'.join(summary_lines) or '所有服务已恢复正常'
             feishu.update_alert_card(alert_message_id, 'fixed', summary)
-        feishu.send_fix_result_card(chat_id, result)
-        logger.info('修复完成，结果卡片已发送')
-        # 后台归档，不阻塞主流程
+
+        logger.info('修复完成，流式卡片已更新')
         threading.Thread(target=_append_runbook_entry, args=(question, result), daemon=True).start()
     except Exception as e:
         logger.error(f'修复过程出错: {e}', exc_info=True)
-        feishu.send_text(chat_id, f'❌ 修复过程出错：{e}')
+        if stream_msg_id:
+            feishu.update_streaming_card(stream_msg_id, f'❌ 修复过程出错：{e}', '❌ 修复失败', 'red')
+        else:
+            feishu.send_text(chat_id, f'❌ 修复过程出错：{e}')
     finally:
         with _fix_lock:
             _fix_in_progress.discard(alert_message_id)
@@ -241,14 +305,32 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
 # ── 普通消息处理 ──────────────────────────────────────────────────────────────
 
 def _handle(question: str, chat_id: str, message_id: str = ''):
+    import time
     reaction_id = ''
     try:
         if message_id:
-            reaction_id = feishu.add_reaction(message_id, 'OK')
-        result = get_agent_response(question)
+            reaction_id = feishu.add_reaction(message_id, next(_reaction_cycle))
+
+        # 立即发占位卡片
+        stream_msg_id = feishu.send_processing_card(chat_id, '🤖 AI 运维分析')
+
+        _last_update = [0.0]
+
+        def on_chunk(text):
+            now = time.time()
+            if now - _last_update[0] < 0.8:
+                return
+            _last_update[0] = now
+            feishu.update_streaming_card(stream_msg_id, text, '🤖 AI 运维分析', 'indigo')
+
+        result = get_agent_response_stream(question, on_chunk=on_chunk)
+
         if message_id and reaction_id:
             feishu.delete_reaction(message_id, reaction_id)
-        feishu.send_card(chat_id, result)
+            feishu.add_reaction(message_id, 'CheckMark')
+
+        # 完成后替换为完整格式化卡片
+        feishu.finalize_claude_card(stream_msg_id, result)
     except Exception as e:
         logger.error(f'Agent 出错: {e}', exc_info=True)
         feishu.send_text(chat_id, f'❌ 出错了：{e}')

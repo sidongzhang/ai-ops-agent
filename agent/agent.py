@@ -32,10 +32,12 @@ client = OpenAI(
     base_url='https://api.deepseek.com',
 )
 
-SYSTEM_PROMPT = """你是一个智能运维助手（AI Ops Agent），负责监控和维护一套分布式系统。
+_PRODUCER_INTERVAL = os.getenv('PRODUCER_INTERVAL', '100')
+
+SYSTEM_PROMPT = f"""你是一个智能运维助手（AI Ops Agent），负责监控和维护一套分布式系统。
 
 ## 系统架构
-- **Producer**：每10秒向 Kafka 发一条传感器数据（进程名 producer.py）
+- **Producer**：每 {_PRODUCER_INTERVAL} 秒向 Kafka 发一条传感器数据（进程名 producer.py）
 - **Consumer**：从 Kafka 消费数据，写入 MySQL（进程名 consumer.py）
 - **Frontend**：Flask 展示数据统计，端口 5001（进程名 app.py）
 - **Kafka**：消息队列（localhost:9092，topic: sensor-data）
@@ -140,9 +142,17 @@ def run_agent(question: str):
 
 
 def get_agent_response(question: str, on_step=None) -> str:
-    """供飞书机器人调用：运行 Agent 并返回最终结论字符串。
-    on_step(tool_name, args): 每次执行工具前触发，可用于发送进度通知。
+    """供飞书机器人调用：运行 Agent 并返回最终结论字符串。"""
+    return get_agent_response_stream(question, on_step=on_step)
+
+
+def get_agent_response_stream(question: str, on_chunk=None, on_step=None) -> str:
+    """流式版本：工具调用同步执行，最终结论通过 on_chunk 回调逐步推送。
+    on_chunk(accumulated_text): 每积累 100 字符或 800ms 触发一次。
+    on_step(tool_name, args): 每次执行工具前触发。
     """
+    import time
+
     context = get_relevant_context(question)
     skill = get_skill_context(question)
     system_content = SYSTEM_PROMPT
@@ -157,36 +167,82 @@ def get_agent_response(question: str, on_step=None) -> str:
     ]
 
     while True:
-        response = client.chat.completions.create(
+        stream = client.chat.completions.create(
             model='deepseek-chat',
             messages=messages,
             tools=TOOLS,
             tool_choice='auto',
+            stream=True,
         )
-        choice = response.choices[0]
-        message = choice.message
-        messages.append(message)
 
-        if choice.finish_reason == 'stop':
-            return message.content or '分析完成，未发现异常。'
+        content_parts: list = []
+        tool_calls_map: dict = {}
+        finish_reason = None
+        last_push = time.time()
+        new_chars = 0
 
-        if choice.finish_reason == 'tool_calls' and message.tool_calls:
-            for tool_call in message.tool_calls:
-                name = tool_call.function.name
-                args = json.loads(tool_call.function.arguments or '{}')
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+
+            if delta.content:
+                content_parts.append(delta.content)
+                new_chars += len(delta.content)
+                now = time.time()
+                if on_chunk and (new_chars >= 100 or now - last_push >= 0.8):
+                    on_chunk(''.join(content_parts))
+                    last_push = now
+                    new_chars = 0
+
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    idx = tc.index
+                    if idx not in tool_calls_map:
+                        tool_calls_map[idx] = {'id': '', 'function': {'name': '', 'arguments': ''}}
+                    if tc.id:
+                        tool_calls_map[idx]['id'] = tc.id
+                    if tc.function:
+                        if tc.function.name:
+                            tool_calls_map[idx]['function']['name'] += tc.function.name
+                        if tc.function.arguments:
+                            tool_calls_map[idx]['function']['arguments'] += tc.function.arguments
+
+            if chunk.choices[0].finish_reason:
+                finish_reason = chunk.choices[0].finish_reason
+
+        content = ''.join(content_parts)
+
+        if finish_reason == 'stop':
+            if on_chunk and content:
+                on_chunk(content)
+            return content or '分析完成，未发现异常。'
+
+        if finish_reason == 'tool_calls' and tool_calls_map:
+            tool_calls_list = [
+                {'id': tool_calls_map[i]['id'], 'type': 'function', 'function': tool_calls_map[i]['function']}
+                for i in sorted(tool_calls_map)
+            ]
+            messages.append({
+                'role': 'assistant',
+                'content': content or None,
+                'tool_calls': tool_calls_list,
+            })
+            for tc in tool_calls_list:
+                name = tc['function']['name']
+                try:
+                    args = json.loads(tc['function']['arguments'] or '{}')
+                except json.JSONDecodeError:
+                    args = {}
                 if on_step:
                     try:
                         on_step(name, args)
                     except Exception:
                         pass
                 result = execute_tool(name, args)
-                messages.append({
-                    'role': 'tool',
-                    'tool_call_id': tool_call.id,
-                    'content': result,
-                })
+                messages.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': result})
         else:
-            return message.content or '处理完成。'
+            return content or '处理完成。'
 
 
 def summarize_incident(question: str, result: str) -> str:

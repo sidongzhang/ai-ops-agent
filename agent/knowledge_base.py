@@ -22,12 +22,18 @@ _embedder = None
 _last_fingerprint = None
 
 
+_LOCAL_MODEL = os.path.expanduser(
+    '~/.cache/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+)
+_MODEL_ID = _LOCAL_MODEL if os.path.isdir(_LOCAL_MODEL) else 'paraphrase-multilingual-MiniLM-L12-v2'
+
+
 def _get_embedder():
     global _embedder
     if _embedder is None:
         from sentence_transformers import SentenceTransformer
-        logger.info('加载 embedding 模型（首次需要下载，约 400MB）...')
-        _embedder = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        logger.info('加载 embedding 模型...')
+        _embedder = SentenceTransformer(_MODEL_ID)
         logger.info('embedding 模型加载完成')
     return _embedder
 

@@ -368,6 +368,56 @@ class FeishuClient:
             self._post_message(chat_id, 'text', {'text': f'✅ 修复完成：\n{result}'})
         return r
 
+    def send_processing_card(self, chat_id: str, title: str = '🔧 正在修复中...') -> str:
+        """立即发一张占位卡片，返回 message_id 供后续流式更新"""
+        card = {
+            'config': {'wide_screen_mode': True},
+            'header': {'title': {'tag': 'plain_text', 'content': title}, 'template': 'blue'},
+            'elements': [
+                {'tag': 'div', 'text': {'tag': 'lark_md', 'content': '⏳ AI 正在分析，请稍候...'}},
+            ],
+        }
+        result = self._post_message(chat_id, 'interactive', card)
+        return result.get('data', {}).get('message_id', '')
+
+    def _patch_card(self, message_id: str, card: dict):
+        """原地更新已有交互卡片"""
+        if not message_id:
+            return
+        try:
+            r = requests.patch(
+                f'{FEISHU_API}/im/v1/messages/{message_id}',
+                headers=self._headers(),
+                json={'msg_type': 'interactive', 'content': json.dumps(card, ensure_ascii=False)},
+                timeout=10,
+            )
+            result = r.json()
+            if result.get('code') != 0:
+                logger.debug(f'patch 卡片失败（忽略）: {result.get("msg")}')
+        except Exception as e:
+            logger.debug(f'patch 卡片异常（忽略）: {e}')
+
+    def update_streaming_card(self, message_id: str, text: str,
+                              title: str = '🔧 正在处理...', template: str = 'blue'):
+        """流式中间更新：用纯文本内容刷新卡片（每次 on_chunk 回调时调用）"""
+        cleaned = _clean_text_block(text)
+        card = {
+            'config': {'wide_screen_mode': True},
+            'header': {'title': {'tag': 'plain_text', 'content': title}, 'template': template},
+            'elements': [
+                {'tag': 'div', 'text': {'tag': 'lark_md', 'content': cleaned or '⏳ 处理中...'}},
+            ],
+        }
+        self._patch_card(message_id, card)
+
+    def finalize_fix_card(self, message_id: str, result: str):
+        """流式完成后：用完整格式化修复结果替换占位卡片"""
+        self._patch_card(message_id, _build_fix_result_card(result))
+
+    def finalize_claude_card(self, message_id: str, result: str):
+        """流式完成后：用完整格式化 AI 分析卡片替换占位卡片"""
+        self._patch_card(message_id, _build_claude_card(result))
+
     def send_text(self, chat_id: str, text: str):
         return self._post_message(chat_id, 'text', {'text': text})
 
