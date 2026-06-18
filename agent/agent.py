@@ -139,8 +139,10 @@ def run_agent(question: str):
             break
 
 
-def get_agent_response(question: str) -> str:
-    """供飞书机器人调用：运行 Agent 并返回最终结论字符串。"""
+def get_agent_response(question: str, on_step=None) -> str:
+    """供飞书机器人调用：运行 Agent 并返回最终结论字符串。
+    on_step(tool_name, args): 每次执行工具前触发，可用于发送进度通知。
+    """
     context = get_relevant_context(question)
     skill = get_skill_context(question)
     system_content = SYSTEM_PROMPT
@@ -172,6 +174,11 @@ def get_agent_response(question: str) -> str:
             for tool_call in message.tool_calls:
                 name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments or '{}')
+                if on_step:
+                    try:
+                        on_step(name, args)
+                    except Exception:
+                        pass
                 result = execute_tool(name, args)
                 messages.append({
                     'role': 'tool',
@@ -180,6 +187,26 @@ def get_agent_response(question: str) -> str:
                 })
         else:
             return message.content or '处理完成。'
+
+
+def summarize_incident(question: str, result: str) -> str:
+    """用轻量 LLM 调用把修复过程压缩成结构化摘要，供 runbook 归档。"""
+    prompt = (
+        "根据以下运维事件，提取关键信息填写模板，只输出模板内容，不要其他解释：\n\n"
+        f"【触发问题】{question[:300]}\n\n【处理结果】{result[:800]}\n\n"
+        "输出格式：\n"
+        "**症状**: （一句话描述现象）\n"
+        "**根因**: （一句话描述原因）\n"
+        "**修复步骤**: （简要列出操作）\n"
+        "**验证**: （恢复确认）\n"
+        "**关键词**: （逗号分隔，便于搜索）"
+    )
+    resp = client.chat.completions.create(
+        model='deepseek-chat',
+        messages=[{'role': 'user', 'content': prompt}],
+        max_tokens=300,
+    )
+    return resp.choices[0].message.content.strip()
 
 
 def main():

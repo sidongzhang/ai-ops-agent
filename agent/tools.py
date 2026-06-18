@@ -35,23 +35,30 @@ SERVICE_CMDS = {
 # ── 工具实现 ──────────────────────────────────────────────────────────────────
 
 def list_services(_=None) -> str:
-    lines = ['=== Python 业务服务 ===']
-    for name in ['producer', 'consumer', 'frontend']:
-        running, pid = _is_running(name)
-        status = f'运行中 ✅  (PID {pid})' if running else '已停止 ❌'
-        lines.append(f'  {name:12s}: {status}')
+    import concurrent.futures
 
-    lines.append('\n=== Docker 基础设施 ===')
-    try:
-        r = subprocess.run(
-            ['docker', 'compose', 'ps', '--format', 'table {{.Name}}\t{{.Status}}'],
-            capture_output=True, text=True, cwd=BASE_DIR, timeout=10
-        )
-        lines.append(r.stdout.strip() if r.returncode == 0 else '  (无法获取 Docker 状态)')
-    except Exception as e:
-        lines.append(f'  (Docker 查询失败: {e})')
+    def _check_processes():
+        lines = ['=== Python 业务服务 ===']
+        for name in ['producer', 'consumer', 'frontend']:
+            running, pid = _is_running(name)
+            status = f'运行中 ✅  (PID {pid})' if running else '已停止 ❌'
+            lines.append(f'  {name:12s}: {status}')
+        return '\n'.join(lines)
 
-    return '\n'.join(lines)
+    def _check_docker():
+        try:
+            r = subprocess.run(
+                ['docker', 'compose', 'ps', '--format', 'table {{.Name}}\t{{.Status}}'],
+                capture_output=True, text=True, cwd=BASE_DIR, timeout=5
+            )
+            return '\n=== Docker 基础设施 ===\n' + (r.stdout.strip() if r.returncode == 0 else '  (无法获取 Docker 状态)')
+        except Exception as e:
+            return f'\n=== Docker 基础设施 ===\n  (Docker 查询失败: {e})'
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+        f1 = ex.submit(_check_processes)
+        f2 = ex.submit(_check_docker)
+        return f1.result() + f2.result()
 
 
 def check_process(params: dict) -> str:
@@ -103,6 +110,9 @@ def restart_service(params: dict) -> str:
     if name not in SERVICE_CMDS:
         return f'未知服务: {name}，可选: {list(SERVICE_CMDS.keys())}'
 
+    import time
+
+    # 1. 按 PID 文件 kill
     running, pid = _is_running(name)
     if running and pid:
         try:
@@ -110,6 +120,11 @@ def restart_service(params: dict) -> str:
             logger.info(f'已终止 {name} (PID {pid})')
         except ProcessLookupError:
             pass
+
+    # 2. 兜底：按脚本名 pkill，防止 PID 文件过期导致残留进程占端口
+    script = os.path.basename(SERVICE_CMDS[name][-1])
+    subprocess.run(['pkill', '-f', script], capture_output=True)
+    time.sleep(1)  # 等端口释放
 
     os.makedirs(LOGS_DIR, exist_ok=True)
     os.makedirs(PIDS_DIR, exist_ok=True)
@@ -125,7 +140,7 @@ def restart_service(params: dict) -> str:
     with open(pid_file, 'w') as pf:
         pf.write(str(proc.pid))
 
-    import time; time.sleep(2)
+    time.sleep(2)
 
     running, new_pid = _is_running(name)
     if running:
@@ -364,21 +379,25 @@ def http_check(params: dict) -> str:
     """检查 HTTP/HTTPS 端点是否正常响应"""
     url = params.get('url', '')
     if not url:
-        # 默认检查本项目所有 HTTP 服务
-        results = []
+        import concurrent.futures
         endpoints = {
             'Frontend': 'http://localhost:5001',
             'Prometheus': 'http://localhost:9090/-/healthy',
             'Webhook': 'http://localhost:8080/webhook',
         }
-        for name, ep in endpoints.items():
+
+        def _check(item):
+            name, ep = item
             try:
-                r = requests.get(ep, timeout=3)
-                results.append(f'{name} ({ep}): HTTP {r.status_code} ✅')
+                r = requests.get(ep, timeout=2)
+                return f'{name} ({ep}): HTTP {r.status_code} ✅'
             except requests.ConnectionError:
-                results.append(f'{name} ({ep}): 连接拒绝 ❌')
+                return f'{name} ({ep}): 连接拒绝 ❌'
             except Exception as e:
-                results.append(f'{name} ({ep}): {e} ❌')
+                return f'{name} ({ep}): {e} ❌'
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(endpoints)) as ex:
+            results = list(ex.map(_check, endpoints.items()))
         return '\n'.join(results)
     try:
         r = requests.get(url, timeout=5)

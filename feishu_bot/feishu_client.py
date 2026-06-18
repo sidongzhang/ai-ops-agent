@@ -100,6 +100,85 @@ def _clean_text_block(text: str) -> str:
     return text.strip()
 
 
+def _build_alert_card(issues: list, suggestion: str) -> dict:
+    """构建简短告警卡片：列出异常 + 一句建议 + 立即修复按钮"""
+    issue_lines = '\n'.join(f'❌ {i}' for i in issues)
+    body = f'{issue_lines}\n\n**建议操作：** {suggestion}'
+
+    elements = [
+        {
+            'tag': 'div',
+            'text': {'tag': 'lark_md', 'content': body},
+        },
+        {'tag': 'hr'},
+        {
+            'tag': 'action',
+            'actions': [
+                {
+                    'tag': 'button',
+                    'text': {'tag': 'plain_text', 'content': '🔧 立即修复'},
+                    'type': 'danger',
+                    'value': {'action': 'fix_issues'},
+                },
+                {
+                    'tag': 'button',
+                    'text': {'tag': 'plain_text', 'content': '忽略'},
+                    'type': 'default',
+                    'value': {'action': 'dismiss', 'issues': issues},
+                },
+            ],
+        },
+        {
+            'tag': 'note',
+            'elements': [{'tag': 'plain_text', 'content': 'AI Ops Agent · 定时巡检 · Powered by DeepSeek'}],
+        },
+    ]
+
+    return {
+        'config': {'wide_screen_mode': True},
+        'header': {
+            'title': {'tag': 'plain_text', 'content': '⚠️  系统异常告警'},
+            'template': 'red',
+        },
+        'elements': elements,
+    }
+
+
+def _build_fix_result_card(result: str) -> dict:
+    """构建修复结果卡片（绿色头部）"""
+    blocks = _parse_blocks(result)
+    elements = []
+
+    for block_type, content in blocks:
+        if block_type == 'table':
+            table_els = _build_table_as_column_set(content)
+            if table_els:
+                elements.append({'tag': 'hr'})
+                elements.extend(table_els)
+        else:
+            cleaned = _clean_text_block(content)
+            if cleaned:
+                elements.append({
+                    'tag': 'div',
+                    'text': {'tag': 'lark_md', 'content': cleaned},
+                })
+
+    elements.append({'tag': 'hr'})
+    elements.append({
+        'tag': 'note',
+        'elements': [{'tag': 'plain_text', 'content': 'AI Ops Agent · 修复完成 · Powered by DeepSeek'}],
+    })
+
+    return {
+        'config': {'wide_screen_mode': True},
+        'header': {
+            'title': {'tag': 'plain_text', 'content': '✅  修复结果报告'},
+            'template': 'green',
+        },
+        'elements': elements,
+    }
+
+
 def _build_claude_card(text: str) -> dict:
     """把 Agent 回复构建成 Claude 风格飞书卡片"""
     blocks = _parse_blocks(text)
@@ -183,6 +262,36 @@ class FeishuClient:
             logger.error(f"发送消息失败: {result}")
         return result
 
+    def update_alert_card(self, message_id: str, state: str, body: str = ''):
+        """原地更新告警卡片状态。state: 'fixed' | 'dismissed'"""
+        if state == 'fixed':
+            title, template = '✅  已修复', 'green'
+        else:
+            title, template = '⏭️  已忽略', 'grey'
+
+        elements = []
+        if body:
+            elements.append({'tag': 'div', 'text': {'tag': 'lark_md', 'content': body}})
+        elements.append({
+            'tag': 'note',
+            'elements': [{'tag': 'plain_text', 'content': 'AI Ops Agent · 定时巡检 · Powered by DeepSeek'}],
+        })
+
+        card = {
+            'config': {'wide_screen_mode': True},
+            'header': {'title': {'tag': 'plain_text', 'content': title}, 'template': template},
+            'elements': elements,
+        }
+        r = requests.patch(
+            f'{FEISHU_API}/im/v1/messages/{message_id}',
+            headers=self._headers(),
+            json={'msg_type': 'interactive', 'content': json.dumps(card, ensure_ascii=False)},
+            timeout=10,
+        )
+        result = r.json()
+        if result.get('code') != 0:
+            logger.warning(f'更新告警卡片失败（忽略）: {result}')
+
     def reply_text(self, message_id: str, text: str) -> str:
         """回复指定消息（文字），返回新消息的 message_id"""
         r = requests.post(
@@ -239,6 +348,25 @@ class FeishuClient:
         result = r.json()
         if result.get('code') != 0:
             logger.warning(f"删除 reaction 失败（忽略）: {result}")
+
+    def send_alert_card(self, chat_id: str, issues: list, suggestion: str):
+        """发送简短异常告警卡片（含立即修复按钮）"""
+        card = _build_alert_card(issues, suggestion)
+        result = self._post_message(chat_id, 'interactive', card)
+        if result.get('code') != 0:
+            logger.warning(f'告警卡片发送失败: {result}')
+            text = '⚠️ 系统异常：\n' + '\n'.join(f'• {i}' for i in issues)
+            self._post_message(chat_id, 'text', {'text': text})
+        return result
+
+    def send_fix_result_card(self, chat_id: str, result: str):
+        """发送修复结果卡片（绿色）"""
+        card = _build_fix_result_card(result)
+        r = self._post_message(chat_id, 'interactive', card)
+        if r.get('code') != 0:
+            logger.warning('修复结果卡片发送失败，降级为纯文本')
+            self._post_message(chat_id, 'text', {'text': f'✅ 修复完成：\n{result}'})
+        return r
 
     def send_text(self, chat_id: str, text: str):
         return self._post_message(chat_id, 'text', {'text': text})
