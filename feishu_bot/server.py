@@ -7,6 +7,7 @@
 import json
 import os
 import sys
+import time
 import threading
 import logging
 import itertools
@@ -230,6 +231,7 @@ _STEP_LABELS = {
     'get_system_info':  '💻 获取系统信息',
     'check_port':       '🔌 检查端口',
     'docker_logs':      '🐳 读取容器日志',
+    'restart_docker':   '🐳 重启 Docker 容器',
     'query_redis':      '🔴 查询 Redis',
     'get_metrics':      '📈 获取指标',
 }
@@ -241,6 +243,7 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
 
     # 1. 立即发占位卡片，给用户即时反馈
     stream_msg_id = feishu.send_processing_card(chat_id, '🔧 正在修复中...')
+    _start_time = time.time()
 
     try:
         logger.info('收集现场信息...')
@@ -264,12 +267,11 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
 
         def on_step(name, args):
             label = _STEP_LABELS.get(name, f'⚙️ {name}')
-            # 上一步打勾（去重：不重复添加）
             prev = _current_step[0]
-            if prev and prev not in steps_done:
+            if prev and prev != label and prev not in steps_done:
                 steps_done.append(prev)
             _current_step[0] = label
-            feishu.update_progress_card(stream_msg_id, steps_done, label, '🔧 正在修复中...', 'blue')
+            feishu.update_progress_card(stream_msg_id, steps_done, label, '🔧 正在修复中...', 'blue', _start_time)
 
         # 3. on_chunk 首次触发 → 工具全部执行完，LLM 开始生成结论
         _generating = [False]
@@ -280,7 +282,7 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
                 prev = _current_step[0]
                 if prev and prev not in steps_done:
                     steps_done.append(prev)
-                feishu.update_progress_card(stream_msg_id, steps_done, '正在生成修复报告...', '🔧 正在修复中...', 'blue')
+                feishu.update_progress_card(stream_msg_id, steps_done, '正在生成修复报告...', '🔧 正在修复中...', 'blue', _start_time)
 
         logger.info('交由 Agent 执行修复...')
         result = get_agent_response_stream(question, on_chunk=on_chunk, on_step=on_step)
@@ -316,6 +318,7 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
             reaction_id = feishu.add_reaction(message_id, next(_reaction_cycle))
 
         stream_msg_id = feishu.send_processing_card(chat_id, '🤖 AI 运维分析')
+        _start_time = time.time()
 
         steps_done: list = []
         _current_step = ['']
@@ -324,10 +327,10 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
         def on_step(name, args):
             label = _STEP_LABELS.get(name, f'⚙️ {name}')
             prev = _current_step[0]
-            if prev and prev not in steps_done:
+            if prev and prev != label and prev not in steps_done:
                 steps_done.append(prev)
             _current_step[0] = label
-            feishu.update_progress_card(stream_msg_id, steps_done, label, '🤖 AI 运维分析', 'indigo')
+            feishu.update_progress_card(stream_msg_id, steps_done, label, '🤖 AI 运维分析', 'indigo', _start_time)
 
         def on_chunk(text):
             if not _generating[0]:
@@ -335,7 +338,7 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
                 prev = _current_step[0]
                 if prev and prev not in steps_done:
                     steps_done.append(prev)
-                feishu.update_progress_card(stream_msg_id, steps_done, '正在生成分析报告...', '🤖 AI 运维分析', 'indigo')
+                feishu.update_progress_card(stream_msg_id, steps_done, '正在生成分析报告...', '🤖 AI 运维分析', 'indigo', _start_time)
 
         result = get_agent_response_stream(question, on_chunk=on_chunk, on_step=on_step)
 

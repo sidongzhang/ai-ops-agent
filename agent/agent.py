@@ -60,6 +60,7 @@ SYSTEM_PROMPT = f"""你是一个智能运维助手（AI Ops Agent），负责监
 | get_system_info | 主机 CPU、内存、磁盘、负载概览 |
 | check_port | 检测某个端口是否可达（排查网络问题）|
 | docker_logs | 查看 Docker 容器（kafka/mysql/redis）的日志 |
+| restart_docker | 重启已停止的 Docker 容器（kafka/mysql/redis/prometheus）|
 | http_check | 检查 HTTP 端点是否正常响应 |
 
 ## 工作原则

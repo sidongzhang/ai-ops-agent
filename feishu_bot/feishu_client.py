@@ -414,17 +414,34 @@ class FeishuClient:
         self._patch_card(message_id, card)
 
     def update_progress_card(self, message_id: str, steps: list,
-                             current: str = '', title: str = '🔧 正在修复中...', template: str = 'blue'):
-        """步骤进度卡：已完成步骤打勾，当前步骤显示 loading"""
-        lines = [f'✅ {s}' for s in steps]
+                             current: str = '', title: str = '🔧 正在修复中...',
+                             template: str = 'blue', start_time: float = 0):
+        """步骤进度卡：已完成步骤打勾，当前步骤显示 loading，顶部进度条 + 耗时"""
+        done = len(steps)
+        # 进度条：以完成步数占估算总步数的比例填充，最少保留 1 格空余（未完成感）
+        estimated = max(done + (2 if current else 1), 6)
+        filled = min(int(done / estimated * 12), 11)  # 最多 11/12，留一格给当前步骤
+        bar = '▓' * filled + '░' * (12 - filled)
+
+        elapsed_str = ''
+        if start_time:
+            secs = int(time.time() - start_time)
+            elapsed_str = f'  ·  已耗时 {secs}s'
+
+        progress_line = f'{bar}  第 {done + (1 if current else 0)} 步 / 预计 {estimated} 步{elapsed_str}'
+
+        step_lines = [f'✅ {s}' for s in steps]
         if current:
-            lines.append(f'⏳ {current}')
-        content = '\n'.join(lines) if lines else '⏳ 准备中...'
+            step_lines.append(f'⏳ {current}')
+        steps_content = '\n'.join(step_lines) if step_lines else '⏳ 准备中...'
+
         card = {
             'config': {'wide_screen_mode': True},
             'header': {'title': {'tag': 'plain_text', 'content': title}, 'template': template},
             'elements': [
-                {'tag': 'div', 'text': {'tag': 'lark_md', 'content': content}},
+                {'tag': 'div', 'text': {'tag': 'lark_md', 'content': progress_line}},
+                {'tag': 'hr'},
+                {'tag': 'div', 'text': {'tag': 'lark_md', 'content': steps_content}},
                 {'tag': 'note', 'elements': [{'tag': 'plain_text', 'content': 'AI Ops Agent · Powered by DeepSeek'}]},
             ],
         }

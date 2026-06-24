@@ -375,6 +375,35 @@ def docker_logs(params: dict) -> str:
         return f'获取容器日志失败: {e}'
 
 
+def restart_docker(params: dict) -> str:
+    """重启 Docker Compose 服务（kafka/mysql/redis/prometheus）"""
+    container = params.get('container', '')
+    ALLOWED = {'kafka', 'mysql', 'redis', 'prometheus'}
+    if not container:
+        return f'请提供容器名，可选: {", ".join(sorted(ALLOWED))}'
+    if container not in ALLOWED:
+        return f'不允许重启容器 {container}，可选: {", ".join(sorted(ALLOWED))}'
+    try:
+        r = subprocess.run(
+            ['docker', 'compose', 'start', container],
+            capture_output=True, text=True, cwd=BASE_DIR, timeout=30
+        )
+        if r.returncode == 0:
+            return f'✅ {container} 容器已启动\n{r.stdout.strip()}'
+        # start 失败时尝试 up -d
+        r2 = subprocess.run(
+            ['docker', 'compose', 'up', '-d', container],
+            capture_output=True, text=True, cwd=BASE_DIR, timeout=30
+        )
+        if r2.returncode == 0:
+            return f'✅ {container} 容器已通过 up -d 启动\n{r2.stdout.strip()}'
+        return f'❌ 启动 {container} 失败:\n{r2.stderr.strip()}'
+    except subprocess.TimeoutExpired:
+        return f'启动 {container} 超时'
+    except Exception as e:
+        return f'重启 Docker 容器失败: {e}'
+
+
 def http_check(params: dict) -> str:
     """检查 HTTP/HTTPS 端点是否正常响应"""
     url = params.get('url', '')
@@ -627,6 +656,23 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "restart_docker",
+            "description": "重启已停止的 Docker Compose 服务（kafka/mysql/redis/prometheus）。当 Docker 容器意外停止导致基础设施不可用时使用",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "container": {
+                        "type": "string",
+                        "description": "docker compose 服务名，可选: kafka、mysql、redis、prometheus"
+                    }
+                },
+                "required": ["container"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "docker_logs",
             "description": "查看 Docker 容器的最新日志，用于排查 Kafka/MySQL/Redis/Prometheus 自身问题",
             "parameters": {
@@ -677,6 +723,7 @@ TOOL_FUNCTIONS = {
     'get_system_info': get_system_info,
     'check_port': check_port,
     'docker_logs': docker_logs,
+    'restart_docker': restart_docker,
     'http_check': http_check,
 }
 
