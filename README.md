@@ -145,6 +145,12 @@ Prometheus 里现在有哪些指标可以看
 系统完全没响应了，帮我全面排查并修复
 ```
 
+### 场景一补充：Web 聊天入口（前端内嵌）
+
+打开数据面板后，点击右下角 🤖 按钮可直接在网页内向 AI 运维助手提问，效果与飞书机器人相同，支持 Markdown 渲染和聊天历史（24 小时缓存）。点击「🔍 立即巡检」按钮或告警横幅中的「立即巡检」会自动发起全面巡检请求。
+
+---
+
 ### 场景二：演示 Demo（故障注入 → AI 自动修复）
 
 ```bash
@@ -253,26 +259,35 @@ Colima 未启动，运行 `colima start` 后再试。
 
 ```
 ai-ops-agent/
-├── .env                    环境变量（API Key、数据库配置等）
-├── docker-compose.yml      Kafka / MySQL / Redis / Prometheus
+├── .env                        环境变量（API Key、数据库配置等）
+├── docker-compose.yml          Kafka / MySQL / Redis / Prometheus
 ├── business/
-│   ├── producer.py         数据生产者（→ Kafka）
-│   ├── consumer.py         数据消费者（Kafka → MySQL）
-│   └── frontend/app.py     数据展示（Flask :5001）
+│   ├── producer.py             数据生产者（→ Kafka）
+│   ├── consumer.py             数据消费者（Kafka → MySQL，自动跳过脏消息）
+│   └── frontend/
+│       ├── app.py              Flask 服务（:5001），纯 Python 路由与数据逻辑
+│       ├── templates/
+│       │   └── index.html      页面 HTML 结构
+│       └── static/
+│           ├── css/style.css   全局样式
+│           └── js/
+│               ├── chat.js     AI 聊天浮窗（历史记录 / Markdown 渲染）
+│               └── dashboard.js 数据刷新 / 折线图 / 服务状态 / 一键巡检
 ├── agent/
-│   ├── agent.py            ReAct 主循环（DeepSeek API）
-│   ├── tools.py            6个运维工具
-│   ├── knowledge_base.py   关键词 RAG
-│   └── docs/               系统拓扑知识文档
+│   ├── agent.py                ReAct 主循环（DeepSeek API，while True）
+│   ├── tools.py                运维工具集
+│   ├── knowledge_base.py       关键词 RAG
+│   ├── skills/                 场景化 Skill（日志调查等）
+│   └── docs/                   系统拓扑 + 故障修复经验库（自动归档）
 ├── feishu_bot/
-│   ├── server.py           飞书 Webhook 服务（Flask :8080）
-│   └── feishu_client.py    飞书消息发送客户端（支持卡片格式）
+│   ├── server.py               飞书 Webhook 服务（Flask :8080）+ /internal/chat
+│   └── feishu_client.py        飞书消息发送客户端（支持卡片格式）
 ├── scripts/
-│   ├── start.sh            一键启动业务系统
-│   ├── stop.sh             停止业务系统
-│   ├── inject_fault.sh     故障注入（10 种类型）
-│   └── status.sh           查看服务状态
-└── logs/                   服务日志（运行后生成）
+│   ├── start.sh                一键启动业务系统
+│   ├── stop.sh                 停止业务系统
+│   ├── inject_fault.sh         故障注入（10 种类型）
+│   └── status.sh               查看服务状态
+└── logs/                       服务日志（运行后生成）
 ```
 
 ---
@@ -291,3 +306,20 @@ ai-ops-agent/
 | 飞书集成 | Webhook 事件订阅 + 卡片消息 API |
 | 公网暴露 | Cloudflare Tunnel（命名隧道，永久域名） |
 | 自动启动 | macOS LaunchAgent |
+
+
+
+Node Exporter，是 Prometheus 生态里的一个采集器，专门负责暴露宿主机（你的 Mac）的系统指标。
+
+它做的事：挂载 /proc、/sys 等系统目录，把里面的数据转成 Prometheus 能抓取的格式，暴露在 :9100/metrics。
+
+采集的指标包括：
+- CPU 使用率、idle 时间
+- 内存使用量
+- 磁盘 I/O、磁盘剩余空间
+- 网络流量（收发字节数）
+- 系统负载（load average）
+
+在这个项目里的作用：Agent 的 get_metrics 工具会向 Prometheus 发 PromQL 查询，Prometheus 再去 scrape Node Exporter 的数据。所以当你注入 cpu 故障时，Agent 可以通过 get_metrics 查到 CPU 飙高的指标，从而辅助判断根因。
+
+访问 http://localhost:9100/metrics 可以看到它暴露的所有原始数据。

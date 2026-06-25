@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI Ops</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<header class="hdr">
+  <div class="brand">
+    <div class="brand-icon">🔵</div>
+    <span class="brand-name">AI Ops</span>
+    <span class="brand-sep">/</span>
+    <span class="brand-sub">运维监控面板</span>
+  </div>
+  <div class="hdr-right">
+    <div class="svc-health" id="svc-health">
+      <div class="svc-dot" data-tip="Producer"><div class="pip" id="pip-producer"></div></div>
+      <div class="svc-dot" data-tip="Consumer"><div class="pip" id="pip-consumer"></div></div>
+      <div class="svc-dot" data-tip="Kafka"><div class="pip" id="pip-kafka"></div></div>
+      <div class="svc-dot" data-tip="MySQL"><div class="pip" id="pip-mysql"></div></div>
+    </div>
+    <div class="status-badge" id="db-badge" style="display:none">
+      <div class="pip dead" id="db-pip"></div>
+      <span id="db-label">异常</span>
+    </div>
+    <span id="countdown" style="font-size:11px;color:var(--t3)">5s</span>
+    <span class="hdr-time" id="last-update">--</span>
+  </div>
+</header>
+
+<div id="alert-bar">
+  <span class="alert-icon">🚨</span>
+  <span id="alert-text">数据链路异常，请检查服务状态</span>
+  <button class="alert-action" onclick="triggerInspect()">立即巡检</button>
+</div>
+
+<div class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+    <span style="font-size:13px;font-weight:600;color:var(--t1);">实时概览</span>
+    <button id="inspect-btn" onclick="triggerInspect()">🔍 立即巡检</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-icon">📊</div>
+      <div class="stat-val" id="total">--</div>
+      <div class="stat-lbl">传感器数据总条数</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-val norm" id="rate">--</div>
+      <div class="stat-lbl">写入速率（条 / 分钟）</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">🔗</div>
+      <div id="status-dot"><span class="stat-val ok-tag">⬤ 检测中</span></div>
+      <div class="stat-lbl">数据链路状态</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">数据写入趋势</span>
+      <span class="card-badge">近 15 分钟</span>
+    </div>
+    <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head" style="padding-bottom:12px;">
+      <span class="card-title">最近写入记录</span>
+      <span class="card-badge">最新 10 条</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>传感器</th><th>数值</th><th>单位</th><th>接收时间</th></tr></thead>
+        <tbody id="recent-rows">
+          <tr><td colspan="4" style="text-align:center;padding:40px;color:var(--t3)">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    Producer → Kafka :9092 → Consumer → MySQL :3306 → Frontend :5001 · AI Ops Agent
+  </div>
+</div>
+
+<!-- Chat Widget -->
+<button id="chat-btn" title="AI 运维助手">🤖</button>
+
+<div id="chat-panel">
+  <div id="chat-hdr">
+    <div id="chat-hdr-left">
+      <div id="chat-hdr-icon">🤖</div>
+      <div id="chat-hdr-text">
+        <div class="name">AI 运维助手</div>
+        <div class="sub">Powered by DeepSeek</div>
+      </div>
+    </div>
+    <button id="chat-close">×</button>
+  </div>
+  <div id="chat-messages">
+    <div class="msg msg-agent">你好！我是 AI 运维助手，可以帮你分析系统状态、排查故障。有什么需要了解的？</div>
+  </div>
+  <div id="chat-input-row">
+    <textarea id="chat-input" rows="1" placeholder="向 AI 提问，Enter 发送…"></textarea>
+    <button id="chat-send">↑</button>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

@@ -69,9 +69,14 @@ SYSTEM_PROMPT = f"""你是一个智能运维助手（AI Ops Agent），负责监
 3. 网络/端口问题：check_port 排查连通性，http_check 验证 HTTP 服务
 4. 性能问题：get_system_info + get_metrics 分析资源瓶颈
 5. 数据积压：get_kafka_status 检查 consumer lag
-6. 诊断清楚后执行 restart_service 修复
+6. 诊断清楚后执行 restart_service / restart_docker 修复
 7. 修复后验证：check_process + query_database 确认数据恢复
 8. 最后输出清晰的【问题报告】：发现的问题 → 根因分析 → 执行的操作 → 当前状态
+
+## 效率要求（重要）
+- **每次回复尽量同时调用多个独立工具**，不要一次只调一个。例如诊断阶段可以同时调 check_process + check_port + read_logs
+- **不要重复调用已经有结果的工具**，已知信息直接用，不要再查一遍
+- **验证阶段一次完成**：修复后同时调 check_process + query_database，不要分两次
 
 用中文回复，专业简洁。"""
 
@@ -148,11 +153,11 @@ def get_agent_response(question: str, on_step=None) -> str:
 
 
 def get_agent_response_stream(question: str, on_chunk=None, on_step=None) -> str:
-    """流式版本：工具调用同步执行，最终结论通过 on_chunk 回调逐步推送。
-    on_chunk(accumulated_text): 每积累 100 字符或 800ms 触发一次。
-    on_step(tool_name, args): 每次执行工具前触发。
+    """ReAct 主循环：工具调用阶段非流式（快），最终答案阶段流式（支持 on_chunk 推送）。
+    on_chunk(text): LLM 开始生成最终结论时触发一次。
+    on_step(tool_name, args): 每批工具执行前触发（通知进度卡片）。
     """
-    import time
+    import concurrent.futures
 
     context = get_relevant_context(question)
     skill = get_skill_context(question)
@@ -168,82 +173,78 @@ def get_agent_response_stream(question: str, on_chunk=None, on_step=None) -> str
     ]
 
     while True:
-        stream = client.chat.completions.create(
+        # ── 非流式推理（工具调用阶段更快）────────────────────────────────────
+        resp = client.chat.completions.create(
             model='deepseek-chat',
             messages=messages,
             tools=TOOLS,
             tool_choice='auto',
-            stream=True,
+            stream=False,
         )
+        choice = resp.choices[0]
+        finish_reason = choice.finish_reason
+        message = choice.message
+        content = message.content or ''
 
-        content_parts: list = []
-        tool_calls_map: dict = {}
-        finish_reason = None
-        last_push = time.time()
-        new_chars = 0
-
-        for chunk in stream:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-
-            if delta.content:
-                content_parts.append(delta.content)
-                new_chars += len(delta.content)
-                now = time.time()
-                if on_chunk and (new_chars >= 100 or now - last_push >= 0.8):
-                    on_chunk(''.join(content_parts))
-                    last_push = now
-                    new_chars = 0
-
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    idx = tc.index
-                    if idx not in tool_calls_map:
-                        tool_calls_map[idx] = {'id': '', 'function': {'name': '', 'arguments': ''}}
-                    if tc.id:
-                        tool_calls_map[idx]['id'] = tc.id
-                    if tc.function:
-                        if tc.function.name:
-                            tool_calls_map[idx]['function']['name'] += tc.function.name
-                        if tc.function.arguments:
-                            tool_calls_map[idx]['function']['arguments'] += tc.function.arguments
-
-            if chunk.choices[0].finish_reason:
-                finish_reason = chunk.choices[0].finish_reason
-
-        content = ''.join(content_parts)
-
+        # ── 最终答案 ─────────────────────────────────────────────────────────
         if finish_reason == 'stop':
             if on_chunk and content:
                 on_chunk(content)
             return content or '分析完成，未发现异常。'
 
-        if finish_reason == 'tool_calls' and tool_calls_map:
+        # ── 工具调用 ─────────────────────────────────────────────────────────
+        if finish_reason == 'tool_calls' and message.tool_calls:
             tool_calls_list = [
-                {'id': tool_calls_map[i]['id'], 'type': 'function', 'function': tool_calls_map[i]['function']}
-                for i in sorted(tool_calls_map)
+                {
+                    'id': tc.id,
+                    'type': 'function',
+                    'function': {'name': tc.function.name, 'arguments': tc.function.arguments or ''}
+                }
+                for tc in message.tool_calls
             ]
             messages.append({
                 'role': 'assistant',
                 'content': content or None,
                 'tool_calls': tool_calls_list,
             })
+
+            # 解析参数
+            parsed = []
             for tc in tool_calls_list:
                 name = tc['function']['name']
                 try:
                     args = json.loads(tc['function']['arguments'] or '{}')
                 except json.JSONDecodeError:
                     args = {}
-                if on_step:
-                    try:
-                        on_step(name, args)
-                    except Exception:
-                        pass
-                result = execute_tool(name, args)
-                messages.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': result})
+                parsed.append((tc, name, args))
+
+            # 通知进度卡片（第一个步骤）
+            if on_step and parsed:
+                try:
+                    on_step(parsed[0][1], parsed[0][2])
+                except Exception:
+                    pass
+
+            # 并行执行同批次所有工具
+            def _run(item):
+                tc, name, args = item
+                return tc['id'], execute_tool(name, args)
+
+            if len(parsed) == 1:
+                tc, name, args = parsed[0]
+                results_map = {tc['id']: execute_tool(name, args)}
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=len(parsed)) as ex:
+                    results_map = {}
+                    for tool_id, result in ex.map(_run, parsed):
+                        results_map[tool_id] = result
+
+            # 按原顺序追加（OpenAI 协议要求顺序与 tool_calls 一致）
+            for tc, name, args in parsed:
+                messages.append({'role': 'tool', 'tool_call_id': tc['id'], 'content': results_map[tc['id']]})
         else:
             return content or '处理完成。'
+
 
 
 def summarize_incident(question: str, result: str) -> str:

@@ -320,6 +320,23 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
         stream_msg_id = feishu.send_processing_card(chat_id, '🤖 AI 运维分析')
         _start_time = time.time()
 
+        # 并行预收集系统快照，让 LLM 一开始就有足够上下文，减少探索性工具调用
+        import concurrent.futures as _cf
+        with _cf.ThreadPoolExecutor(max_workers=5) as _ex:
+            _fs = _ex.submit(execute_tool, 'list_services', {})
+            _fh = _ex.submit(execute_tool, 'http_check', {})
+            _fk = _ex.submit(execute_tool, 'get_kafka_status', {})
+            _fe = _ex.submit(execute_tool, 'search_logs', {'service': 'consumer', 'keyword': 'ERROR', 'lines': 50})
+            _fp = _ex.submit(execute_tool, 'search_logs', {'service': 'producer', 'keyword': 'ERROR', 'lines': 50})
+            _snapshot = (
+                f'【当前服务状态】\n{_fs.result()}\n\n'
+                f'【HTTP 可用性】\n{_fh.result()}\n\n'
+                f'【Kafka 状态】\n{_fk.result()}\n\n'
+                f'【Consumer 近期错误日志】\n{_fe.result()}\n\n'
+                f'【Producer 近期错误日志】\n{_fp.result()}'
+            )
+        enriched_question = f'{question}\n\n以下是当前系统快照，请基于此直接分析，无需重复查询已有信息：\n{_snapshot}'
+
         steps_done: list = []
         _current_step = ['']
         _generating = [False]
@@ -340,7 +357,7 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
                     steps_done.append(prev)
                 feishu.update_progress_card(stream_msg_id, steps_done, '正在生成分析报告...', '🤖 AI 运维分析', 'indigo', _start_time)
 
-        result = get_agent_response_stream(question, on_chunk=on_chunk, on_step=on_step)
+        result = get_agent_response_stream(enriched_question, on_chunk=on_chunk, on_step=on_step)
 
         if message_id and reaction_id:
             feishu.delete_reaction(message_id, reaction_id)
@@ -350,6 +367,36 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
     except Exception as e:
         logger.error(f'Agent 出错: {e}', exc_info=True)
         feishu.send_text(chat_id, f'❌ 出错了：{e}')
+
+
+@app.route('/internal/chat', methods=['POST'])
+def internal_chat():
+    """前端聊天悬浮窗专用接口，不触发进度卡片，只返回纯文字答案。"""
+    data = request.get_json(silent=True) or {}
+    question = data.get('question', '').strip()
+    if not question:
+        return jsonify({'error': '问题不能为空'}), 400
+    try:
+        import concurrent.futures as _cf
+        with _cf.ThreadPoolExecutor(max_workers=5) as _ex:
+            _fs = _ex.submit(execute_tool, 'list_services', {})
+            _fh = _ex.submit(execute_tool, 'http_check', {})
+            _fk = _ex.submit(execute_tool, 'get_kafka_status', {})
+            _fe = _ex.submit(execute_tool, 'search_logs', {'service': 'consumer', 'keyword': 'ERROR', 'lines': 50})
+            _fp = _ex.submit(execute_tool, 'search_logs', {'service': 'producer', 'keyword': 'ERROR', 'lines': 50})
+            snapshot = (
+                f'【当前服务状态】\n{_fs.result()}\n\n'
+                f'【HTTP 可用性】\n{_fh.result()}\n\n'
+                f'【Kafka 状态】\n{_fk.result()}\n\n'
+                f'【Consumer 近期错误日志】\n{_fe.result()}\n\n'
+                f'【Producer 近期错误日志】\n{_fp.result()}'
+            )
+        enriched = f'{question}\n\n以下是当前系统快照，请基于此直接分析，无需重复查询已有信息：\n{snapshot}'
+        result = get_agent_response_stream(enriched)
+        return jsonify({'answer': result})
+    except Exception as e:
+        logger.error(f'internal_chat 出错: {e}', exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

@@ -145,14 +145,11 @@ PYEOF
 
 bad-data)
     echo "🦠 向 Kafka 注入 20 条异常消息..."
-    python3 - <<'PYEOF'
+    python3 - <<PYEOF
 import os, sys, json, random, string
-sys.path.insert(0, '.')
-from dotenv import load_dotenv
-load_dotenv()
+broker = os.getenv('KAFKA_BROKER', '${KAFKA_BROKER:-localhost:9092}')
 try:
     from kafka import KafkaProducer
-    broker = os.getenv('KAFKA_BROKER', 'localhost:9092')
     producer = KafkaProducer(bootstrap_servers=broker)
     for i in range(20):
         t = i % 3

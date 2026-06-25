@@ -77,7 +77,7 @@ def create_consumer(retries=10):
             consumer = KafkaConsumer(
                 TOPIC,
                 bootstrap_servers=KAFKA_BROKER,
-                value_deserializer=lambda v: json.loads(v.decode('utf-8')),
+                value_deserializer=lambda v: v,  # 原始 bytes，解析在循环内做
                 group_id='ops-consumer-group',
                 auto_offset_reset='earliest',
                 consumer_timeout_ms=1000,
@@ -98,9 +98,23 @@ def main():
 
     logger.info("开始消费消息...")
     saved = 0
+    skipped = 0
     while True:
         for message in consumer:
-            data = message.value
+            # 解析 JSON，失败则跳过这条消息，不影响后续消费
+            try:
+                data = json.loads(message.value.decode('utf-8'))
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                skipped += 1
+                logger.warning(f'跳过无法解析的消息 (共跳过 {skipped} 条): {e} | raw={message.value[:80]}')
+                continue
+
+            # 字段校验，缺少必要字段的消息同样跳过
+            if not isinstance(data, dict) or 'sensor' not in data or 'value' not in data:
+                skipped += 1
+                logger.warning(f'跳过格式不完整的消息 (共跳过 {skipped} 条): {data}')
+                continue
+
             try:
                 save_to_db(data)
                 saved += 1

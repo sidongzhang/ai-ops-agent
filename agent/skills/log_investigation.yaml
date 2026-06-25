@@ -24,6 +24,11 @@ steps: |
   5. 如果发现连接类错误（Connection refused / Can't connect）：
      - check_port 验证对应端口连通性
      - list_services 确认相关服务状态
-  6. 如果发现解析错误（JSON decode / invalid）：可能是 bad-data 故障注入导致乱码消息
+  6. 如果发现解析错误（JSON decode / invalid / UnicodeDecodeError）：
+     - 根因：Kafka 中存在格式错误的脏消息（bad-data 故障）
+     - consumer 已升级为跳过模式，WARNING 日志中会显示"跳过无法解析的消息"
+     - 若 consumer 仍在运行（check_process），无需重启，脏消息会被自动跳过
+     - 若 consumer 已崩溃，执行 restart_service(consumer)，重启后将自动跳过剩余脏消息
+     - 验证：search_logs(consumer, "跳过") 确认跳过日志出现，search_logs(consumer, "已保存") 确认正常消息仍在写入
   7. 如果日志量异常大：可能触发了 log-flood 故障，read_logs 查看最后几行确认
-  8. 输出【日志调查报告】：在哪个服务发现了什么错误 / 错误的时间范围 / 推断原因
+  8. 输出【日志调查报告】：在哪个服务发现了什么错误 / 错误的时间范围 / 推断原因 / 是否需要人工介入
