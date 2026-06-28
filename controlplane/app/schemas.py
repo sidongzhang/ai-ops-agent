@@ -1,4 +1,5 @@
 """API 请求/响应模型（Pydantic）。与 DB 模型分离，控制对外暴露的字段。"""
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr
@@ -113,6 +114,26 @@ class DiagnoseRequest(BaseModel):
 class DiagnoseResponse(BaseModel):
     system_id: int
     answer: str
+
+
+class WorkflowStart(BaseModel):
+    question: str
+
+
+class WorkflowOut(BaseModel):
+    id: int
+    thread_id: str
+    status: str
+    question: str
+    diagnosis: str
+    proposed_action: dict
+    execution_result: str
+    created_at: datetime
+
+
+class WorkflowDecision(BaseModel):
+    approved: bool
+    reason: str = ""
 
 
 class CollectorExecRequest(BaseModel):

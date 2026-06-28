@@ -121,5 +121,5 @@ python collector/run.py          # --once 跑一轮即退出
 ✅ 凭据加密存储：Fernet 字段级加密落库，API 响应掩码，连接器自动解密
 ✅ Langfuse 可观测性：每次 AI 诊断追踪 token / 耗时 / 模型，LANGFUSE_PUBLIC_KEY 未配置时跳过
 ✅ 模型路由：关键词检测（P0/崩溃/宕机/数据丢失等）自动升档至高级模型（deepseek-reasoner 或任意 OpenAI 兼容）
-⬜ LangGraph 审批闸 + 可恢复修复工作流
+✅ LangGraph 审批闸：AI 诊断+提案 → 人工审批 → 自动执行，MemorySaver 检查点可恢复
 ```

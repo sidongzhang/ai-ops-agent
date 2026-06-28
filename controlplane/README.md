@@ -192,8 +192,57 @@ POST /systems/{id}/collector/exec
 | POST | `/collector/report` | 采集器上报健康快照（X-Collector-Key） |
 | WS   | `/ws/collector?key=KEY` | 采集器下行通道（WebSocket，持久连接） |
 
+## LangGraph 审批闸
+
+AI 提案 + 人工审批 + 自动执行的三段式工作流，基于 LangGraph `interrupt_before` 实现人机协同。
+
+```
+POST /systems/{id}/workflow          → 启动（AI 分析 → 提案 → 暂停等待审批）
+POST /systems/{id}/workflow/{id}/decision  → 决策（approved=true 恢复执行 / false 拒绝）
+GET  /systems/{id}/workflow          → 列表
+GET  /systems/{id}/workflow/{id}     → 详情
+```
+
+**图结构：**
+```
+START → analyze_node ──[interrupt_before]──> execute_node → END
+```
+
+**提案动作类型：**
+| type | 触发条件 | 执行方式 |
+|---|---|---|
+| `fetch_logs` | 需看日志排查 | 采集器 WS 下行拉取，实时回传 |
+| `health_check` | 验证服务恢复 | 采集器 WS 下行检查 |
+| `manual` | 危险/不可逆操作 | 返回分步骤说明，人工执行 |
+
+**状态流转：** `pending` → `approved/rejected` → `done/error`
+
+**检查点：** dev 使用 `MemorySaver`（进程重启 pending 工作流不可恢复）；生产替换为 `AsyncPostgresSaver`。
+
+## 接口全览
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/auth/register` | 注册（首个用户创建其 Org） |
+| POST | `/auth/login` | 登录拿 JWT（OAuth2 表单） |
+| GET  | `/auth/me` | 当前用户 |
+| POST | `/systems` | 注册一套被监控系统 + 服务 |
+| GET  | `/systems` | 列出本租户系统 |
+| GET  | `/systems/{id}` | 系统详情 |
+| GET  | `/systems/{id}/health` | 经连接器并发探活 |
+| POST | `/systems/{id}/diagnose` | AI 诊断（Pydantic AI，含 Langfuse 追踪 + 模型路由） |
+| POST | `/systems/{id}/collectors` | 为系统创建采集器（返回一次性密钥） |
+| POST | `/systems/{id}/collector/exec` | 向在线采集器下发命令（fetch_logs/search_logs/health_check） |
+| POST | `/systems/{id}/workflow` | 启动 LangGraph 审批工作流 |
+| GET  | `/systems/{id}/workflow` | 列出工作流记录 |
+| GET  | `/systems/{id}/workflow/{wf_id}` | 工作流详情 |
+| POST | `/systems/{id}/workflow/{wf_id}/decision` | 审批决策（通过/拒绝） |
+| GET  | `/collector/config` | 采集器拉取探测配置（X-Collector-Key） |
+| POST | `/collector/report` | 采集器上报健康快照（X-Collector-Key） |
+| WS   | `/ws/collector?key=KEY` | 采集器下行通道（WebSocket，持久连接） |
+
 ## 生产化 TODO（下一阶段）
 
 - 审计日志；凭据轮转脚本
-- LangGraph 审批闸 + 可恢复修复工作流
+- LangGraph 生产检查点（AsyncPostgresSaver 替换 MemorySaver）
 - fastapi-users（OAuth/邮箱验证）；多副本部署（连接池 pgBouncer）

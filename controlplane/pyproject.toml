@@ -20,6 +20,8 @@ dependencies = [
     "redis>=5.0",
     "cryptography>=42.0",
     "langfuse>=3.0",
+    "langgraph>=0.2",
+    "websockets>=13.0",
 ]
 
 [tool.uv]

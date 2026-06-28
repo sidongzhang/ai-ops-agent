@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db
-from .routers import agent, auth, collector_agent, collector_exec, collectors, monitoring, systems
+from .routers import agent, auth, collector_agent, collector_exec, collectors, monitoring, systems, workflow
 from .routers import ws as ws_router
 
 
@@ -38,6 +38,7 @@ app.include_router(agent.router)
 app.include_router(collectors.router)
 app.include_router(collector_agent.router)
 app.include_router(collector_exec.router)
+app.include_router(workflow.router)
 app.include_router(ws_router.router)
 
 

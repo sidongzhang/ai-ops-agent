@@ -68,3 +68,26 @@ class Service(SQLModel, table=True):
     name: str
     connector: str = Field(default="http")       # local|http|tcp|ssh|prometheus|k8s
     config: dict = Field(default_factory=dict, sa_column=Column(JSON))
+
+
+class ActionWorkflow(SQLModel, table=True):
+    """
+    审批闸工作流记录。
+
+    AI 诊断后提案一个修复动作（proposed_action），等待人工审批。
+    审批通过后平台自动执行（fetch_logs/health_check 经采集器，manual 返回步骤）。
+    LangGraph 在 MemorySaver 中保存可恢复的执行状态（thread_id 为索引键）。
+    """
+    __tablename__ = "action_workflows"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    org_id: int = Field(foreign_key="orgs.id", index=True)
+    system_id: int = Field(foreign_key="systems.id", index=True)
+    thread_id: str = Field(index=True)            # LangGraph checkpoint thread id（UUID）
+    question: str
+    diagnosis: str = Field(default="")
+    proposed_action: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    # pending → approved/rejected → done/error
+    status: str = Field(default="pending", index=True)
+    execution_result: str = Field(default="")
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
