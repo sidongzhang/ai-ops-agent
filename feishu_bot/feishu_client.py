@@ -416,19 +416,27 @@ class FeishuClient:
     def update_progress_card(self, message_id: str, steps: list,
                              current: str = '', title: str = '🔧 正在修复中...',
                              template: str = 'blue', start_time: float = 0):
-        """步骤进度卡：已完成步骤打勾，当前步骤显示 loading，顶部进度条 + 耗时"""
+        """步骤进度卡：已完成步骤打勾，当前步骤显示 loading，顶部进度条 + 百分比 + 预计剩余时间"""
         done = len(steps)
-        # 进度条：以完成步数占估算总步数的比例填充，最少保留 1 格空余（未完成感）
         estimated = max(done + (2 if current else 1), 6)
-        filled = min(int(done / estimated * 12), 11)  # 最多 11/12，留一格给当前步骤
-        bar = '▓' * filled + '░' * (12 - filled)
 
-        elapsed_str = ''
-        if start_time:
-            secs = int(time.time() - start_time)
-            elapsed_str = f'  ·  已耗时 {secs}s'
+        # 百分比：当前步骤算半格，最多 95% 留余量给生成阶段
+        progress = (done + (0.5 if current else 0)) / estimated
+        pct = min(int(progress * 100), 95)
 
-        progress_line = f'{bar}  第 {done + (1 if current else 0)} 步 / 预计 {estimated} 步{elapsed_str}'
+        # 预计剩余时间：根据已完成步数动态推算，首步前用固定估算
+        if start_time and done > 0:
+            elapsed = time.time() - start_time
+            remaining = max(0, int((estimated - done) * (elapsed / done)))
+            time_str = '即将完成' if remaining == 0 else f'预计还需 {remaining}s'
+        elif start_time:
+            time_str = f'预计还需约 {estimated * 8}s'
+        else:
+            time_str = ''
+
+        dots = '●' * (pct // 10) + '○' * (10 - pct // 10)
+        suffix = f'  ·  {time_str}' if time_str else ''
+        progress_line = f'{dots}  **{pct}%**{suffix}'
 
         step_lines = [f'✅ {s}' for s in steps]
         if current:

@@ -11,6 +11,7 @@ import time
 import threading
 import logging
 import itertools
+import concurrent.futures
 from datetime import datetime
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
@@ -237,9 +238,26 @@ _STEP_LABELS = {
 }
 
 
+def _enrich_with_snapshot(question: str) -> str:
+    """并行采集五项系统快照注入到问题中，减少 Agent 的探索性工具调用。"""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+        fs = ex.submit(execute_tool, 'list_services', {})
+        fh = ex.submit(execute_tool, 'http_check', {})
+        fk = ex.submit(execute_tool, 'get_kafka_status', {})
+        fe = ex.submit(execute_tool, 'search_logs', {'service': 'consumer', 'keyword': 'ERROR', 'lines': 50})
+        fp = ex.submit(execute_tool, 'search_logs', {'service': 'producer', 'keyword': 'ERROR', 'lines': 50})
+        snapshot = (
+            f'【当前服务状态】\n{fs.result()}\n\n'
+            f'【HTTP 可用性】\n{fh.result()}\n\n'
+            f'【Kafka 状态】\n{fk.result()}\n\n'
+            f'【Consumer 近期错误日志】\n{fe.result()}\n\n'
+            f'【Producer 近期错误日志】\n{fp.result()}'
+        )
+    return f'{question}\n\n以下是当前系统快照，请基于此直接分析，无需重复查询已有信息：\n{snapshot}'
+
+
 def _do_fix(chat_id: str, alert_message_id: str = ''):
     """流式修复：立即发占位卡片，边执行边更新，最终替换为完整格式化卡片"""
-    import time
 
     # 1. 立即发占位卡片，给用户即时反馈
     stream_msg_id = feishu.send_processing_card(chat_id, '🔧 正在修复中...')
@@ -247,7 +265,6 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
 
     try:
         logger.info('收集现场信息...')
-        import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
             f_svc = ex.submit(execute_tool, 'list_services', {})
             f_http = ex.submit(execute_tool, 'http_check', {})
@@ -321,21 +338,7 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
         _start_time = time.time()
 
         # 并行预收集系统快照，让 LLM 一开始就有足够上下文，减少探索性工具调用
-        import concurrent.futures as _cf
-        with _cf.ThreadPoolExecutor(max_workers=5) as _ex:
-            _fs = _ex.submit(execute_tool, 'list_services', {})
-            _fh = _ex.submit(execute_tool, 'http_check', {})
-            _fk = _ex.submit(execute_tool, 'get_kafka_status', {})
-            _fe = _ex.submit(execute_tool, 'search_logs', {'service': 'consumer', 'keyword': 'ERROR', 'lines': 50})
-            _fp = _ex.submit(execute_tool, 'search_logs', {'service': 'producer', 'keyword': 'ERROR', 'lines': 50})
-            _snapshot = (
-                f'【当前服务状态】\n{_fs.result()}\n\n'
-                f'【HTTP 可用性】\n{_fh.result()}\n\n'
-                f'【Kafka 状态】\n{_fk.result()}\n\n'
-                f'【Consumer 近期错误日志】\n{_fe.result()}\n\n'
-                f'【Producer 近期错误日志】\n{_fp.result()}'
-            )
-        enriched_question = f'{question}\n\n以下是当前系统快照，请基于此直接分析，无需重复查询已有信息：\n{_snapshot}'
+        enriched_question = _enrich_with_snapshot(question)
 
         steps_done: list = []
         _current_step = ['']
@@ -377,22 +380,7 @@ def internal_chat():
     if not question:
         return jsonify({'error': '问题不能为空'}), 400
     try:
-        import concurrent.futures as _cf
-        with _cf.ThreadPoolExecutor(max_workers=5) as _ex:
-            _fs = _ex.submit(execute_tool, 'list_services', {})
-            _fh = _ex.submit(execute_tool, 'http_check', {})
-            _fk = _ex.submit(execute_tool, 'get_kafka_status', {})
-            _fe = _ex.submit(execute_tool, 'search_logs', {'service': 'consumer', 'keyword': 'ERROR', 'lines': 50})
-            _fp = _ex.submit(execute_tool, 'search_logs', {'service': 'producer', 'keyword': 'ERROR', 'lines': 50})
-            snapshot = (
-                f'【当前服务状态】\n{_fs.result()}\n\n'
-                f'【HTTP 可用性】\n{_fh.result()}\n\n'
-                f'【Kafka 状态】\n{_fk.result()}\n\n'
-                f'【Consumer 近期错误日志】\n{_fe.result()}\n\n'
-                f'【Producer 近期错误日志】\n{_fp.result()}'
-            )
-        enriched = f'{question}\n\n以下是当前系统快照，请基于此直接分析，无需重复查询已有信息：\n{snapshot}'
-        result = get_agent_response_stream(enriched)
+        result = get_agent_response_stream(_enrich_with_snapshot(question))
         return jsonify({'answer': result})
     except Exception as e:
         logger.error(f'internal_chat 出错: {e}', exc_info=True)

@@ -1,6 +1,42 @@
 # 故障修复经验库
 
 
+## [2026-06-26 11:02] 数据已从684增长到685，Kafka新产生的1条消息已被consumer消费（
+
+**症状**: Python 业务服务全部停止，导致数据流中断
+**根因**: MySQL短暂宕机导致consumer异常退出，进而引发producer和frontend连锁停止
+**修复步骤**: 重启producer、consumer和frontend服务
+**验证**: 所有服务正常运行，Kafka消息消费正常，Lag=0
+**关键词**: 服务离线，连锁故障，MySQL宕机，进程重启，Kafka消费确认
+
+## [2026-06-25 18:36] 数据正常流动，Producer已成功发送第1条数据，Consumer正在消费（L
+
+**症状**: Python业务服务（producer、consumer、frontend）全部停止，Docker基础设施正常运行。
+
+**根因**: Kafka容器短暂宕机导致producer连续连接失败异常退出，consumer和frontend因依赖链断裂相继停止，且无自动重启机制。
+
+**修复步骤**: 网络连通性诊断 → 日志分析确认根因 → 依次重启producer、consumer、frontend服务。
+
+**验证**: Producer成功发送数据，Consumer正在消费（Lag=1），系统完全恢复。
+
+**关键词**: Kafka宕机, Python服务停止, 依赖链断裂, 服务重启, 数据未丢失
+
+## [2026-06-24 14:59] 所有验证通过！数据已从 54 条增长到 55 条（新数据已成功生产并消费），Ka
+
+**症状**: 系统巡检发现 Python 业务服务（producer、consumer、frontend）全部停止。
+**根因**: Kafka 容器曾停止运行，导致业务服务因连接失败而退出，Kafka 自动恢复后业务服务未自动拉起。
+**修复步骤**: 手动重启 producer、consumer、frontend 服务。
+**验证**: 所有服务运行正常，新数据成功生产并消费，Kafka 无积压，Frontend 返回 200。
+**关键词**: kafka故障, 业务服务停止, 自动恢复, 服务重启, 数据积压
+
+## [2026-06-24 14:52] 所有数据正常，无异常读数。现在汇总输出最终报告。
+
+**症状**: 系统定时巡检发现 producer 服务已停止，Kafka 容器未运行  
+**根因**: Kafka Docker 容器意外停止，导致 producer 因连接超时触发 KafkaTimeoutError 后异常退出  
+**修复步骤**: 重启 Kafka 容器并验证端口可达，重启 producer 服务  
+**验证**: 所有服务运行中，数据流持续增长，无异常读数  
+**关键词**: producer 停止, Kafka 容器故障, KafkaTimeoutError, ECONNREFUSED, Docker 重启, 服务恢复
+
 ## [2026-06-24 14:03] 好的，producer 第 7/10 次，consumer 第 5/10 次重试
 
 **症状**: 系统定时巡检发现异常，多个服务持续重试连接Kafka并即将退出，数据生产中断
