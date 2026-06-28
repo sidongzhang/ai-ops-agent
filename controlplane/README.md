@@ -1,6 +1,6 @@
 # 智能运维平台 · 控制面 (Control Plane)
 
-多租户 AIOps SaaS 的后端骨架。技术栈:**FastAPI + SQLModel + Pydantic AI + Alembic**,复用仓库根目录的 `connectors/` 包做探活。
+多租户 AIOps SaaS 的后端骨架。技术栈:**FastAPI + SQLModel + Pydantic AI + Alembic + Celery**，复用仓库根目录的 `connectors/` 包做探活。
 
 ## 架构定位
 
@@ -9,7 +9,10 @@ Vue SPA ──REST/SSE──> [本控制面 FastAPI]
                          ├─ 鉴权(JWT) + 多租户(org_id 行级隔离)
                          ├─ 系统注册(systems/services → DB)
                          ├─ 监控(经 connectors/ 探活)
-                         └─ AI 诊断(Pydantic AI,DeepSeek/Claude 可切)
+                         └─ AI 诊断(Pydantic AI，DeepSeek/Claude 可切)
+
+Celery Beat ──每 60s──> Celery Worker
+                         └─ 遍历所有系统 → collect_health() → 写快照 → 告警 Webhook
 ```
 
 ## 本地运行（dev，SQLite）
@@ -95,10 +98,37 @@ cd controlplane
 `Org ──< User`,`Org ──< MonitoredSystem ──< Service`,`MonitoredSystem ──< Collector`。
 每张业务表带 `org_id`，所有查询经 `get_current_org_id` 依赖按租户过滤（行级隔离）。
 
+## 定时巡检（Celery）
+
+`docker-compose.platform.yml` 已包含 Redis（端口 6380）。
+
+```bash
+# 启动 Postgres + Redis
+docker compose -f ../docker-compose.platform.yml up -d
+
+# Worker（处理任务）—— 新终端
+cd controlplane
+.venv/bin/celery -A app.celery_app worker --loglevel=info
+
+# Beat（定时发布）—— 新终端
+.venv/bin/celery -A app.celery_app beat --loglevel=info
+```
+
+每隔 `HEALTH_CHECK_INTERVAL`（默认 60s）秒，Worker 自动巡检所有系统，发现新异常时向 `system.notify.webhook_url` 发送告警（飞书/钉钉/Slack incoming webhook 格式兼容）。
+
+**告警策略**：边沿触发（新出现的 FAIL 才告警）+ 冷却期（`ALERT_COOLDOWN_SECONDS`，默认 3600s）防刷屏。有采集器且近期有上报的系统跳过，避免重复探测。
+
+可通过根 `.env` 覆盖：
+```
+CELERY_BROKER_URL=redis://...
+HEALTH_CHECK_INTERVAL=30
+ALERT_COOLDOWN_SECONDS=1800
+```
+
 ## 生产化 TODO（下一阶段）
 
-- 定时巡检接 Celery + Redis；告警渠道抽象
 - 凭据加密存储（KMS/Vault）；审计日志
+- Collector 下行通道（WebSocket）：平台主动向采集器下发命令
 - Langfuse 可观测性；模型按难度路由（DeepSeek 分诊 / Claude 硬核诊断）
 - 审批闸 + 可恢复修复工作流引入 LangGraph
 - fastapi-users（OAuth/邮箱验证）；多副本部署（连接池 pgBouncer）

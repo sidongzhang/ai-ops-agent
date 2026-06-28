@@ -102,6 +102,7 @@ python collector/run.py          # --once 跑一轮即退出
 | 前端 | Vue 3 + Vite + Ant Design Vue + Pinia |
 | 连接器 | http / tcp / ssh / prometheus / k8s / local |
 | 采集器 | Python 轻量脚本，复用 `connectors/`，仅依赖 `requests` |
+| 定时巡检 | Celery 5 + Redis（Broker）；Beat 调度，Worker 并发探活，Webhook 告警 |
 | 控制面 DB | PostgreSQL 16（生产）/ SQLite（dev） |
 
 ---
@@ -115,7 +116,7 @@ python collector/run.py          # --once 跑一轮即退出
 ✅ collector/：出站探测上报，健康路径已打通
 ✅ Alembic 迁移：PostgreSQL 生产支持，首个 migration 已生成
 
-⬜ Celery 定时巡检：平台主动轮询每系统健康，异常自动告警
+✅ Celery 定时巡检：Beat 每 60s 发布任务，Worker 并发探活，边沿触发 Webhook 告警
 ⬜ 采集器下行通道（WebSocket）：平台向 Collector 下发命令（拉日志 / 远程动作）
 ⬜ 凭据加密存储（KMS / Vault）；审计日志
 ⬜ Langfuse 可观测性；模型按难度路由（DeepSeek 分诊 / Claude 硬核诊断）

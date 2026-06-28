@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     agent_model: str = "deepseek-chat"
 
+    # Celery 定时巡检
+    celery_broker_url: str = "redis://localhost:6380/0"
+    celery_result_backend: str = "redis://localhost:6380/1"
+    health_check_interval: int = 60        # 巡检周期（秒）
+    alert_cooldown_seconds: int = 3600     # 同一系统两次告警最小间隔（秒）
+
     repo_root: str = _REPO_ROOT
 
 

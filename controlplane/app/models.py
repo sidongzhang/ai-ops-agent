@@ -44,6 +44,7 @@ class MonitoredSystem(SQLModel, table=True):
     # Collector 上报的最近一次健康快照（私有内网系统由采集器出站推送）
     last_health: dict = Field(default_factory=dict, sa_column=Column(JSON))
     last_report_at: Optional[datetime] = Field(default=None)
+    last_alert_at: Optional[datetime] = Field(default=None)   # 上次告警时间，用于冷却期去重
     created_at: datetime = Field(default_factory=_utcnow)
 
 

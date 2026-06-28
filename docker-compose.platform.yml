@@ -15,5 +15,15 @@ services:
       timeout: 3s
       retries: 10
 
+  platform-redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"   # 6380 避免与其他 Redis 实例冲突
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   platform_pg_data:
