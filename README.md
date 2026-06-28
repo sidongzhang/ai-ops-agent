@@ -117,7 +117,7 @@ python collector/run.py          # --once 跑一轮即退出
 ✅ Alembic 迁移：PostgreSQL 生产支持，首个 migration 已生成
 
 ✅ Celery 定时巡检：Beat 每 60s 发布任务，Worker 并发探活，边沿触发 Webhook 告警
-⬜ 采集器下行通道（WebSocket）：平台向 Collector 下发命令（拉日志 / 远程动作）
+✅ 采集器下行通道（WebSocket）：平台通过 POST /systems/{id}/collector/exec 实时下发命令（fetch_logs / search_logs / health_check），采集器 WS 持久连接+断线重连
 ✅ 凭据加密存储：Fernet 字段级加密落库，API 响应掩码，连接器自动解密
 ✅ Langfuse 可观测性：每次 AI 诊断追踪 token / 耗时 / 模型，LANGFUSE_PUBLIC_KEY 未配置时跳过
 ✅ 模型路由：关键词检测（P0/崩溃/宕机/数据丢失等）自动升档至高级模型（deepseek-reasoner 或任意 OpenAI 兼容）

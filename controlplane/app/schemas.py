@@ -113,3 +113,14 @@ class DiagnoseRequest(BaseModel):
 class DiagnoseResponse(BaseModel):
     system_id: int
     answer: str
+
+
+class CollectorExecRequest(BaseModel):
+    cmd: str   # fetch_logs / search_logs / health_check
+    args: dict = {}
+
+
+class CollectorExecResponse(BaseModel):
+    ok: bool
+    result: object   # str（日志）或 list（健康列表）
+    collector_id: int

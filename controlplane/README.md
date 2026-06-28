@@ -95,22 +95,6 @@ cd controlplane
 .venv/bin/alembic downgrade -1
 ```
 
-## 主要接口
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/auth/register` | 注册（首个用户创建其 Org） |
-| POST | `/auth/login` | 登录拿 JWT（OAuth2 表单） |
-| GET  | `/auth/me` | 当前用户 |
-| POST | `/systems` | 注册一套被监控系统 + 服务 |
-| GET  | `/systems` | 列出本租户系统 |
-| GET  | `/systems/{id}` | 系统详情 |
-| GET  | `/systems/{id}/health` | 经连接器并发探活 |
-| POST | `/systems/{id}/diagnose` | AI 诊断（Pydantic AI） |
-| POST | `/systems/{id}/collectors` | 为系统创建采集器（返回一次性密钥） |
-| GET  | `/collector/config` | 采集器拉取探测配置（X-Collector-Key） |
-| POST | `/collector/report` | 采集器上报健康快照（X-Collector-Key） |
-
 ## 数据模型（多租户）
 
 `Org ──< User`,`Org ──< MonitoredSystem ──< Service`,`MonitoredSystem ──< Collector`。
@@ -167,10 +151,49 @@ ADVANCED_AGENT_MODEL=deepseek-reasoner
 # ADVANCED_AGENT_API_KEY=    # 空则复用 DEEPSEEK_API_KEY
 ```
 
+## 采集器下行通道（WebSocket）
+
+平台可随时向在线采集器下发命令，采集器立即执行并实时回传结果（无需客户开放入站端口）。
+
+**平台 WebSocket 端点**（采集器连接，不走 JWT，用采集器密钥）：
+```
+ws://localhost:8000/ws/collector?key=<COLLECTOR_KEY>
+```
+
+**下发命令接口**（由控制台用户或 AI Agent 调用，需 JWT）：
+```
+POST /systems/{id}/collector/exec
+{"cmd": "fetch_logs", "args": {"service": "web", "lines": 50}}
+```
+
+| cmd | args | 返回 |
+|---|---|---|
+| `fetch_logs` | `service`, `lines`（默认 50） | 日志文本 |
+| `search_logs` | `service`, `keyword`, `lines` | 匹配行 |
+| `health_check` | `service`（空=全部） | 健康状态列表 |
+
+采集器侧：自动在后台线程建立 WebSocket 连接，断线指数退避重连（最长 60s）。详见 `collector/README.md`。
+
+## 接口总览
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/auth/register` | 注册（首个用户创建其 Org） |
+| POST | `/auth/login` | 登录拿 JWT（OAuth2 表单） |
+| GET  | `/auth/me` | 当前用户 |
+| POST | `/systems` | 注册一套被监控系统 + 服务 |
+| GET  | `/systems` | 列出本租户系统 |
+| GET  | `/systems/{id}` | 系统详情 |
+| GET  | `/systems/{id}/health` | 经连接器并发探活 |
+| POST | `/systems/{id}/diagnose` | AI 诊断（Pydantic AI） |
+| POST | `/systems/{id}/collectors` | 为系统创建采集器（返回一次性密钥） |
+| POST | `/systems/{id}/collector/exec` | 向在线采集器下发命令（需采集器 WS 在线） |
+| GET  | `/collector/config` | 采集器拉取探测配置（X-Collector-Key） |
+| POST | `/collector/report` | 采集器上报健康快照（X-Collector-Key） |
+| WS   | `/ws/collector?key=KEY` | 采集器下行通道（WebSocket，持久连接） |
+
 ## 生产化 TODO（下一阶段）
 
 - 审计日志；凭据轮转脚本
-- Collector 下行通道（WebSocket）：平台主动向采集器下发命令
-- Langfuse 可观测性；模型按难度路由（DeepSeek 分诊 / Claude 硬核诊断）
-- 审批闸 + 可恢复修复工作流引入 LangGraph
+- LangGraph 审批闸 + 可恢复修复工作流
 - fastapi-users（OAuth/邮箱验证）；多副本部署（连接池 pgBouncer）
