@@ -19,11 +19,14 @@ from dotenv import load_dotenv
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(_ROOT, '.env'))
 
-sys.path.insert(0, os.path.join(_ROOT, 'agent'))
+for _p in (_ROOT, os.path.join(_ROOT, 'agent')):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 from feishu_client import FeishuClient
 from agent import get_agent_response, get_agent_response_stream, summarize_incident
 from tools import execute_tool
 from scheduler import HealthCheckScheduler
+import registry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,11 +75,14 @@ def _set_chat_id(chat_id: str):
 
 scheduler = HealthCheckScheduler(
     feishu_client=feishu,
-    execute_tool_fn=execute_tool,
-    get_agent_fn=get_agent_response,
     get_chat_id_fn=_get_chat_id,
 )
 scheduler.start()
+
+
+def _resolve_system_id(chat_id: str) -> str:
+    """飞书会话 → system_id；未注册映射的会话回退 demo。"""
+    return registry.resolve_system_by_chat(chat_id) or 'demo'
 
 
 def _warmup():
@@ -139,10 +145,11 @@ def webhook():
         if text and chat_id:
             # 记录 chat_id 供定时巡检使用
             _set_chat_id(chat_id)
-            logger.info(f'收到提问: {text[:80]} [message_id={message_id}]')
+            system_id = _resolve_system_id(chat_id)
+            logger.info(f'收到提问[{system_id}]: {text[:80]} [message_id={message_id}]')
             threading.Thread(
                 target=_handle,
-                args=(text, chat_id, message_id),
+                args=(text, chat_id, message_id, system_id),
                 daemon=True
             ).start()
 
@@ -169,10 +176,11 @@ def _handle_card_action(data: dict):
             if alert_message_id in _fix_in_progress:
                 return jsonify({'toast': {'type': 'warning', 'content': '⏳ 修复正在进行中，请勿重复点击'}})
             _fix_in_progress.add(alert_message_id)
-        logger.info(f'收到修复请求，chat_id={chat_id}, alert_msg={alert_message_id}')
+        system_id = _resolve_system_id(chat_id)
+        logger.info(f'收到修复请求[{system_id}]，chat_id={chat_id}, alert_msg={alert_message_id}')
         threading.Thread(
             target=_do_fix,
-            args=(chat_id, alert_message_id),
+            args=(chat_id, alert_message_id, system_id),
             daemon=True
         ).start()
         return jsonify({'toast': {'type': 'info', 'content': '🔧 正在修复，请稍候...'}})
@@ -192,15 +200,20 @@ def _handle_card_action(data: dict):
     return jsonify({})
 
 
-def _append_runbook_entry(question: str, result: str):
-    """后台调用：把本次修复经验结构化后追加到 runbook.md（最新在前）"""
+def _append_runbook_entry(question: str, result: str, system_id: str = 'demo'):
+    """后台调用：把本次修复经验结构化后追加到该系统的 runbook.md（最新在前）"""
     try:
         summary = summarize_incident(question, result)
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
         title = next((l.strip() for l in result.splitlines() if l.strip()), '故障修复')[:40]
         entry = f"\n## [{timestamp}] {title}\n\n{summary}\n"
 
-        runbook = os.path.join(_ROOT, 'agent', 'docs', 'runbook.md')
+        docs_dir = os.path.join(_ROOT, 'agent', 'docs', system_id)
+        os.makedirs(docs_dir, exist_ok=True)
+        runbook = os.path.join(docs_dir, 'runbook.md')
+        if not os.path.exists(runbook):
+            with open(runbook, 'w', encoding='utf-8') as f:
+                f.write(f'# {system_id} 运维 Runbook\n\n')
         with open(runbook, 'r', encoding='utf-8') as f:
             content = f.read()
 
@@ -238,25 +251,21 @@ _STEP_LABELS = {
 }
 
 
-def _enrich_with_snapshot(question: str) -> str:
-    """并行采集五项系统快照注入到问题中，减少 Agent 的探索性工具调用。"""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
-        fs = ex.submit(execute_tool, 'list_services', {})
-        fh = ex.submit(execute_tool, 'http_check', {})
-        fk = ex.submit(execute_tool, 'get_kafka_status', {})
-        fe = ex.submit(execute_tool, 'search_logs', {'service': 'consumer', 'keyword': 'ERROR', 'lines': 50})
-        fp = ex.submit(execute_tool, 'search_logs', {'service': 'producer', 'keyword': 'ERROR', 'lines': 50})
+def _enrich_with_snapshot(question: str, system_id: str = 'demo') -> str:
+    """并行采集系统快照注入到问题中，减少 Agent 的探索性工具调用。
+    通用化：只采集「服务状态 + HTTP 可用性」这两项对所有系统都成立的快照；
+    Kafka/日志等依赖具体基础设施的探查交给 Agent 按需调用，避免对远程系统报错刷屏。"""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+        fs = ex.submit(execute_tool, 'list_services', {}, system_id)
+        fh = ex.submit(execute_tool, 'http_check', {}, system_id)
         snapshot = (
             f'【当前服务状态】\n{fs.result()}\n\n'
-            f'【HTTP 可用性】\n{fh.result()}\n\n'
-            f'【Kafka 状态】\n{fk.result()}\n\n'
-            f'【Consumer 近期错误日志】\n{fe.result()}\n\n'
-            f'【Producer 近期错误日志】\n{fp.result()}'
+            f'【HTTP 可用性】\n{fh.result()}'
         )
     return f'{question}\n\n以下是当前系统快照，请基于此直接分析，无需重复查询已有信息：\n{snapshot}'
 
 
-def _do_fix(chat_id: str, alert_message_id: str = ''):
+def _do_fix(chat_id: str, alert_message_id: str = '', system_id: str = 'demo'):
     """流式修复：立即发占位卡片，边执行边更新，最终替换为完整格式化卡片"""
 
     # 1. 立即发占位卡片，给用户即时反馈
@@ -264,10 +273,10 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
     _start_time = time.time()
 
     try:
-        logger.info('收集现场信息...')
+        logger.info(f'[{system_id}] 收集现场信息...')
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
-            f_svc = ex.submit(execute_tool, 'list_services', {})
-            f_http = ex.submit(execute_tool, 'http_check', {})
+            f_svc = ex.submit(execute_tool, 'list_services', {}, system_id)
+            f_http = ex.submit(execute_tool, 'http_check', {}, system_id)
             services_snapshot = f_svc.result()
             http_snapshot = f_http.result()
 
@@ -301,8 +310,8 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
                     steps_done.append(prev)
                 feishu.update_progress_card(stream_msg_id, steps_done, '正在生成修复报告...', '🔧 正在修复中...', 'blue', _start_time)
 
-        logger.info('交由 Agent 执行修复...')
-        result = get_agent_response_stream(question, on_chunk=on_chunk, on_step=on_step)
+        logger.info(f'[{system_id}] 交由 Agent 执行修复...')
+        result = get_agent_response_stream(question, system_id=system_id, on_chunk=on_chunk, on_step=on_step)
 
         # 4. 最终替换为完整格式化卡片
         feishu.finalize_fix_card(stream_msg_id, result)
@@ -313,8 +322,8 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
             summary = '\n'.join(summary_lines) or '所有服务已恢复正常'
             feishu.update_alert_card(alert_message_id, 'fixed', summary)
 
-        logger.info('修复完成，流式卡片已更新')
-        threading.Thread(target=_append_runbook_entry, args=(question, result), daemon=True).start()
+        logger.info(f'[{system_id}] 修复完成，流式卡片已更新')
+        threading.Thread(target=_append_runbook_entry, args=(question, result, system_id), daemon=True).start()
     except Exception as e:
         logger.error(f'修复过程出错: {e}', exc_info=True)
         if stream_msg_id:
@@ -328,7 +337,7 @@ def _do_fix(chat_id: str, alert_message_id: str = ''):
 
 # ── 普通消息处理 ──────────────────────────────────────────────────────────────
 
-def _handle(question: str, chat_id: str, message_id: str = ''):
+def _handle(question: str, chat_id: str, message_id: str = '', system_id: str = 'demo'):
     reaction_id = ''
     try:
         if message_id:
@@ -338,7 +347,7 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
         _start_time = time.time()
 
         # 并行预收集系统快照，让 LLM 一开始就有足够上下文，减少探索性工具调用
-        enriched_question = _enrich_with_snapshot(question)
+        enriched_question = _enrich_with_snapshot(question, system_id)
 
         steps_done: list = []
         _current_step = ['']
@@ -360,7 +369,7 @@ def _handle(question: str, chat_id: str, message_id: str = ''):
                     steps_done.append(prev)
                 feishu.update_progress_card(stream_msg_id, steps_done, '正在生成分析报告...', '🤖 AI 运维分析', 'indigo', _start_time)
 
-        result = get_agent_response_stream(enriched_question, on_chunk=on_chunk, on_step=on_step)
+        result = get_agent_response_stream(enriched_question, system_id=system_id, on_chunk=on_chunk, on_step=on_step)
 
         if message_id and reaction_id:
             feishu.delete_reaction(message_id, reaction_id)
@@ -377,13 +386,45 @@ def internal_chat():
     """前端聊天悬浮窗专用接口，不触发进度卡片，只返回纯文字答案。"""
     data = request.get_json(silent=True) or {}
     question = data.get('question', '').strip()
+    system_id = data.get('system_id', 'demo')
     if not question:
         return jsonify({'error': '问题不能为空'}), 400
     try:
-        result = get_agent_response_stream(_enrich_with_snapshot(question))
+        result = get_agent_response_stream(_enrich_with_snapshot(question, system_id), system_id=system_id)
         return jsonify({'answer': result})
     except Exception as e:
         logger.error(f'internal_chat 出错: {e}', exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/systems', methods=['GET', 'POST'])
+def api_systems():
+    """系统注册入口。
+    GET  → 返回已注册系统概要（id/name/服务数/接入模式）。
+    POST → 接收系统描述符 JSON（至少含 id），落成 registry/systems/<id>.yaml 并热重载。
+    这给「别人自助接入」提供了程序化入口；也可直接往 registry/systems/ 放 YAML。
+    """
+    if request.method == 'GET':
+        systems = [
+            {
+                'id': s.get('id'),
+                'name': s.get('name'),
+                'services': len(s.get('services', [])),
+                'local': bool(s.get('local')),
+            }
+            for s in registry.list_systems()
+        ]
+        return jsonify({'systems': systems})
+
+    data = request.get_json(silent=True) or {}
+    if not data.get('id'):
+        return jsonify({'error': '系统描述符必须包含 id 字段'}), 400
+    try:
+        sid = registry.add_system(data)
+        logger.info(f'已注册/更新系统: {sid}')
+        return jsonify({'ok': True, 'id': sid})
+    except Exception as e:
+        logger.error(f'注册系统失败: {e}', exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 

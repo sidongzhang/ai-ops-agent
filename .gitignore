@@ -1,11 +1,26 @@
+# secrets / env
 .env
+
+# python venvs & caches
 .venv/
 ops-env/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# data / runtime artifacts
 agent/chroma_db/
 logs/
 pids/
-__pycache__/
-*.pyc
+*.log
+*.db
+
+# node / frontend build
+node_modules/
+dist/
+
+# editors / OS
 .idea/
 .vscode/
-*.log
+.DS_Store
