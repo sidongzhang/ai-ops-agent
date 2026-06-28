@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     agent_model: str = "deepseek-chat"
 
+    # 凭据字段加密（Fernet AES-128）；空字符串 = dev 模式跳过加密
+    encryption_key: str = ""
+
     # Celery 定时巡检
     celery_broker_url: str = "redis://localhost:6380/0"
     celery_result_backend: str = "redis://localhost:6380/1"

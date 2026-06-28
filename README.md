@@ -118,7 +118,7 @@ python collector/run.py          # --once 跑一轮即退出
 
 ✅ Celery 定时巡检：Beat 每 60s 发布任务，Worker 并发探活，边沿触发 Webhook 告警
 ⬜ 采集器下行通道（WebSocket）：平台向 Collector 下发命令（拉日志 / 远程动作）
-⬜ 凭据加密存储（KMS / Vault）；审计日志
+✅ 凭据加密存储：Fernet 字段级加密落库，API 响应掩码，连接器自动解密
 ⬜ Langfuse 可观测性；模型按难度路由（DeepSeek 分诊 / Claude 硬核诊断）
 ⬜ LangGraph 审批闸 + 可恢复修复工作流
 ```

@@ -9,6 +9,7 @@ import concurrent.futures
 
 from .config import settings
 from .models import MonitoredSystem, Service
+from .security import decrypt_sensitive_fields
 
 # 让控制面能 import 顶层 connectors 包
 if settings.repo_root not in sys.path:
@@ -19,7 +20,7 @@ from connectors import get_connector  # noqa: E402
 
 def service_to_descriptor(s: Service) -> dict:
     d = {"name": s.name, "connector": s.connector}
-    d.update(s.config or {})
+    d.update(decrypt_sensitive_fields(s.config or {}))   # 解密后再传给连接器
     return d
 
 
@@ -28,7 +29,7 @@ def system_to_descriptor(system: MonitoredSystem, services: list[Service]) -> di
         "id": f"org{system.org_id}-{system.key}",
         "name": system.name,
         "local": system.local,
-        "infra": system.infra or {},
+        "infra": decrypt_sensitive_fields(system.infra or {}),   # infra 同样解密
         "services": [service_to_descriptor(s) for s in services],
     }
 

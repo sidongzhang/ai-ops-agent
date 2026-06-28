@@ -6,6 +6,7 @@ from ..db import get_session
 from ..deps import get_current_org_id
 from ..models import MonitoredSystem, Service
 from ..schemas import ServiceOut, SystemCreate, SystemOut
+from ..security import encrypt_sensitive_fields, mask_sensitive_fields
 
 router = APIRouter(prefix="/systems", tags=["systems"])
 
@@ -25,8 +26,10 @@ def _services_of(session: Session, system_id: int) -> list[Service]:
 def _to_out(system: MonitoredSystem, services: list[Service]) -> SystemOut:
     return SystemOut(
         id=system.id, org_id=system.org_id, key=system.key, name=system.name,
-        local=system.local, notify=system.notify, infra=system.infra,
-        services=[ServiceOut(id=s.id, name=s.name, connector=s.connector, config=s.config)
+        local=system.local, notify=system.notify,
+        infra=mask_sensitive_fields(system.infra),           # 掩码敏感字段
+        services=[ServiceOut(id=s.id, name=s.name, connector=s.connector,
+                             config=mask_sensitive_fields(s.config))   # 掩码敏感字段
                   for s in services],
     )
 
@@ -42,14 +45,16 @@ def create_system(body: SystemCreate, session: Session = Depends(get_session),
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"key「{body.key}」在本组织下已存在")
 
     system = MonitoredSystem(org_id=org_id, key=body.key, name=body.name,
-                             local=body.local, notify=body.notify, infra=body.infra)
+                             local=body.local, notify=body.notify,
+                             infra=encrypt_sensitive_fields(body.infra))   # 加密落库
     session.add(system)
     session.commit()
     session.refresh(system)
 
     services = []
     for svc in body.services:
-        s = Service(system_id=system.id, name=svc.name, connector=svc.connector, config=svc.config)
+        s = Service(system_id=system.id, name=svc.name, connector=svc.connector,
+                    config=encrypt_sensitive_fields(svc.config))   # 加密落库
         session.add(s)
         services.append(s)
     session.commit()

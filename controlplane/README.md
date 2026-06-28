@@ -29,6 +29,24 @@ uv pip install --python .venv -e .         # 安装所有依赖（含 alembic + 
 
 > dev 默认使用 `controlplane/dev.db`（SQLite），零配置启动，无需额外服务。
 
+## 凭据字段加密
+
+`Service.config` 和 `MonitoredSystem.infra` 中的敏感字段（`password`、`token`、`private_key`、`identity_file`、`kubeconfig` 等）在落库前自动加密（Fernet AES-128），API 响应中掩码为 `"***"`，连接器使用前自动解密。
+
+**生成密钥：**
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+写入根目录 `.env`：
+```
+ENCRYPTION_KEY=<生成的密钥>
+```
+
+- **dev 可不设置**（留空跳过加密，零摩擦本地开发）
+- **生产必须设置**并妥善保管；密钥丢失则已加密数据无法恢复
+- 密钥轮转：需对所有已加密记录重新用新密钥加密（`re-encrypt` 脚本后续提供）
+
 ## 切换 PostgreSQL（生产）
 
 **1. 启动 Postgres**（使用仓库根目录提供的 compose 文件）：
