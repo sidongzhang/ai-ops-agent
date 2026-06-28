@@ -1,6 +1,6 @@
 # 智能运维平台 · 控制面 (Control Plane)
 
-多租户 AIOps SaaS 的后端骨架。技术栈:**FastAPI + SQLModel + Pydantic AI**,复用仓库根目录的 `connectors/` 包做探活。
+多租户 AIOps SaaS 的后端骨架。技术栈:**FastAPI + SQLModel + Pydantic AI + Alembic**,复用仓库根目录的 `connectors/` 包做探活。
 
 ## 架构定位
 
@@ -12,41 +12,93 @@ Vue SPA ──REST/SSE──> [本控制面 FastAPI]
                          └─ AI 诊断(Pydantic AI,DeepSeek/Claude 可切)
 ```
 
-> 当前阶段 = SaaS 控制面 + agentless 直连探测。下一跃:可下载 Collector(出站长连)以触达客户私有内网。
-
-## 本地运行
+## 本地运行（dev，SQLite）
 
 ```bash
 cd controlplane
-uv venv --python python3.12 .venv          # 首次
-uv pip install --python .venv -r <(uv pip compile pyproject.toml)   # 或直接装 pyproject 依赖
+uv venv --python python3.12 .venv          # 首次创建 venv
+uv pip install --python .venv -e .         # 安装所有依赖（含 alembic + psycopg2-binary）
+.venv/bin/alembic upgrade head             # 建表（dev 用 SQLite）
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
-打开 http://localhost:8000/docs 看交互式 API 文档(Swagger)。
+打开 http://localhost:8000/docs 看交互式 API 文档（Swagger）。
+
+> dev 默认使用 `controlplane/dev.db`（SQLite），零配置启动，无需额外服务。
+
+## 切换 PostgreSQL（生产）
+
+**1. 启动 Postgres**（使用仓库根目录提供的 compose 文件）：
+
+```bash
+docker compose -f docker-compose.platform.yml up -d
+```
+
+这会在本机 5432 启动 `postgres:16-alpine`，数据库名 `controlplane`，用户 `ops/opspass`。
+
+**2. 配置 DATABASE_URL**（在仓库根 `.env` 或 shell 里）：
+
+```bash
+export DATABASE_URL=postgresql+psycopg2://ops:opspass@localhost:5432/controlplane
+```
+
+**3. 运行迁移**：
+
+```bash
+cd controlplane
+.venv/bin/alembic upgrade head
+```
+
+**4. 启动控制面**：
+
+```bash
+.venv/bin/uvicorn app.main:app --reload --port 8000
+```
+
+### Alembic 常用命令
+
+```bash
+# 查看当前版本
+.venv/bin/alembic current
+
+# 查看迁移历史
+.venv/bin/alembic history
+
+# 生成新的迁移（修改 models.py 后）
+.venv/bin/alembic revision --autogenerate -m "describe change"
+
+# 升级到最新
+.venv/bin/alembic upgrade head
+
+# 回滚一步
+.venv/bin/alembic downgrade -1
+```
 
 ## 主要接口
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | `/auth/register` | 注册(首个用户创建其 Org) |
-| POST | `/auth/login` | 登录拿 JWT(OAuth2 表单) |
+| POST | `/auth/register` | 注册（首个用户创建其 Org） |
+| POST | `/auth/login` | 登录拿 JWT（OAuth2 表单） |
 | GET  | `/auth/me` | 当前用户 |
 | POST | `/systems` | 注册一套被监控系统 + 服务 |
 | GET  | `/systems` | 列出本租户系统 |
 | GET  | `/systems/{id}` | 系统详情 |
 | GET  | `/systems/{id}/health` | 经连接器并发探活 |
-| POST | `/systems/{id}/diagnose` | AI 诊断(Pydantic AI) |
+| POST | `/systems/{id}/diagnose` | AI 诊断（Pydantic AI） |
+| POST | `/systems/{id}/collectors` | 为系统创建采集器（返回一次性密钥） |
+| GET  | `/collector/config` | 采集器拉取探测配置（X-Collector-Key） |
+| POST | `/collector/report` | 采集器上报健康快照（X-Collector-Key） |
 
-## 数据模型(多租户)
+## 数据模型（多租户）
 
-`Org ──< User`,`Org ──< MonitoredSystem ──< Service`。每张业务表带 `org_id`,所有查询经 `get_current_org_id` 依赖按租户过滤。
+`Org ──< User`,`Org ──< MonitoredSystem ──< Service`,`MonitoredSystem ──< Collector`。
+每张业务表带 `org_id`，所有查询经 `get_current_org_id` 依赖按租户过滤（行级隔离）。
 
-## 生产化 TODO(下一阶段)
+## 生产化 TODO（下一阶段）
 
-- DB 换 PostgreSQL(改 `DATABASE_URL`)+ Alembic 迁移
-- 鉴权可升级 fastapi-users(OAuth/邮箱验证)
-- 定时巡检接 Celery + Redis;告警渠道抽象
-- 凭据加密存储(KMS/Vault);审计日志
-- Langfuse 可观测性;模型按难度路由(DeepSeek 分诊 / Claude 硬核诊断)
+- 定时巡检接 Celery + Redis；告警渠道抽象
+- 凭据加密存储（KMS/Vault）；审计日志
+- Langfuse 可观测性；模型按难度路由（DeepSeek 分诊 / Claude 硬核诊断）
 - 审批闸 + 可恢复修复工作流引入 LangGraph
+- fastapi-users（OAuth/邮箱验证）；多副本部署（连接池 pgBouncer）

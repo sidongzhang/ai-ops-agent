@@ -1,4 +1,8 @@
-"""数据库引擎与会话。dev 用 SQLite，生产换 DATABASE_URL 即可。"""
+"""数据库引擎与会话。
+
+dev 默认 SQLite（零配置启动），生产设置 DATABASE_URL=postgresql+psycopg2://...
+然后运行 alembic upgrade head 做 schema 迁移。
+"""
 from sqlmodel import SQLModel, Session, create_engine
 
 from .config import settings
@@ -8,9 +12,11 @@ engine = create_engine(settings.database_url, echo=False, connect_args=_connect_
 
 
 def init_db():
-    # 导入模型以注册到 metadata
-    from . import models  # noqa: F401
-    SQLModel.metadata.create_all(engine)
+    from . import models  # noqa: F401  # 注册所有模型到 metadata
+    if settings.database_url.startswith("sqlite"):
+        # dev 模式：直接 create_all，无需 alembic
+        SQLModel.metadata.create_all(engine)
+    # Postgres 生产模式：schema 由 `alembic upgrade head` 管理，此处不 create_all
 
 
 def get_session():
