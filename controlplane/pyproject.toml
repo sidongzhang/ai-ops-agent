@@ -19,6 +19,7 @@ dependencies = [
     "celery[redis]>=5.3",
     "redis>=5.0",
     "cryptography>=42.0",
+    "langfuse>=3.0",
 ]
 
 [tool.uv]

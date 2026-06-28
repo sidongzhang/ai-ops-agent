@@ -119,6 +119,7 @@ python collector/run.py          # --once 跑一轮即退出
 ✅ Celery 定时巡检：Beat 每 60s 发布任务，Worker 并发探活，边沿触发 Webhook 告警
 ⬜ 采集器下行通道（WebSocket）：平台向 Collector 下发命令（拉日志 / 远程动作）
 ✅ 凭据加密存储：Fernet 字段级加密落库，API 响应掩码，连接器自动解密
-⬜ Langfuse 可观测性；模型按难度路由（DeepSeek 分诊 / Claude 硬核诊断）
+✅ Langfuse 可观测性：每次 AI 诊断追踪 token / 耗时 / 模型，LANGFUSE_PUBLIC_KEY 未配置时跳过
+✅ 模型路由：关键词检测（P0/崩溃/宕机/数据丢失等）自动升档至高级模型（deepseek-reasoner 或任意 OpenAI 兼容）
 ⬜ LangGraph 审批闸 + 可恢复修复工作流
 ```

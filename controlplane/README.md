@@ -143,9 +143,33 @@ HEALTH_CHECK_INTERVAL=30
 ALERT_COOLDOWN_SECONDS=1800
 ```
 
+## Langfuse 可观测性
+
+每次 `/systems/{id}/diagnose` 调用都会向 Langfuse 上报：问题、回答、模型名、token 用量、耗时、org/system 元数据。
+
+在根 `.env` 中配置：
+```
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=https://cloud.langfuse.com   # 或自托管地址
+```
+
+未配置时自动跳过追踪（dev 零摩擦）。
+
+## 模型路由
+
+检测到以下关键词时自动升档至高级模型：`P0` `崩溃` `宕机` `数据丢失` `根因分析` `紧急` `生产故障`
+
+默认高级模型 `deepseek-reasoner`，可在 `.env` 覆盖：
+```
+ADVANCED_AGENT_MODEL=deepseek-reasoner
+# ADVANCED_AGENT_BASE_URL=   # 空则复用 DEEPSEEK_BASE_URL
+# ADVANCED_AGENT_API_KEY=    # 空则复用 DEEPSEEK_API_KEY
+```
+
 ## 生产化 TODO（下一阶段）
 
-- 凭据加密存储（KMS/Vault）；审计日志
+- 审计日志；凭据轮转脚本
 - Collector 下行通道（WebSocket）：平台主动向采集器下发命令
 - Langfuse 可观测性；模型按难度路由（DeepSeek 分诊 / Claude 硬核诊断）
 - 审批闸 + 可恢复修复工作流引入 LangGraph

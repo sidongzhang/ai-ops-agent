@@ -18,5 +18,5 @@ def diagnose_system(system_id: int, body: DiagnoseRequest,
                     org_id: int = Depends(get_current_org_id)):
     system = get_org_system(session, system_id, org_id)
     descriptor = system_to_descriptor(system, _services_of(session, system.id))
-    answer = diagnose(descriptor, body.question)
+    answer = diagnose(descriptor, body.question, org_id=org_id, system_id=system.id)
     return DiagnoseResponse(system_id=system.id, answer=answer)

@@ -21,10 +21,19 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
 
-    # Agent 模型（默认 DeepSeek，OpenAI 兼容；硬核诊断可切 Claude）
+    # Agent 模型（默认 DeepSeek，OpenAI 兼容）
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     agent_model: str = "deepseek-chat"
+    # 高级模型：含 P0/崩溃/数据丢失等关键词时自动升档（也走 OpenAI 兼容接口，可指向任意厂商）
+    advanced_agent_model: str = "deepseek-reasoner"
+    advanced_agent_base_url: str = ""    # 空则复用 deepseek_base_url
+    advanced_agent_api_key: str = ""     # 空则复用 deepseek_api_key
+
+    # Langfuse 可观测性（留空则跳过追踪）
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://cloud.langfuse.com"
 
     # 凭据字段加密（Fernet AES-128）；空字符串 = dev 模式跳过加密
     encryption_key: str = ""
