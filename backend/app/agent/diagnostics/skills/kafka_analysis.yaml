@@ -1,0 +1,31 @@
+name: kafka_analysis
+description: Kafka 深度分析，消费者 lag、topic 详情、broker 健康
+triggers:
+  - kafka
+  - topic
+  - 消息积压
+  - lag
+  - 消费者
+  - 消费组
+  - 队列
+  - 积压
+  - broker
+  - partition
+  - 分区
+
+steps: |
+  ## 排查剧本：Kafka 深度分析
+  1. check_service('Kafka') — 确认 Kafka 端口 9092 可达
+  2. query_prometheus('kafka_brokers') — 确认 broker 数量
+  3. query_prometheus('kafka_consumergroup_lag') — 查看各消费者组积压量
+  4. query_prometheus('kafka_consumergroup_lag_sum') — 查看总积压汇总
+  5. query_prometheus('kafka_topic_partitions') — 查看 topic 分区分布
+  6. run_kafka_command('consumer-groups --describe --all-groups') — 获取消费者组详细偏移量和 lag
+  7. run_kafka_command('topics --list') — 列出所有 topic
+  8. read_logs('Kafka', 30) — 查看 Kafka 最近日志有无报错或 warn
+  9. 输出【Kafka 状态报告】：
+     - broker 状态和数量
+     - 各 topic lag 数值（标注是否超过阈值）
+     - consumer group 消费进度
+     - 日志中的异常信息
+     - 建议（若 lag 持续增长说明 consumer 处理能力不足）

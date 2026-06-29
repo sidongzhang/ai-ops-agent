@@ -1,0 +1,33 @@
+name: log_investigation
+description: 日志调查，在各服务日志中搜索错误、异常、特定事件
+triggers:
+  - 日志
+  - 报错
+  - 错误
+  - error
+  - exception
+  - 异常
+  - 出错
+  - 崩溃
+  - log
+  - 堆栈
+  - traceback
+  - warn
+  - 警告
+
+steps: |
+  ## 排查剧本：日志调查
+  1. list_services — 先看整体，识别哪些服务状态异常（❌）
+  2. 对每个异常（❌）服务执行 search_logs(服务名, 'error') — 搜索 error 关键词
+  3. search_logs(服务名, 'Exception') — 搜索 Python/Java 异常堆栈
+  4. search_logs(服务名, 'WARN') — 搜索警告信息
+  5. 如果发现连接类错误（Connection refused / Can't connect / timeout）：
+     - check_service 验证对应依赖服务端口连通性
+  6. 如果发现解析错误（JSON decode / invalid / UnicodeDecodeError）：
+     - read_logs 查看最新日志确认是否在自动跳过脏数据
+  7. 对状态正常（✅）的服务也 read_logs(服务名, 20) 抽查最新日志
+  8. 输出【日志调查报告】：
+     - 在哪个服务发现了什么错误
+     - 错误的时间范围和频率
+     - 推断根因
+     - 是否需要人工介入

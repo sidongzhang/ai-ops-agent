@@ -1,0 +1,33 @@
+name: database_analysis
+description: MySQL 数据库状态分析，连接数、QPS、运行状态
+triggers:
+  - 数据库
+  - mysql
+  - sql
+  - 表
+  - 查询
+  - 数据条数
+  - 传感器
+  - 读数
+  - 统计
+  - db
+  - 连接数
+  - 慢查询
+
+steps: |
+  ## 排查剧本：数据库分析
+  1. check_service('MySQL') — 确认 MySQL 端口 3306 可达
+  2. query_prometheus('mysql_global_status_threads_connected') — 当前连接数
+  3. query_prometheus('mysql_global_status_threads_running') — 活跃查询线程数
+  4. query_prometheus('rate(mysql_global_status_queries[1m])') — 每秒查询数（QPS）
+  5. query_prometheus('mysql_global_status_uptime') — 运行时长（秒，判断是否近期重启过）
+  6. query_prometheus('rate(mysql_global_status_slow_queries[1m])') — 慢查询频率（若有慢查询指标）
+  7. read_logs('MySQL', 30) — 查看 MySQL 最近日志有无错误或警告
+  8. 如果连接数接近 max_connections：说明连接池可能耗尽，需要关注连接泄漏
+  9. 如果 uptime 很小（< 3600 秒）：说明 MySQL 近期重启过，检查原因
+  10. 输出【数据库分析报告】：
+      - 当前连接数和负载
+      - QPS 和慢查询情况
+      - 运行状态（稳定/近期重启）
+      - 日志中的异常
+      - 建议

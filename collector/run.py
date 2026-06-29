@@ -28,10 +28,11 @@ import time
 
 import requests
 
-# 复用平台同一套 connectors（采集器=连接器跑在客户侧）
+# 复用 shared/connectors（共享连接器 SDK）
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+_SHARED = os.path.join(_ROOT, 'shared')
+if _SHARED not in sys.path:
+    sys.path.insert(0, _SHARED)
 from connectors import get_connector  # noqa: E402
 
 PLATFORM_URL = os.getenv("PLATFORM_URL", "http://localhost:8000").rstrip("/")

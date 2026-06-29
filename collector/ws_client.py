@@ -22,8 +22,9 @@ from typing import Callable
 log = logging.getLogger(__name__)
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+_SHARED = os.path.join(_ROOT, 'shared')
+if _SHARED not in sys.path:
+    sys.path.insert(0, _SHARED)
 from connectors import get_connector  # noqa: E402
 
 

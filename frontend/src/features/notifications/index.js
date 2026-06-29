@@ -1,0 +1,1 @@
+export { useNotifyConfig } from './useNotifyConfig'

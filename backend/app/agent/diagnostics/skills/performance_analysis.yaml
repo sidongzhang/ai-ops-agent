@@ -1,0 +1,39 @@
+name: performance_analysis
+description: 系统性能分析，排查 CPU 飙高、内存不足、磁盘满等资源瓶颈
+triggers:
+  - 性能
+  - cpu
+  - 内存
+  - 磁盘
+  - 负载
+  - 卡
+  - 慢
+  - 资源
+  - 压力
+  - load
+  - memory
+  - disk
+  - 飙高
+  - 占用
+  - 瓶颈
+
+steps: |
+  ## 排查剧本：性能分析
+  1. query_prometheus('node_load1') — 系统 1 分钟平均负载
+  2. query_prometheus('node_load5') — 系统 5 分钟平均负载（趋势判断）
+  3. query_prometheus('100 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100') — CPU 使用率百分比
+  4. query_prometheus('node_memory_MemAvailable_bytes') — 当前可用内存（字节）
+  5. query_prometheus('node_memory_MemTotal_bytes') — 内存总量，与上条对比算占用率
+  6. query_prometheus('node_filesystem_avail_bytes{mountpoint="/"}') — 根分区剩余空间
+  7. 如果 CPU 使用率 > 80%：
+     - list_services 确认服务是否都在运行
+     - search_logs 关键服务排查是否有异常高频操作
+  8. 如果内存可用量 < 总内存 20%：
+     - run_redis_command('INFO memory') 检查 Redis 内存占用
+  9. 如果磁盘剩余 < 10%：
+     - 提示可能影响日志写入和数据库写入
+  10. 输出【性能分析报告】：
+      - 各指标当前数值（标明是否超过阈值）
+      - 最可能的性能瓶颈
+      - 根因推断
+      - 建议措施
