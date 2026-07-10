@@ -28,9 +28,35 @@ async def analyze_node(state: WorkflowState) -> dict:
         }
     except Exception as exc:
         log.error("[workflow:%s] 分析失败: %s", state["thread_id"], exc)
+        err_str = str(exc)
+        if "Exceeded maximum output retries" in err_str or "retries" in err_str.lower():
+            err_type, guidance = "模型输出异常", (
+                "AI 模型生成诊断时反复出错。这可能是因为问题描述不够清晰，"
+                "或系统描述符信息不足。建议补充更多上下文后重试，"
+                "或直接进入系统详情页手动查看监控数据。"
+            )
+        elif "401" in err_str or "Unauthorized" in err_str or "API key" in err_str.lower():
+            err_type, guidance = "AI 服务认证失败", (
+                "AI 模型 API 密钥无效或已过期。"
+                "请检查后端 .env 文件中的 DEEPSEEK_API_KEY 是否正确配置。"
+            )
+        elif "timeout" in err_str.lower() or "timed out" in err_str.lower():
+            err_type, guidance = "AI 服务超时", (
+                "AI 模型服务响应超时，可能是网络问题或模型负载过高，请稍后重试。"
+            )
+        else:
+            err_type, guidance = "诊断异常", f"AI 诊断遇到错误: {err_str[:200]}"
         return {
-            "diagnosis": f"分析失败: {exc}",
-            "proposed_action": {"type": "manual", "description": "请人工排查", "manual_steps": []},
+            "diagnosis": f"分析失败（{err_type}）",
+            "proposed_action": {
+                "type": "manual",
+                "description": guidance,
+                "manual_steps": [
+                    "确认 AI 模型服务是否正常运行（检查 API KEY 和网络）",
+                    "检查系统服务配置（健康检查地址、容器名称等）",
+                    "如问题持续，可进入系统详情页手动查看监控数据和日志",
+                ],
+            },
         }
 
 
