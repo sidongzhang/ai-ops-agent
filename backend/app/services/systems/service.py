@@ -389,6 +389,22 @@ def get_decrypted_notify(session: Session, system_id: int, org_id: int) -> tuple
     return system.name, decrypt_sensitive_fields(system.notify or {})
 
 
+def get_restart_policy(
+    session: Session,
+    system_id: int,
+    org_id: int,
+    current_user: User,
+) -> RestartPolicyOut:
+    system = require_system(session, system_id, org_id)
+    policy = normalize_restart_policy(system)
+    return RestartPolicyOut(
+        authorized_user_ids=policy["authorized_user_ids"],
+        has_permission=has_restart_permission(current_user, system),
+        can_manage=can_manage_restart_policy(current_user, system),
+    )
+
+
+
 def update_restart_policy(
     session: Session,
     system_id: int,

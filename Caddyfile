@@ -1,0 +1,34 @@
+:80 {
+    # API 请求转发到后端
+    handle /api/* {
+        reverse_proxy localhost:8000
+    }
+    handle /auth/* {
+        reverse_proxy localhost:8000
+    }
+    handle /systems* {
+        reverse_proxy localhost:8000
+    }
+    handle /collectors* {
+        reverse_proxy localhost:8000
+    }
+    handle /workflows* {
+        reverse_proxy localhost:8000
+    }
+    handle /healthz {
+        reverse_proxy localhost:8000
+    }
+    handle /ws* {
+        reverse_proxy localhost:8000
+    }
+    handle /feishu* {
+        reverse_proxy localhost:8000
+    }
+
+    # 前端静态文件
+    handle {
+        root * /Users/zhangsidong/ai-ops-agent/frontend/dist
+        try_files {path} /index.html
+        file_server
+    }
+}

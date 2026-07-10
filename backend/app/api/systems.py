@@ -28,6 +28,7 @@ from ..services.systems.service import (
     get_system as get_system_detail,
     list_systems as list_system_records,
     test_service_draft as test_service_draft_record,
+    get_restart_policy as get_restart_policy_record,
     update_service_draft as update_service_draft_record,
     update_restart_policy as update_restart_policy_config,
     update_notify as update_notify_config,
@@ -191,6 +192,19 @@ def test_notify(system_id: int,
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"发送失败: {exc}")
     return {"ok": True, "message": "测试通知已发送", "channels": results}
 
+
+
+@router.get("/{system_id}/restart-policy", response_model=RestartPolicyOut)
+def read_restart_policy(
+    system_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
+):
+    try:
+        return get_restart_policy_record(session, system_id, org_id, user)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
 
 @router.put("/{system_id}/restart-policy", response_model=RestartPolicyOut)
 def update_restart_policy(

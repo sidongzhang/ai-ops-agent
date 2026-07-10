@@ -387,9 +387,9 @@ CELERY_BROKER_URL=redis://localhost:6380/0
 
 ## 十五、下一步方向（待办）
 
-- [ ] Prometheus 告警规则 → 自动触发飞书告警（目前靠 Celery 定时探活）
-- [ ] 前端 WebSocket 流式诊断接入（已有后端 WS 端点，前端 SystemDetailView 诊断 tab 待改）
-- [ ] Alembic 迁移脚本补全（当前 dev 用 `create_all`）
+- [x] Prometheus 告警规则 → 自动触发飞书告警（目前靠 Celery 定时探活）
+- [x] 前端 WebSocket 流式诊断接入（已有后端 WS 端点，前端 SystemDetailView 诊断 tab 待改）
+- [x] Alembic 迁移脚本补全（当前 dev 用 `create_all`）
 - [ ] 采集器打包为可执行二进制（PyInstaller / Docker 镜像）
 - [ ] 生产切换 Postgres（`DATABASE_URL=postgresql+psycopg://...`）
-- [ ] Celery Worker 告警任务补全（`tasks.py` 框架已有，巡检逻辑待完善）
+- [x] Celery Worker 告警任务补全（`tasks.py` 框架已有，巡检逻辑待完善）
