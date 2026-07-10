@@ -391,5 +391,5 @@ CELERY_BROKER_URL=redis://localhost:6380/0
 - [x] 前端 WebSocket 流式诊断接入（已有后端 WS 端点，前端 SystemDetailView 诊断 tab 待改）
 - [x] Alembic 迁移脚本补全（当前 dev 用 `create_all`）
 - [x] 采集器打包为可执行二进制（PyInstaller + Docker）
-- [ ] 生产切换 Postgres（`DATABASE_URL=postgresql+psycopg://...`）
+- [x] 生产切换 Postgres（docker-compose + DATABASE_URL，依赖已安装）
 - [x] Celery Worker 告警任务补全（`tasks.py` 框架已有，巡检逻辑待完善）
