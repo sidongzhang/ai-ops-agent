@@ -21,6 +21,7 @@
   python collector/run.py --once     # 跑一轮即退出（便于测试/cron，跳过 WS）
   COLLECTOR_WS=false python collector/run.py  # 禁用下行通道
 """
+__version__ = "934d8bc"
 import logging
 import os
 import sys
@@ -102,8 +103,11 @@ def _start_ws() -> None:
 
 def main() -> None:
     if not COLLECTOR_KEY:
-        print("错误：请设置 COLLECTOR_KEY 环境变量（创建采集器时返回的密钥）")
+        print(f"采集器版本: {__version__}\n正确用法: PLATFORM_URL=... COLLECTOR_KEY=... /path/to/aiops-collector [--once]")
         sys.exit(1)
+    if "--version" in sys.argv or "-v" in sys.argv:
+        print(f"aiops-collector v{__version__}")
+        sys.exit(0)
     once = "--once" in sys.argv
     log.info(f"采集器启动 → 平台 {PLATFORM_URL}，间隔 {INTERVAL}s，模式={'单次' if once else '持续'}")
 
