@@ -24,16 +24,23 @@ class PrometheusConnector(Connector):
             r = requests.get(f'{url}/api/v1/query', params={'query': query}, timeout=5)
             if r.status_code != 200:
                 return False, f'Prometheus HTTP {r.status_code}'
-            result = r.json().get('data', {}).get('result', [])
+            payload = r.json()
+            if payload.get('status') != 'success':
+                return False, f"PromQL 无效：{payload.get('error', '查询失败')}"
+            result = payload.get('data', {}).get('result', [])
             if not result:
-                return False, f"查询 '{query}' 无结果"
+                return False, f"指标校验失败：查询 '{query}' 无结果，请确认指标名和抓取目标"
             vals = []
             for item in result:
                 try:
                     vals.append(float(item.get('value', [0, '0'])[1]))
                 except (ValueError, TypeError):
                     pass
+            if not vals:
+                return False, f"指标校验失败：查询 '{query}' 未返回数值"
             ok = any(v >= 1 for v in vals)
-            return ok, f"{query} => {vals[:5]}"
+            if not ok:
+                return False, f"指标存在但当前值均小于 1：{query} => {vals[:5]}"
+            return True, f"指标校验通过：{query} => {vals[:5]}"
         except Exception as e:
             return False, str(e)

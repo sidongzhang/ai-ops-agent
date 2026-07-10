@@ -8,6 +8,7 @@ export const THEMES = {
   amber: {
     name: '琥珀', label: '暖金',
     colorPrimary: '#D97706',
+    primaryBg: 'rgba(217,119,6,0.1)',
     colorBgBase: '#FEFCF7',
     colorBgContainer: '#FFFFFF',
     sidebar: '#1A1206',
@@ -24,6 +25,7 @@ export const THEMES = {
   rose: {
     name: '玫瑰', label: '暖粉',
     colorPrimary: '#E11D48',
+    primaryBg: 'rgba(225,29,72,0.1)',
     colorBgBase: '#FFF9FA',
     colorBgContainer: '#FFFFFF',
     sidebar: '#1A0810',
@@ -40,6 +42,7 @@ export const THEMES = {
   ember: {
     name: '余烬', label: '暖焰',
     colorPrimary: '#C2410C',
+    primaryBg: 'rgba(194,65,12,0.1)',
     colorBgBase: '#FEF7F2',
     colorBgContainer: '#FFFFFF',
     sidebar: '#1A0D08',
@@ -56,6 +59,7 @@ export const THEMES = {
   ocean: {
     name: '海洋', label: '冷蓝',
     colorPrimary: '#0284C7',
+    primaryBg: 'rgba(2,132,199,0.1)',
     colorBgBase: '#F0F9FF',
     colorBgContainer: '#FFFFFF',
     sidebar: '#0C4A6E',
@@ -84,6 +88,7 @@ const CSS_VARS = {
   '--text':              'textColor',
   '--text-subtle':       'subtleText',
   '--primary':           'colorPrimary',
+  '--primary-bg':        'primaryBg',
 }
 
 export const useThemeStore = defineStore('theme', () => {

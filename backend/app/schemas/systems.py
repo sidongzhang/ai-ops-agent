@@ -1,4 +1,6 @@
 """Schemas for monitored systems."""
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -10,10 +12,18 @@ class ServiceIn(BaseModel):
 
 class NotifyConfig(BaseModel):
     type: str = "none"
+    channels: list[str] = Field(default_factory=list)
     app_id: str = ""
     app_secret: str = ""
     chat_id: str = ""
     webhook_url: str = ""
+    email_to: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_tls: bool = True
 
 
 class SystemCreate(BaseModel):
@@ -30,6 +40,44 @@ class ServiceOut(BaseModel):
     name: str
     connector: str
     config: dict
+    enabled: bool = True
+    probe_status: str = "passed"
+    probe_detail: str = ""
+    tested_at: datetime | None = None
+
+
+class ServiceProbeOut(BaseModel):
+    service_id: int
+    name: str
+    connector: str
+    ok: bool
+    detail: str
+    tested_at: str
+
+
+class RestartPolicyUpdate(BaseModel):
+    authorized_user_ids: list[int] = Field(default_factory=list)
+
+
+class RestartPolicyOut(BaseModel):
+    authorized_user_ids: list[int] = Field(default_factory=list)
+    has_permission: bool = False
+    can_manage: bool = False
+
+
+class RestartServiceOut(BaseModel):
+    name: str
+    container: str = ""
+    restartable: bool = False
+
+
+class RestartCapabilityOut(BaseModel):
+    enabled: bool = False
+    execution_mode: str = "unavailable"
+    collector_online: bool = False
+    has_permission: bool = False
+    reason: str = ""
+    services: list[RestartServiceOut] = Field(default_factory=list)
 
 
 class SystemOut(BaseModel):
@@ -40,4 +88,6 @@ class SystemOut(BaseModel):
     local: bool
     notify: dict
     infra: dict
+    restart_policy: RestartPolicyOut = Field(default_factory=RestartPolicyOut)
+    restart_capability: RestartCapabilityOut = Field(default_factory=RestartCapabilityOut)
     services: list[ServiceOut] = Field(default_factory=list)

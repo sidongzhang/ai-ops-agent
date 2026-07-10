@@ -6,7 +6,7 @@ from sqlmodel import Session
 from app.core.security import generate_collector_key, hash_collector_key
 from app.models.collectors import Collector
 from app.repositories.collectors import list_collectors_for_system
-from app.repositories.systems import list_services_for_system
+from app.repositories.systems import list_enabled_services_for_system
 from app.schemas import CollectorConfig, CollectorCreate, CollectorCreated, CollectorOut, CollectorReport
 from app.services.descriptors.builder import system_to_descriptor
 from app.services.systems.service import require_system
@@ -47,7 +47,7 @@ def list_collectors(session: Session, system_id: int, org_id: int) -> list[Colle
 
 def get_collector_config(session: Session, collector: Collector) -> CollectorConfig:
     system = require_system(session, collector.system_id, collector.org_id)
-    services = list_services_for_system(session, system.id)
+    services = list_enabled_services_for_system(session, system.id)
     descriptor = system_to_descriptor(system, services)
     return CollectorConfig(
         system_id=system.id,

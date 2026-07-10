@@ -15,8 +15,10 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
 import sys
 import threading
+import time
 from typing import Callable
 
 log = logging.getLogger(__name__)
@@ -62,6 +64,39 @@ def _handle_command(cmd: str, args: dict, descriptor: dict) -> dict:
                     ok, detail = False, str(e)
                 results.append({"name": svc.get("name", ""), "ok": ok, "detail": detail})
             return {"ok": True, "result": results}
+
+        elif cmd == "restart_container":
+            svc_name = args.get("service", "")
+            container = str(args.get("container", "") or "").strip()
+            svc = _find_service(descriptor, svc_name)
+            if not svc:
+                return {"ok": False, "result": {"error": f"服务「{svc_name}」未注册"}}
+            expected = str(
+                svc.get("runtime", {}).get("container")
+                or svc.get("container")
+                or svc.get("config", {}).get("container", "")
+            ).strip()
+            if not expected:
+                return {"ok": False, "result": {"error": f"服务「{svc_name}」未配置可重启容器"}}
+            if container != expected:
+                return {"ok": False, "result": {"error": f"容器「{container}」与系统注册配置不一致"}}
+            started_at = time.monotonic()
+            result = subprocess.run(
+                ["docker", "restart", expected],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                error = result.stderr.strip() or f"docker restart 失败，退出码 {result.returncode}"
+                return {"ok": False, "result": {"error": error, "target": expected}}
+            return {
+                "ok": True,
+                "result": {
+                    "target": expected,
+                    "duration_ms": int((time.monotonic() - started_at) * 1000),
+                },
+            }
 
         else:
             return {"ok": False, "result": f"未知命令: {cmd}"}

@@ -1,0 +1,21 @@
+name: http_health_failure
+description: HTTP 接口健康检查失败，检查状态码、响应耗时和服务日志
+triggers:
+  - http
+  - 接口异常
+  - 接口失败
+  - 健康接口
+  - healthz
+  - "404"
+  - "500"
+  - 网关超时
+  - bad gateway
+
+steps: |
+  ## 排查剧本：HTTP 健康检查失败
+  1. list_services - 确认失败接口及影响范围
+  2. check_service(目标 HTTP 服务) - 复测 URL、状态码和响应时间
+  3. read_logs(目标 HTTP 服务, 50) - 检查应用错误、依赖超时和启动异常
+  4. search_logs(目标 HTTP 服务, 'error') - 提取最近错误证据
+  5. query_prometheus('up') - 对照 Prometheus 抓取状态，判断是单接口还是整体故障
+  6. 输出【HTTP 健康检查报告】：失败 URL、状态码或超时、影响、证据和处理建议

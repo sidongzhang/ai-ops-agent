@@ -19,8 +19,18 @@ from jose import JWTError, jwt
 from .config import settings
 
 # 凭据字段白名单：字段名（小写）包含以下词即视为敏感
-_SENSITIVE_KEYS = {"password", "secret", "token", "private_key",
-                   "identity_file", "auth_header", "kubeconfig", "api_key", "key"}
+_SENSITIVE_KEYS = {
+    "password",
+    "secret",
+    "token",
+    "private_key",
+    "identity_file",
+    "auth_header",
+    "kubeconfig",
+    "api_key",
+    "database_url",
+    "key",
+}
 _ENC_PREFIX = "enc:"
 
 
@@ -37,11 +47,15 @@ def _is_sensitive(field_name: str) -> bool:
 def encrypt_sensitive_fields(config: dict) -> dict:
     """落库前加密 config/infra 中的敏感字段。dev 无密钥时原样返回。"""
     f = _get_fernet()
-    if not f or not config:
+    if not config:
         return config
     result = {}
     for k, v in config.items():
-        if _is_sensitive(k) and v and not str(v).startswith(_ENC_PREFIX):
+        if isinstance(v, dict):
+            result[k] = encrypt_sensitive_fields(v)
+        elif isinstance(v, list):
+            result[k] = [encrypt_sensitive_fields(item) if isinstance(item, dict) else item for item in v]
+        elif f and _is_sensitive(k) and v and not str(v).startswith(_ENC_PREFIX):
             result[k] = _ENC_PREFIX + f.encrypt(str(v).encode()).decode()
         else:
             result[k] = v
@@ -55,7 +69,11 @@ def decrypt_sensitive_fields(config: dict) -> dict:
         return config
     result = {}
     for k, v in config.items():
-        if f and _is_sensitive(k) and isinstance(v, str) and v.startswith(_ENC_PREFIX):
+        if isinstance(v, dict):
+            result[k] = decrypt_sensitive_fields(v)
+        elif isinstance(v, list):
+            result[k] = [decrypt_sensitive_fields(item) if isinstance(item, dict) else item for item in v]
+        elif f and _is_sensitive(k) and isinstance(v, str) and v.startswith(_ENC_PREFIX):
             result[k] = f.decrypt(v[len(_ENC_PREFIX):].encode()).decode()
         else:
             result[k] = v
@@ -66,7 +84,17 @@ def mask_sensitive_fields(config: dict) -> dict:
     """API 响应中将有值的敏感字段替换为 '***'，防止凭据通过 API 泄露。"""
     if not config:
         return config
-    return {k: ("***" if _is_sensitive(k) and v else v) for k, v in config.items()}
+    result = {}
+    for k, v in config.items():
+        if isinstance(v, dict):
+            result[k] = mask_sensitive_fields(v)
+        elif isinstance(v, list):
+            result[k] = [mask_sensitive_fields(item) if isinstance(item, dict) else item for item in v]
+        elif _is_sensitive(k) and v:
+            result[k] = "***"
+        else:
+            result[k] = v
+    return result
 
 
 def hash_password(password: str) -> str:
@@ -101,3 +129,11 @@ def generate_collector_key() -> str:
 
 def hash_collector_key(key: str) -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def generate_system_token() -> str:
+    return "sys_" + secrets.token_urlsafe(32)
+
+
+def hash_system_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

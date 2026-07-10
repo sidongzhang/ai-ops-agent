@@ -1,4 +1,4 @@
-"""Skill router: match a user question to a pre-defined diagnostic playbook."""
+"""Match a user question to a built-in diagnostic playbook."""
 import logging
 import os
 from functools import lru_cache
@@ -28,22 +28,39 @@ def _load_skills() -> tuple[dict, ...]:
     return tuple(skills)
 
 
-def get_skill_steps(question: str) -> str:
-    """Return the steps of the best-matching skill, or '' if none match."""
+def match_skill(question: str, disabled_names: set[str] | None = None) -> dict | None:
+    """Return the best matching enabled playbook with its match score."""
     if not question:
-        return ""
+        return None
+    disabled_names = disabled_names or set()
     q = question.lower()
     best, best_score = None, 0
     for skill in _load_skills():
+        if skill["name"] in disabled_names:
+            continue
         score = sum(1 for t in skill["triggers"] if t.lower() in q)
         if score > best_score:
             best_score, best = score, skill
     if best and best_score >= 1:
         log.info(f"[skill-router] 匹配 skill={best['name']} score={best_score}")
-        return best["steps"]
-    return ""
+        return {**best, "score": best_score}
+    return None
+
+
+def get_skill_steps(question: str, disabled_names: set[str] | None = None) -> str:
+    """Return the steps of the best-matching playbook, or an empty string."""
+    skill = match_skill(question, disabled_names)
+    return skill["steps"] if skill else ""
 
 
 def list_skills() -> list[dict]:
-    """Return name + description for all loaded skills (for introspection)."""
-    return [{"name": s["name"], "description": s["description"]} for s in _load_skills()]
+    """Return all built-in playbooks for management and introspection."""
+    return [
+        {
+            "name": skill["name"],
+            "description": skill["description"],
+            "triggers": list(skill["triggers"]),
+            "steps": skill["steps"],
+        }
+        for skill in _load_skills()
+    ]

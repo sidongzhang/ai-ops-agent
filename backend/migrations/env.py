@@ -10,7 +10,7 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.core.config import settings  # noqa: E402
-from app.models import tables as models  # noqa: E402, F401  # 注册所有 table 到 metadata
+from app.models import Org, User, MonitoredSystem, Collector, Service, ActionWorkflow  # noqa: E402, F401  # 注册所有 table 到 metadata
 
 config = context.config
 

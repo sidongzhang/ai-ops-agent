@@ -1,11 +1,15 @@
 <script setup>
-import { defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '../../../api'
 const AddServiceModal = defineAsyncComponent(() => import('../components').then((module) => module.AddServiceModal))
+const DiagnosticTemplatesCard = defineAsyncComponent(() => import('../components').then((module) => module.DiagnosticTemplatesCard))
 const MetricsTab = defineAsyncComponent(() => import('../components').then((module) => module.MetricsTab))
 const NotifyConfigCard = defineAsyncComponent(() => import('../components').then((module) => module.NotifyConfigCard))
+const ReadonlyDatabaseCard = defineAsyncComponent(() => import('../components').then((module) => module.ReadonlyDatabaseCard))
 const ServicesConfigCard = defineAsyncComponent(() => import('../components').then((module) => module.ServicesConfigCard))
+const SystemTokensCard = defineAsyncComponent(() => import('../components').then((module) => module.SystemTokensCard))
+const AuditLogList = defineAsyncComponent(() => import('../../../components/AuditLogList.vue'))
 const DiagnosisPanel = defineAsyncComponent(() => import('../../diagnostics').then((module) => module.DiagnosisPanel))
 import { useMetricsPolling } from '../../monitoring'
 import { useNotifyConfig } from '../../notifications'
@@ -34,6 +38,20 @@ const activeTab = ref('overview')
 const system = ref(null)
 const health = ref(null)
 const healthLoading = ref(false)
+const systemMessages = ref([])
+const messageActionId = ref(null)
+const auditLogs = ref([])
+const auditLoading = ref(false)
+const systemMessageStatusText = {
+  unread: '未读',
+  read: '已读',
+  acknowledged: '已确认',
+}
+const systemAccessTag = computed(() => {
+  if (!system.value) return ''
+  if (system.value.local) return '平台托管'
+  return system.value.restart_capability?.enabled ? '远程可控' : '远程接入'
+})
 const { metrics, metricsLoading } = useMetricsPolling(props.id)
 const {
   notifyCfg,
@@ -43,6 +61,7 @@ const {
   notifyTestLoading,
   onNotifyTypeChange,
   saveNotify,
+  startEditingNotifySecret,
   syncNotifyFromSystem,
   testNotify,
 } = useNotifyConfig(props.id, loadSystem)
@@ -53,6 +72,44 @@ async function loadSystem() {
     system.value = data
     syncNotifyFromSystem(data)
   } catch { message.error('加载系统失败') }
+}
+
+async function loadSystemMessages() {
+  try {
+    const { data } = await api.get(`/systems/${props.id}/messages`, { params: { limit: 20 } })
+    systemMessages.value = data.filter((item) => item.status !== 'resolved')
+  } catch {
+    systemMessages.value = []
+  }
+}
+
+async function loadSystemAudit() {
+  auditLoading.value = true
+  try {
+    const { data } = await api.get('/audit', { params: { system_id: props.id, limit: 8 } })
+    auditLogs.value = data
+  } catch {
+    auditLogs.value = []
+  } finally {
+    auditLoading.value = false
+  }
+}
+
+async function updateSystemMessage(item, action) {
+  messageActionId.value = item.id
+  try {
+    const { data } = await api.post(`/messages/${item.id}/${action}`)
+    systemMessages.value = systemMessages.value
+      .map((current) => current.id === item.id ? data : current)
+      .filter((current) => current.status !== 'resolved')
+    window.dispatchEvent(new Event('aiops:messages-changed'))
+    loadSystemAudit()
+    message.success(action === 'ack' ? '已确认消息' : '已标记解决')
+  } catch (error) {
+    message.error(error?.response?.data?.detail || '操作失败')
+  } finally {
+    messageActionId.value = null
+  }
 }
 
 async function runHealth() {
@@ -66,6 +123,8 @@ async function runHealth() {
 
 onMounted(() => {
   loadSystem()
+  loadSystemMessages()
+  loadSystemAudit()
   runHealth()
 })
 </script>
@@ -82,7 +141,7 @@ onMounted(() => {
       <div class="header-info">
         <h2 class="sys-name">{{ system.name }}</h2>
         <a-tag :color="system.local ? 'success' : 'processing'" style="border:none">
-          {{ system.local ? '平台托管' : '远程只读' }}
+          {{ systemAccessTag }}
         </a-tag>
         <!-- 全局健康灯 -->
         <span v-if="health" :class="['health-badge', health.healthy ? 'health-badge--ok' : 'health-badge--err']">
@@ -96,10 +155,52 @@ onMounted(() => {
 
       <!-- ① 概览 -->
       <a-tab-pane key="overview" tab="概览">
+        <a-card v-if="systemMessages.length" class="panel-card message-card" title="近期消息">
+          <div class="system-message-list">
+            <div v-for="item in systemMessages" :key="item.id" class="system-message-row">
+              <div class="system-message-main">
+                <div class="system-message-title">
+                  <a-tag :color="item.status === 'unread' ? 'error' : 'warning'" style="border:none;margin:0">
+                    {{ systemMessageStatusText[item.status] || item.status }}
+                  </a-tag>
+                  <span>{{ item.title }}</span>
+                </div>
+                <p>{{ item.summary || item.content }}</p>
+                <div v-if="item.suggestion?.length" class="system-message-suggestion">
+                  建议：{{ item.suggestion[0] }}
+                </div>
+              </div>
+              <div class="system-message-actions">
+                <a-button
+                  v-if="item.status !== 'acknowledged'"
+                  size="small"
+                  :loading="messageActionId === item.id"
+                  @click="updateSystemMessage(item, 'ack')"
+                >确认</a-button>
+                <a-button
+                  size="small"
+                  type="primary"
+                  :loading="messageActionId === item.id"
+                  @click="updateSystemMessage(item, 'resolve')"
+                >解决</a-button>
+              </div>
+            </div>
+          </div>
+        </a-card>
+
         <a-card class="panel-card" title="服务健康状态">
           <template #extra>
             <a-button size="small" :loading="healthLoading" @click="runHealth">重新探活</a-button>
           </template>
+          <a-alert
+            v-if="system.restart_capability"
+            style="margin-bottom:12px"
+            :type="system.restart_capability.enabled ? 'info' : 'warning'"
+            show-icon
+            :message="system.restart_capability.enabled
+              ? `支持容器重启：${system.restart_capability.execution_mode === 'local' ? '平台本机执行' : '采集器远程执行'}`
+              : (system.restart_capability.reason || '当前系统暂不支持自动重启')"
+          />
           <a-alert
             v-if="health"
             :type="health.healthy ? 'success' : 'error'"
@@ -119,6 +220,20 @@ onMounted(() => {
             </template>
           </a-list>
         </a-card>
+
+        <a-card class="panel-card audit-card" title="最近操作记录">
+          <template #extra>
+            <a-button size="small" :loading="auditLoading" @click="loadSystemAudit">刷新</a-button>
+          </template>
+          <AuditLogList
+            compact
+            :logs="auditLogs"
+            :systems="[system]"
+            :loading="auditLoading"
+            empty-title="暂无操作记录"
+            empty-sub="接入上报、告警处理和人工确认记录会出现在这里"
+          />
+        </a-card>
       </a-tab-pane>
 
       <!-- ② 监控 -->
@@ -128,7 +243,7 @@ onMounted(() => {
 
       <!-- ③ 诊断 -->
       <a-tab-pane key="diagnose" tab="AI 诊断">
-        <DiagnosisPanel :system-id="props.id" />
+        <DiagnosisPanel :system-id="props.id" :restart-capability="system.restart_capability" />
       </a-tab-pane>
 
       <!-- ④ 配置 -->
@@ -146,11 +261,14 @@ onMounted(() => {
           :notify-loading="notifyLoading"
           :notify-secret-already-set="notifySecretAlreadySet"
           :notify-test-loading="notifyTestLoading"
-          @update:notifyEditingSecret="notifyEditingSecret = $event; if ($event) notifyCfg.app_secret = ''"
           @notify-type-change="onNotifyTypeChange"
+          @edit-secret="startEditingNotifySecret"
           @save="saveNotify"
           @test="testNotify"
         />
+        <SystemTokensCard :system-id="props.id" />
+        <DiagnosticTemplatesCard :system-id="props.id" />
+        <ReadonlyDatabaseCard :system-id="props.id" />
       </a-tab-pane>
 
     </a-tabs>
@@ -201,6 +319,57 @@ onMounted(() => {
   border-radius: 12px;
   border: 1px solid var(--border-color);
 }
+.message-card {
+  margin-bottom: 16px;
+}
+.audit-card {
+  margin-top: 16px;
+}
+.system-message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.system-message-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--body-bg);
+}
+.system-message-main {
+  flex: 1;
+  min-width: 0;
+}
+.system-message-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+.system-message-main p {
+  font-size: 13px;
+  color: var(--text-subtle);
+  line-height: 1.55;
+  margin: 0;
+}
+.system-message-suggestion {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.system-message-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
 
 /* ── Tab 布局 ── */
 .main-tabs {
@@ -228,6 +397,15 @@ onMounted(() => {
 .loading-center {
   display: flex; justify-content: center;
   padding-top: 120px;
+}
+
+@media (max-width: 720px) {
+  .system-message-row {
+    flex-direction: column;
+  }
+  .system-message-actions {
+    width: 100%;
+  }
 }
 
 </style>

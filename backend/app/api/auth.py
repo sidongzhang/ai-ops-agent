@@ -43,3 +43,12 @@ def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depend
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
     return UserOut(id=user.id, email=user.email, org_id=user.org_id, role=user.role)
+
+
+@router.get("/users", response_model=list[UserOut])
+def list_org_users(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    users = session.exec(select(User).where(User.org_id == user.org_id).order_by(User.id.asc())).all()
+    return [UserOut(id=item.id, email=item.email, org_id=item.org_id, role=item.role) for item in users]

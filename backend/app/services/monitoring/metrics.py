@@ -8,7 +8,7 @@ import httpx
 from pydantic import BaseModel
 from sqlmodel import Session
 
-from app.repositories.systems import list_services_for_system
+from app.repositories.systems import list_enabled_services_for_system
 from app.services.descriptors.builder import system_to_descriptor
 from app.services.systems.service import require_system
 
@@ -77,7 +77,7 @@ class SystemMetrics(BaseModel):
 
 def get_metrics(session: Session, system_id: int, org_id: int) -> SystemMetrics:
     system = require_system(session, system_id, org_id)
-    services = list_services_for_system(session, system_id)
+    services = list_enabled_services_for_system(session, system_id)
     descriptor = system_to_descriptor(system, services)
     prom_base = find_prometheus_url(descriptor)
     return SystemMetrics(
@@ -91,7 +91,10 @@ def get_metrics(session: Session, system_id: int, org_id: int) -> SystemMetrics:
 
 def find_prometheus_url(descriptor: dict) -> str:
     for svc in descriptor.get("services", []):
-        url = svc.get("health_url") or svc.get("config", {}).get("health_url", "")
+        config = svc.get("config", {})
+        url = svc.get("url") or config.get("url") or svc.get("health_url") or config.get("health_url", "")
+        if svc.get("connector") == "prometheus" and url:
+            return url.rstrip("/")
         if url and ("9090" in url or "prometheus" in url.lower()):
             parsed = urlparse(url)
             return f"{parsed.scheme}://{parsed.netloc}"

@@ -11,7 +11,7 @@ from ...core.config import settings
 
 
 class ProposedAction(BaseModel):
-    type: Literal["fetch_logs", "health_check", "manual"]
+    type: Literal["fetch_logs", "health_check", "restart_container", "run_redis_command", "manual"]
     description: str
     service: str = ""
     args: dict = Field(default_factory=dict)
@@ -47,12 +47,17 @@ analysis_agent = Agent(
 2. 一个建议执行的修复/排查动作（proposed_action）
 
 动作类型规则：
-- fetch_logs  ：当需要拉取服务日志来排查时使用；service 填服务名，args 可加 {"lines": 100}
-- health_check：当需要验证某个服务是否恢复正常时使用；service 填服务名
-- manual      ：需要人工执行的高危操作（重启、删数据、修配置）；manual_steps 列出具体步骤
+- fetch_logs        ：拉取服务日志排查；service 填服务名，args 可加 {"lines": 100}
+- health_check      ：验证服务是否恢复正常；service 填服务名
+- restart_container ：重启 Docker 容器（服务崩溃/无响应时使用）；必须同时填写 service 和 args={"container": "容器名"}
+                      容器名只能使用系统描述里该服务的 config.container，如 ai-ops-agent-redis-1
+                      本地系统会在平台宿主机执行；远程系统会通过采集器执行
+- run_redis_command ：在 Redis 上执行特定命令；args 填 {"command": "FLUSHDB"} 或 {"command": "CONFIG SET maxmemory 256mb"}
+                      仅限：FLUSHDB / FLUSHALL / CONFIG SET / DEBUG SLEEP 等运维类命令
+- manual            ：需要人工执行的操作；manual_steps 列出具体步骤
 
-优先选择风险低、可逆的动作。若问题已清晰且只需验证，选 health_check；
-若需要看日志细节，选 fetch_logs；若需要危险操作，选 manual。""",
+优先级：能自动修复 > 日志排查 > 人工操作。
+重启容器风险低且可逆，优先考虑；数据清理需谨慎，选 manual 说明风险。""",
 )
 
 

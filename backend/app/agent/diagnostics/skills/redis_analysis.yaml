@@ -1,0 +1,21 @@
+name: redis_analysis
+description: Redis 内存、连接数、慢命令和服务状态分析
+triggers:
+  - redis
+  - 缓存
+  - 内存淘汰
+  - maxmemory
+  - redis连接
+  - redis 连接
+  - 慢命令
+  - slowlog
+
+steps: |
+  ## 排查剧本：Redis 内存和连接异常
+  1. check_service('Redis') - 确认 Redis 端口可达
+  2. run_redis_command('INFO memory') - 检查已用内存、峰值和 maxmemory
+  3. run_redis_command('INFO clients') - 检查连接数、阻塞客户端和连接上限
+  4. run_redis_command('INFO stats') - 检查拒绝连接、命中率和淘汰数量
+  5. run_redis_command('SLOWLOG GET 10') - 查看最近慢命令
+  6. read_logs('Redis', 30) - 检查 OOM、持久化和重启异常
+  7. 输出【Redis 状态报告】：关键数值、阈值判断、证据、低风险建议和需确认的操作

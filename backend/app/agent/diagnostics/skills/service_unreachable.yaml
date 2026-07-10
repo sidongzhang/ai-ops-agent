@@ -1,0 +1,20 @@
+name: service_unreachable
+description: 服务不可达，检查地址、端口、进程状态和依赖链路
+triggers:
+  - 服务不可达
+  - 无法连接
+  - connection refused
+  - connect timeout
+  - 连接超时
+  - 端口不通
+  - 服务离线
+  - 连不上
+
+steps: |
+  ## 排查剧本：服务不可达
+  1. list_services - 确认异常服务及其余依赖是否正常
+  2. check_service(目标服务) - 复测目标地址、端口或健康检查地址
+  3. read_logs(目标服务, 50) - 检查启动失败、端口占用、连接拒绝和超时
+  4. search_logs(目标服务, 'error') - 提取最近错误证据
+  5. 如目标依赖其他服务，逐个 check_service 验证依赖链路
+  6. 输出【服务不可达诊断】：故障位置、检测依据、可能原因、低风险检查和需人工确认的恢复操作

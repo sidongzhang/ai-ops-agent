@@ -1,3 +1,5 @@
+from .audit import AuditLogOut
+from .analytics import EfficiencyAnalyticsOut, EfficiencyTrendPoint, SystemEfficiencyRow
 from .auth import RegisterRequest, TokenResponse, UserOut
 from .collectors import (
     CollectorConfig,
@@ -8,18 +10,47 @@ from .collectors import (
     CollectorOut,
     CollectorReport,
 )
-from .diagnostics import DiagnoseRequest, DiagnoseResponse
+from .diagnostics import (
+    DataAnalysisRequest,
+    DataAnalysisResponse,
+    DiagnosticTemplateOut,
+    DiagnosticTemplateSettingsUpdate,
+    DiagnoseRequest,
+    DiagnoseResponse,
+    ReadonlyDatabaseConfig,
+)
 from .health import HealthItem, SystemHealth
-from .systems import NotifyConfig, ServiceIn, ServiceOut, SystemCreate, SystemOut
+from .messages import SystemMessageOut
+from .openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn
+from .systems import (
+    NotifyConfig,
+    RestartCapabilityOut,
+    RestartPolicyOut,
+    RestartPolicyUpdate,
+    RestartServiceOut,
+    ServiceIn,
+    ServiceOut,
+    ServiceProbeOut,
+    SystemCreate,
+    SystemOut,
+)
+from .tokens import SystemTokenCreate, SystemTokenCreated, SystemTokenOut
 from .workflows import WorkflowDecision, WorkflowOut, WorkflowStart
 
 __all__ = [
     "RegisterRequest", "TokenResponse", "UserOut",
-    "ServiceIn", "NotifyConfig", "SystemCreate", "ServiceOut", "SystemOut",
+    "AuditLogOut",
+    "EfficiencyAnalyticsOut", "EfficiencyTrendPoint", "SystemEfficiencyRow",
+    "ServiceIn", "NotifyConfig", "SystemCreate", "ServiceOut", "ServiceProbeOut", "SystemOut",
+    "RestartPolicyUpdate", "RestartPolicyOut", "RestartCapabilityOut", "RestartServiceOut",
     "HealthItem", "SystemHealth",
     "CollectorCreate", "CollectorCreated", "CollectorOut",
     "CollectorConfig", "CollectorReport",
-    "DiagnoseRequest", "DiagnoseResponse",
+    "SystemMessageOut",
+    "OpenAlertIn", "OpenHealthIn", "OpenMessageIn",
+    "SystemTokenCreate", "SystemTokenCreated", "SystemTokenOut",
+    "DiagnoseRequest", "DiagnoseResponse", "DiagnosticTemplateOut", "DiagnosticTemplateSettingsUpdate",
+    "DataAnalysisRequest", "DataAnalysisResponse", "ReadonlyDatabaseConfig",
     "CollectorExecRequest", "CollectorExecResponse",
     "WorkflowStart", "WorkflowOut", "WorkflowDecision",
 ]

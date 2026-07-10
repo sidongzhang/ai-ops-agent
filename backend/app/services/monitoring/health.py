@@ -2,7 +2,7 @@
 from sqlmodel import Session
 
 from app.repositories.collectors import get_first_collector_for_system
-from app.repositories.systems import list_services_for_system
+from app.repositories.systems import list_enabled_services_for_system
 from app.schemas import HealthItem, SystemHealth
 from app.services.descriptors.builder import system_to_descriptor
 from app.services.descriptors.health import collect_health
@@ -23,7 +23,7 @@ def get_system_health(session: Session, system_id: int, org_id: int) -> SystemHe
             reported_at=system.last_report_at.isoformat(),
         )
 
-    descriptor = system_to_descriptor(system, list_services_for_system(session, system.id))
+    descriptor = system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
     health = collect_health(descriptor)
     return SystemHealth(
         system_id=system.id,

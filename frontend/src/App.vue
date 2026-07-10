@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import api from './api'
 import { useAuthStore } from './stores/auth'
 import { useThemeStore, THEMES } from './stores/theme'
 
@@ -11,13 +12,46 @@ const router = useRouter()
 
 const showShell = computed(() => route.path !== '/login')
 const userInitial = computed(() => auth.user?.email?.[0]?.toUpperCase() ?? 'U')
+const unreadMessages = ref(0)
+let unreadTimer = null
 
-// 侧边栏收起/展开
+async function loadUnreadMessages() {
+  if (!showShell.value || !localStorage.getItem('token')) {
+    unreadMessages.value = 0
+    return
+  }
+  try {
+    const { data } = await api.get('/messages/unread-count')
+    unreadMessages.value = data.count || 0
+  } catch {
+    unreadMessages.value = 0
+  }
+}
+
+// 桌面端：收起/展开
 const collapsed = ref(localStorage.getItem('aiops_sidebar') === '1')
 function toggleSidebar() {
   collapsed.value = !collapsed.value
   localStorage.setItem('aiops_sidebar', collapsed.value ? '1' : '0')
 }
+
+// 移动端：抽屉开关
+const isMobile = ref(window.innerWidth < 768)
+const drawerOpen = ref(false)
+function onResize() { isMobile.value = window.innerWidth < 768 }
+onMounted(() => {
+  window.addEventListener('resize', onResize)
+  window.addEventListener('aiops:messages-changed', loadUnreadMessages)
+  loadUnreadMessages()
+  unreadTimer = window.setInterval(loadUnreadMessages, 30000)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', onResize)
+  window.removeEventListener('aiops:messages-changed', loadUnreadMessages)
+  if (unreadTimer) window.clearInterval(unreadTimer)
+})
+function openDrawer() { drawerOpen.value = true }
+function closeDrawer() { drawerOpen.value = false }
 
 function logout() {
   auth.logout()
@@ -31,8 +65,13 @@ function logout() {
 
     <div v-else class="shell">
 
+      <!-- 移动端遮罩 -->
+      <div v-if="isMobile && drawerOpen" class="sidebar-backdrop" @click="closeDrawer" />
+
       <!-- ── Sidebar ── -->
-      <aside :class="['sidebar', { 'sidebar--collapsed': collapsed }]">
+      <aside :class="['sidebar',
+        isMobile ? (drawerOpen ? 'sidebar--drawer-open' : 'sidebar--drawer') : (collapsed ? 'sidebar--collapsed' : '')
+      ]">
 
         <!-- Logo + Toggle -->
         <div class="logo-row">
@@ -53,17 +92,82 @@ function logout() {
         <!-- Nav -->
         <nav class="nav">
           <a-tooltip
-            :title="collapsed ? '监控系统' : ''"
+            :title="(collapsed && !isMobile) ? '监控系统' : ''"
             placement="right"
             :mouse-enter-delay="0.1"
           >
-            <router-link to="/systems" class="nav-link" active-class="nav-link--active">
+            <router-link to="/systems" class="nav-link" active-class="nav-link--active" @click="closeDrawer">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" stroke-width="1.8">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
                 <path d="M8 21h8M12 17v4" />
               </svg>
-              <span v-show="!collapsed" class="nav-label">监控系统</span>
+              <span v-show="!collapsed || isMobile" class="nav-label">监控系统</span>
+            </router-link>
+          </a-tooltip>
+
+          <a-tooltip
+            :title="(collapsed && !isMobile) ? '效率分析' : ''"
+            placement="right"
+            :mouse-enter-delay="0.1"
+          >
+            <router-link to="/efficiency" class="nav-link" active-class="nav-link--active" @click="closeDrawer">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.8">
+                <path d="M4 19V9M10 19V5M16 19v-7M22 19V2" />
+                <path d="M2 19h22" />
+              </svg>
+              <span v-show="!collapsed || isMobile" class="nav-label">效率分析</span>
+            </router-link>
+          </a-tooltip>
+
+          <a-tooltip
+            :title="(collapsed && !isMobile) ? '消息中心' : ''"
+            placement="right"
+            :mouse-enter-delay="0.1"
+          >
+            <router-link to="/messages" class="nav-link" active-class="nav-link--active" @click="closeDrawer">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.8">
+                <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+                <line x1="8" y1="9" x2="16" y2="9" />
+                <line x1="8" y1="13" x2="14" y2="13" />
+              </svg>
+              <span v-show="!collapsed || isMobile" class="nav-label">消息中心</span>
+              <span v-if="unreadMessages" class="nav-badge">{{ unreadMessages > 99 ? '99+' : unreadMessages }}</span>
+            </router-link>
+          </a-tooltip>
+
+          <a-tooltip
+            :title="(collapsed && !isMobile) ? '审计记录' : ''"
+            placement="right"
+            :mouse-enter-delay="0.1"
+          >
+            <router-link to="/audit" class="nav-link" active-class="nav-link--active" @click="closeDrawer">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.8">
+                <path d="M9 11l3 3L22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+              <span v-show="!collapsed || isMobile" class="nav-label">审计记录</span>
+            </router-link>
+          </a-tooltip>
+
+          <a-tooltip
+            :title="(collapsed && !isMobile) ? '辅助文档' : ''"
+            placement="right"
+            :mouse-enter-delay="0.1"
+          >
+            <router-link to="/docs" class="nav-link" active-class="nav-link--active" @click="closeDrawer">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="1.8">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
+              </svg>
+              <span v-show="!collapsed || isMobile" class="nav-label">辅助文档</span>
             </router-link>
           </a-tooltip>
         </nav>
@@ -142,7 +246,16 @@ function logout() {
       </aside>
 
       <!-- ── Main content ── -->
-      <main :class="['content', { 'content--wide': collapsed }]">
+      <main :class="['content', { 'content--wide': collapsed && !isMobile, 'content--mobile': isMobile }]">
+        <!-- 移动端顶栏 -->
+        <div v-if="isMobile" class="mobile-topbar">
+          <button class="hamburger" @click="openDrawer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="20" height="20">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <span class="mobile-title">AIOps</span>
+        </div>
         <router-view />
       </main>
     </div>
@@ -263,6 +376,31 @@ body {
 }
 .nav-icon { width: 17px; height: 17px; flex-shrink: 0; }
 .nav-label { white-space: nowrap; }
+.nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.sidebar--collapsed .nav-badge {
+  position: absolute;
+  right: 5px;
+  top: 4px;
+  min-width: 15px;
+  height: 15px;
+  font-size: 9px;
+  padding: 0 4px;
+}
 
 /* Footer */
 .sidebar-footer {
@@ -380,5 +518,59 @@ body {
 }
 .content--wide {
   margin-left: 56px;
+}
+
+/* ── 移动端 ── */
+.sidebar--drawer {
+  transform: translateX(-100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 220px !important;
+  z-index: 300;
+}
+.sidebar--drawer-open {
+  transform: translateX(0);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 220px !important;
+  z-index: 300;
+}
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 299;
+}
+.content--mobile {
+  margin-left: 0 !important;
+  padding: 0 16px 24px;
+}
+.mobile-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 16px;
+  border-bottom: 1px solid var(--sidebar-border, #eee);
+  margin-bottom: 20px;
+}
+.hamburger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 6px;
+}
+.hamburger:hover { background: rgba(0,0,0,0.06); }
+.mobile-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+@media (max-width: 767px) {
+  .content {
+    padding: 0 16px 24px;
+  }
 }
 </style>

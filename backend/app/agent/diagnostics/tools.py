@@ -18,13 +18,18 @@ from .skill_router import get_skill_steps
 class AgentDeps:
     descriptor: dict
     question: str = ""
+    skill_steps: str | None = None
 
 
 def register_tools(agent: Agent) -> Agent:
     @agent.system_prompt
     def system_prompt(ctx: RunContext[AgentDeps]) -> str:
         base = build_prompt(ctx.deps.descriptor)
-        skill_steps = get_skill_steps(ctx.deps.question)
+        skill_steps = (
+            get_skill_steps(ctx.deps.question)
+            if ctx.deps.skill_steps is None
+            else ctx.deps.skill_steps
+        )
         return f"{base}\n\n{skill_steps}" if skill_steps else base
 
     @agent.tool
@@ -160,7 +165,15 @@ def find_prometheus_url(descriptor: dict) -> str:
     if infra.get("prometheus_url"):
         return infra["prometheus_url"].rstrip("/")
     for service in descriptor.get("services", []):
-        url = service.get("health_url", "") or service.get("config", {}).get("health_url", "")
+        config = service.get("config", {})
+        url = (
+            service.get("url", "")
+            or config.get("url", "")
+            or service.get("health_url", "")
+            or config.get("health_url", "")
+        )
+        if service.get("connector") == "prometheus" and url:
+            return url.rstrip("/")
         if url and ("9090" in url or "prometheus" in url.lower()):
             parsed = urlparse(url)
             return f"{parsed.scheme}://{parsed.netloc}"

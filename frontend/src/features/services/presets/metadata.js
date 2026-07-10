@@ -65,8 +65,12 @@ export const SERVICE_PRESETS = {
     inputs: [
       { key: 'host', label: '主机地址', placeholder: '10.0.0.1', span: 14 },
       { key: 'port', label: '端口', placeholder: '9090', span: 10 },
+      { key: 'query', label: '必须存在且正常的指标', placeholder: 'up', span: 24 },
     ],
-    buildConfig: (fields) => ({ url: `http://${fields.host}:${fields.port || 9090}`, up_query: 'up' }),
+    buildConfig: (fields) => ({
+      url: `http://${fields.host}:${fields.port || 9090}`,
+      up_query: fields.query || 'up',
+    }),
   },
   kafka: {
     label: 'Kafka',

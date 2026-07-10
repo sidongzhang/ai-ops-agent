@@ -17,6 +17,7 @@ class MonitoredSystem(SQLModel, table=True):
     local: bool = Field(default=False)
     notify: dict = Field(default_factory=dict, sa_column=Column(JSON))
     infra: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    restart_policy: dict = Field(default_factory=dict, sa_column=Column(JSON))
     last_health: dict = Field(default_factory=dict, sa_column=Column(JSON))
     last_report_at: Optional[datetime] = Field(default=None)
     last_alert_at: Optional[datetime] = Field(default=None)
@@ -30,3 +31,7 @@ class Service(SQLModel, table=True):
     name: str
     connector: str = Field(default="http")
     config: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    enabled: bool = Field(default=True, index=True)
+    probe_status: str = Field(default="passed", index=True)
+    probe_detail: str = ""
+    tested_at: Optional[datetime] = None

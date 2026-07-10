@@ -9,6 +9,7 @@ const router = useRouter()
 const systems = ref([])
 const loading = ref(false)
 const modalOpen = ref(false)
+const deletingId = ref(null)
 
 async function load() {
   loading.value = true
@@ -22,6 +23,19 @@ onMounted(load)
 
 function openCreate() {
   modalOpen.value = true
+}
+
+async function destroySystem(system) {
+  deletingId.value = system.id
+  try {
+    await api.delete(`/systems/${system.id}`)
+    message.success(`已销毁「${system.name}」`)
+    await load()
+  } catch (error) {
+    message.error(error?.response?.data?.detail || '销毁失败')
+  } finally {
+    deletingId.value = null
+  }
 }
 </script>
 
@@ -60,7 +74,28 @@ function openCreate() {
           </div>
           <div class="sys-key">{{ sys.key }}</div>
           <div class="sys-foot">
-            <span class="sys-count">{{ sys.services.length }} 个服务</span>
+            <div class="sys-foot-left">
+              <span class="sys-count">{{ sys.services.length }} 个服务</span>
+              <a-popconfirm
+                v-if="sys.services.length === 0"
+                title="确认销毁这个空系统吗？"
+                ok-text="销毁"
+                ok-type="danger"
+                cancel-text="取消"
+                @confirm.stop="destroySystem(sys)"
+              >
+                <a-button
+                  type="text"
+                  danger
+                  size="small"
+                  class="destroy-btn"
+                  :loading="deletingId === sys.id"
+                  @click.stop
+                >
+                  销毁
+                </a-button>
+              </a-popconfirm>
+            </div>
             <span class="sys-goto">查看详情 →</span>
           </div>
         </div>
@@ -110,6 +145,8 @@ function openCreate() {
 .sys-name { font-size: 15px; font-weight: 600; color: var(--text); }
 .sys-key  { font-size: 12px; color: var(--text-subtle); font-family: 'SF Mono', Menlo, monospace; margin-bottom: 14px; }
 .sys-foot { display: flex; justify-content: space-between; font-size: 13px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.sys-foot-left { display: flex; align-items: center; gap: 8px; }
 .sys-count { color: var(--text-subtle); }
 .sys-goto  { color: var(--primary); font-weight: 500; }
+.destroy-btn { padding-inline: 4px; }
 </style>

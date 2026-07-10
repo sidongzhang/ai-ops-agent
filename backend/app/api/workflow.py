@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from ..core.database import get_session
-from ..core.deps import get_current_org_id
+from ..core.deps import get_current_org_id, get_current_user
+from ..models.auth import User
 from ..schemas import WorkflowDecision, WorkflowOut, WorkflowStart
 from ..services.workflows.service import (
     create_workflow as create_workflow_record,
@@ -21,9 +22,10 @@ async def create_workflow(
     body: WorkflowStart,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
 ):
     try:
-        return await create_workflow_record(session, system_id, org_id, body)
+        return await create_workflow_record(session, system_id, org_id, body, user)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
     except RuntimeError as exc:
@@ -62,11 +64,14 @@ async def decide_workflow(
     body: WorkflowDecision,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
 ):
     try:
-        return await decide_workflow_record(session, system_id, wf_id, org_id, body)
+        return await decide_workflow_record(session, system_id, wf_id, org_id, body, user)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except RuntimeError as exc:

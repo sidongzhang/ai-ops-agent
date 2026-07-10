@@ -32,8 +32,28 @@ def list_services_for_system(session: Session, system_id: int) -> list[Service]:
     return list(session.exec(select(Service).where(Service.system_id == system_id)))
 
 
+def list_enabled_services_for_system(session: Session, system_id: int) -> list[Service]:
+    return list(
+        session.exec(
+            select(Service).where(
+                Service.system_id == system_id,
+                Service.enabled.is_(True),
+            )
+        )
+    )
+
+
 def get_service_for_system(session: Session, system_id: int, service_id: int) -> Service | None:
     service = session.get(Service, service_id)
     if not service or service.system_id != system_id:
         return None
     return service
+
+
+def delete_system_for_org(session: Session, system_id: int, org_id: int) -> bool:
+    system = get_system_for_org(session, system_id, org_id)
+    if not system:
+        return False
+    session.delete(system)
+    session.commit()
+    return True

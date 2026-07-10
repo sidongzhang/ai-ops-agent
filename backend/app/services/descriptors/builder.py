@@ -9,6 +9,7 @@ class ServiceDescriptor(TypedDict, total=False):
     name: str
     connector: str
     config: dict[str, Any]
+    runtime: dict[str, str]
     kind: str
     health_url: str
     url: str
@@ -36,6 +37,11 @@ def service_to_descriptor(service: Service) -> ServiceDescriptor:
         "name": service.name,
         "connector": service.connector,
         "config": decrypted_config,
+        "runtime": {
+            "container": str(decrypted_config.get("container", "") or ""),
+            "systemd_unit": str(decrypted_config.get("systemd_unit", "") or ""),
+            "selector": str(decrypted_config.get("selector", "") or ""),
+        },
     }
     descriptor.update(decrypted_config)
     return descriptor

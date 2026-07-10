@@ -1,5 +1,5 @@
 <script setup>
-import { reactive } from 'vue'
+import { reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '../../../api'
 import {
@@ -17,32 +17,106 @@ const props = defineProps({
 
 const emit = defineEmits(['update:open', 'created'])
 
-const state = reactive({ loading: false })
+const state = reactive({
+  loading: false,
+  testing: false,
+  probePassed: false,
+  probeResult: null,
+  probeSignature: '',
+  draftId: null,
+})
 const newSvc = reactive(createDetailServiceDraft())
+
+function payloadSignature() {
+  return JSON.stringify(buildServicePayload(newSvc))
+}
+
+function resetProbe() {
+  state.probePassed = false
+  state.probeResult = null
+}
 
 function close() {
   emit('update:open', false)
+}
+
+async function cancel() {
+  const draftId = state.draftId
+  state.draftId = null
+  close()
+  if (draftId) {
+    try {
+      await api.delete(`/systems/${props.systemId}/services/${draftId}`)
+      emit('created')
+    } catch {
+      // The persisted draft remains visible in the service list and can be deleted there.
+    }
+  }
+  Object.assign(newSvc, createDetailServiceDraft())
+  resetProbe()
 }
 
 function onNewPresetChange() {
   syncPresetDraft(newSvc)
 }
 
+async function testService() {
+  if (!newSvc.name.trim()) return message.warning('请输入服务名称')
+  state.testing = true
+  state.probeResult = null
+  try {
+    const payload = buildServicePayload(newSvc)
+    if (state.draftId) {
+      await api.put(`/systems/${props.systemId}/services/${state.draftId}`, payload)
+    } else {
+      const { data: draft } = await api.post(`/systems/${props.systemId}/services`, payload)
+      state.draftId = draft.id
+      emit('created')
+    }
+    const { data } = await api.post(
+      `/systems/${props.systemId}/services/${state.draftId}/test`,
+    )
+    state.probeResult = data
+    state.probePassed = !!data.ok
+    state.probeSignature = payloadSignature()
+    if (data.ok) message.success(`测试通过：${data.detail}`)
+    else message.error(`测试未通过：${data.detail}`)
+  } catch (error) {
+    state.probePassed = false
+    state.probeResult = { ok: false, detail: error?.response?.data?.detail || '测试失败' }
+    message.error(state.probeResult.detail)
+  } finally {
+    state.testing = false
+  }
+}
+
 async function submitAddSvc() {
   if (!newSvc.name.trim()) return message.warning('请输入服务名称')
+  if (!state.probePassed || state.probeSignature !== payloadSignature()) {
+    return message.warning('请先测试通过后再添加服务')
+  }
   state.loading = true
   try {
-    await api.post(`/systems/${props.systemId}/services`, buildServicePayload(newSvc))
-    message.success(`服务「${newSvc.name}」已添加`)
+    await api.post(`/systems/${props.systemId}/services/${state.draftId}/enable`)
+    message.success(`服务「${newSvc.name}」已测试并启用`)
+    state.draftId = null
     emit('created')
     close()
     Object.assign(newSvc, createDetailServiceDraft())
+    resetProbe()
   } catch (error) {
     message.error(error?.response?.data?.detail || '添加失败')
   } finally {
     state.loading = false
   }
 }
+
+watch(
+  () => payloadSignature(),
+  (signature) => {
+    if (signature !== state.probeSignature) resetProbe()
+  },
+)
 </script>
 
 <template>
@@ -51,11 +125,8 @@ async function submitAddSvc() {
     title="添加被监控服务"
     width="520px"
     :confirm-loading="state.loading"
-    ok-text="添加"
-    cancel-text="取消"
     @update:open="emit('update:open', $event)"
-    @ok="submitAddSvc"
-    @cancel="close"
+    @cancel="cancel"
   >
     <div class="add-svc-body">
       <div class="add-field">
@@ -98,7 +169,28 @@ async function submitAddSvc() {
           </div>
         </div>
       </div>
+
+      <a-alert
+        v-if="state.probeResult"
+        :type="state.probeResult.ok ? 'success' : 'error'"
+        show-icon
+        :message="state.probeResult.ok ? '配置测试通过，可以添加服务' : '配置测试未通过'"
+        :description="state.probeResult.detail"
+      />
     </div>
+
+    <template #footer>
+      <a-button @click="cancel">取消</a-button>
+      <a-button :loading="state.testing" :disabled="state.loading" @click="testService">测试配置</a-button>
+      <a-button
+        type="primary"
+        :loading="state.loading"
+        :disabled="state.testing || !state.probePassed || state.probeSignature !== payloadSignature()"
+        @click="submitAddSvc"
+      >
+        启用服务
+      </a-button>
+    </template>
   </a-modal>
 </template>
 
