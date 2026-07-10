@@ -24,3 +24,6 @@ dist/
 .idea/
 .vscode/
 .DS_Store
+
+# PyInstaller build artifacts
+build/
