@@ -56,6 +56,17 @@ def revoke_system_token(session: Session, system_id: int, token_id: int, org_id:
     return _to_out(token)
 
 
+def delete_system_token(session: Session, system_id: int, token_id: int, org_id: int) -> None:
+    system = require_system(session, system_id, org_id)
+    token = get_token_for_system(session, system.id, token_id)
+    if not token:
+        raise LookupError("Token 不存在")
+    if token.status == "active":
+        raise ValueError("请先禁用 Token，再永久删除")
+    session.delete(token)
+    session.commit()
+
+
 def _to_out(token: SystemToken) -> SystemTokenOut:
     return SystemTokenOut(
         id=token.id,

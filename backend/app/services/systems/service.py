@@ -21,7 +21,9 @@ from app.repositories.systems import (
 )
 from app.schemas import (
     NotifyConfig,
+    MonitoringConfig,
     RestartPolicyOut,
+    RestartExecuteOut,
     RestartPolicyUpdate,
     ServiceIn,
     ServiceOut,
@@ -39,7 +41,9 @@ from app.services.systems.restart import (
     can_manage_restart_policy,
     has_restart_permission,
     normalize_restart_policy,
+    resolve_registered_restart_target,
 )
+from app.services.realtime.websocket import manager
 
 
 def require_system(session: Session, system_id: int, org_id: int) -> MonitoredSystem:
@@ -50,7 +54,18 @@ def require_system(session: Session, system_id: int, org_id: int) -> MonitoredSy
 
 
 def _get_primary_collector(session: Session, system_id: int) -> Collector | None:
-    return session.exec(select(Collector).where(Collector.system_id == system_id)).first()
+    collectors = list(session.exec(select(Collector).where(Collector.system_id == system_id)))
+    connected = [collector for collector in collectors if manager.is_connected(collector.id)]
+    if connected:
+        return max(
+            connected,
+            key=lambda item: (item.last_seen is not None, item.last_seen, item.id or 0),
+        )
+    return max(
+        collectors,
+        key=lambda item: (item.last_seen is not None, item.last_seen, item.id or 0),
+        default=None,
+    )
 
 
 def _build_system_out(
@@ -61,6 +76,7 @@ def _build_system_out(
 ) -> SystemOut:
     policy = normalize_restart_policy(system)
     collector = _get_primary_collector(session, system.id)
+    monitoring = get_monitoring_config(system)
     return SystemOut(
         id=system.id,
         org_id=system.org_id,
@@ -69,6 +85,7 @@ def _build_system_out(
         local=system.local,
         notify=mask_sensitive_fields(system.notify),
         infra=mask_sensitive_fields(system.infra),
+        monitoring=monitoring,
         restart_policy=RestartPolicyOut(
             authorized_user_ids=policy["authorized_user_ids"],
             has_permission=has_restart_permission(current_user, system) if current_user else False,
@@ -95,6 +112,47 @@ def _service_out(service: Service) -> ServiceOut:
         probe_detail=service.probe_detail,
         tested_at=service.tested_at,
     )
+
+
+def get_monitoring_config(system: MonitoredSystem) -> MonitoringConfig:
+    infra = decrypt_sensitive_fields(system.infra or {})
+    raw = infra.get("monitoring") or {}
+    try:
+        interval = int(raw.get("interval_seconds", 60) or 60)
+    except (TypeError, ValueError):
+        interval = 60
+    return MonitoringConfig(
+        enabled=bool(raw.get("enabled", True)),
+        interval_seconds=max(15, min(interval, 86400)),
+    )
+
+
+def update_monitoring_config(
+    session: Session,
+    system_id: int,
+    org_id: int,
+    body: MonitoringConfig,
+    *,
+    actor_id: str = "",
+) -> MonitoringConfig:
+    system = require_system(session, system_id, org_id)
+    infra = decrypt_sensitive_fields(system.infra or {})
+    infra["monitoring"] = body.model_dump()
+    system.infra = encrypt_sensitive_fields(infra)
+    session.add(system)
+    record_audit_event(
+        session,
+        org_id=org_id,
+        system_id=system.id,
+        event_type="monitoring.config_updated",
+        actor_type="user",
+        actor_id=actor_id,
+        target_type="system",
+        target_id=str(system.id),
+        input=body.model_dump(),
+    )
+    session.commit()
+    return body
 
 
 def _probe_service(system: MonitoredSystem, service: Service) -> tuple[bool, str]:
@@ -139,9 +197,12 @@ def create_system(
             enabled=False,
             probe_status="testing",
         )
-        ok, detail = _probe_service(system, candidate)
-        if not ok:
-            raise ValueError(f"服务「{candidate.name}」测试未通过：{detail}")
+        if body.local:
+            ok, detail = _probe_service(system, candidate)
+            if not ok:
+                raise ValueError(f"服务「{candidate.name}」测试未通过：{detail}")
+        else:
+            ok, detail = False, "等待远程采集器连接后测试"
         probe_results.append((item, detail))
 
     session.add(system)
@@ -156,8 +217,8 @@ def create_system(
             name=item.name.strip(),
             connector=item.connector,
             config=encrypt_sensitive_fields(item.config),
-            enabled=True,
-            probe_status="passed",
+            enabled=body.local,
+            probe_status="passed" if body.local else "waiting_collector",
             probe_detail=detail,
             tested_at=tested_at,
         )
@@ -282,7 +343,27 @@ def test_service_draft(
         raise LookupError("服务不存在")
     if service.enabled:
         raise ValueError("服务已启用，无需重复执行启用前测试")
-    ok, detail = _probe_service(system, service)
+    if not system.local:
+        collector = _get_primary_collector(session, system.id)
+        if not collector:
+            raise ValueError("远程系统请先安装并连接采集器")
+        if not manager.is_connected(collector.id):
+            raise ValueError("采集器当前离线，请先启动采集器")
+        try:
+            response = manager.send_command_sync(
+                collector.id,
+                "health_check",
+                {"service": service.name},
+            )
+        except Exception as exc:
+            detail = str(exc).strip() or repr(exc)
+            raise ValueError(f"远程采集器执行失败：{detail}") from exc
+        items = response.get("result", []) if response.get("ok") else []
+        item = next((entry for entry in items if entry.get("name") == service.name), None)
+        ok = bool(response.get("ok") and item and item.get("ok"))
+        detail = item.get("detail", "远程服务未返回状态") if item else str(response.get("result", "远程测试失败"))
+    else:
+        ok, detail = _probe_service(system, service)
     tested_at = datetime.now(timezone.utc)
     service.probe_status = "passed" if ok else "failed"
     service.probe_detail = detail
@@ -327,7 +408,7 @@ def enable_service_draft(
         raise LookupError("服务不存在")
     if service.enabled:
         return _service_out(service)
-    if service.probe_status != "passed" or not service.tested_at:
+    if service.probe_status != "passed":
         raise ValueError("服务必须测试通过后才能启用")
     service.enabled = True
     session.add(service)
@@ -372,6 +453,63 @@ def delete_service(
     )
     session.delete(service)
     session.commit()
+
+
+async def execute_registered_service_restart(
+    session: Session,
+    system_id: int,
+    org_id: int,
+    service_name: str,
+    current_user: User,
+    *,
+    actor_id: str = "",
+) -> RestartExecuteOut:
+    from app.services.workflows.execution import execute_workflow_action
+
+    system = require_system(session, system_id, org_id)
+    if not has_restart_permission(current_user, system):
+        raise PermissionError("当前用户没有该系统的重启权限")
+
+    services = list_services_for_system(session, system.id)
+    descriptor = system_to_descriptor(system, [service for service in services if service.enabled])
+    service = next((item for item in descriptor.get("services", []) if item.get("name") == service_name), None)
+    if not service:
+        raise LookupError("服务不存在，或尚未启用监控")
+
+    action_type = "restart_systemd" if service.get("systemd_unit") else "restart_container"
+    action = {
+        "type": action_type,
+        "service": service_name,
+        "args": {
+            "unit": str(service.get("systemd_unit", "") or ""),
+            "container": str(service.get("container", "") or ""),
+        },
+    }
+    target = resolve_registered_restart_target(descriptor, action)
+    detail = await execute_workflow_action(
+        {"system_id": system.id, "descriptor": descriptor},
+        action,
+    )
+    record_audit_event(
+        session,
+        org_id=org_id,
+        system_id=system.id,
+        event_type="service.restart_executed",
+        actor_type="user",
+        actor_id=actor_id,
+        target_type="service",
+        target_id=service_name,
+        input={"action": action},
+        output={"detail": detail},
+    )
+    session.commit()
+    return RestartExecuteOut(
+        ok=True,
+        service=service_name,
+        target_type=target["target_type"],
+        target_resource=target.get("container", "") or target.get("unit", ""),
+        detail=detail,
+    )
 
 
 def update_notify(session: Session, system_id: int, org_id: int, body: NotifyConfig) -> dict:

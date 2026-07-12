@@ -48,6 +48,10 @@ def diagnose_with_details(
     org_id: int = 0,
     system_id: int = 0,
     skill_steps: str | None = None,
+    knowledge_context: str = "",
+    trace_question: str | None = None,
+    remote_command=None,
+    business_data_query=None,
 ) -> DiagnosisRun:
     model = pick_model(question)
     model_name = model.model_name if hasattr(model, "model_name") else str(model)
@@ -57,7 +61,7 @@ def diagnose_with_details(
     if langfuse:
         trace = langfuse.trace(
             name="diagnose",
-            input=question,
+            input=trace_question if trace_question is not None else question,
             metadata={
                 "org_id": org_id,
                 "system_id": system_id,
@@ -79,6 +83,9 @@ def diagnose_with_details(
                 descriptor=descriptor,
                 question=question,
                 skill_steps=skill_steps,
+                knowledge_context=knowledge_context,
+                remote_command=remote_command,
+                business_data_query=business_data_query,
             ),
             model=model,
         )

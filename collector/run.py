@@ -21,7 +21,7 @@
   python collector/run.py --once     # 跑一轮即退出（便于测试/cron，跳过 WS）
   COLLECTOR_WS=false python collector/run.py  # 禁用下行通道
 """
-__version__ = "934d8bc"
+__version__ = "0.2.0"
 import logging
 import os
 import sys
@@ -87,6 +87,11 @@ def run_once() -> None:
 
 
 def _get_descriptor() -> dict:
+    global _last_descriptor
+    try:
+        _last_descriptor = fetch_config()
+    except Exception as exc:
+        log.warning(f"[ws] 刷新采集配置失败，继续使用缓存: {exc}")
     return _last_descriptor
 
 
@@ -102,12 +107,12 @@ def _start_ws() -> None:
 
 
 def main() -> None:
-    if not COLLECTOR_KEY:
-        print(f"采集器版本: {__version__}\n正确用法: PLATFORM_URL=... COLLECTOR_KEY=... /path/to/aiops-collector [--once]")
-        sys.exit(1)
     if "--version" in sys.argv or "-v" in sys.argv:
         print(f"aiops-collector v{__version__}")
         sys.exit(0)
+    if not COLLECTOR_KEY:
+        print(f"采集器版本: {__version__}\n正确用法: PLATFORM_URL=... COLLECTOR_KEY=... /path/to/aiops-collector [--once]")
+        sys.exit(1)
     once = "--once" in sys.argv
     log.info(f"采集器启动 → 平台 {PLATFORM_URL}，间隔 {INTERVAL}s，模式={'单次' if once else '持续'}")
 

@@ -5,73 +5,23 @@ import { theme } from 'ant-design-vue'
 const { defaultAlgorithm, darkAlgorithm } = theme
 
 export const THEMES = {
-  amber: {
-    name: '琥珀', label: '暖金',
-    colorPrimary: '#D97706',
-    primaryBg: 'rgba(217,119,6,0.1)',
-    colorBgBase: '#FEFCF7',
-    colorBgContainer: '#FFFFFF',
-    sidebar: '#1A1206',
-    sidebarText: '#F5DEB3',
-    sidebarHover: '#2D1E0A',
-    sidebarActive: '#FBBF24',
-    sidebarActiveBg: 'rgba(251,191,36,0.13)',
-    sidebarBorder: 'rgba(255,255,255,0.06)',
-    textColor: '#1A1206',
-    subtleText: '#78674A',
-    borderColor: '#F0E4C8',
-    dark: false,
+  stone: {
+    name: '云灰蓝', label: 'Blue Gray', colorPrimary: '#59788C', primaryBg: 'rgba(89,120,140,0.10)',
+    colorBgBase: '#F4F6F7', colorBgContainer: '#FFFFFF', sidebar: '#FBFCFC', sidebarText: '#4B5563',
+    sidebarHover: '#F0F3F4', sidebarActive: '#4D6778', sidebarActiveBg: 'rgba(89,120,140,0.10)',
+    sidebarBorder: '#E4E8EA', textColor: '#111827', subtleText: '#6B7280', borderColor: '#E4E8EA', dark: false,
   },
-  rose: {
-    name: '玫瑰', label: '暖粉',
-    colorPrimary: '#E11D48',
-    primaryBg: 'rgba(225,29,72,0.1)',
-    colorBgBase: '#FFF9FA',
-    colorBgContainer: '#FFFFFF',
-    sidebar: '#1A0810',
-    sidebarText: '#FECDD3',
-    sidebarHover: '#2D1020',
-    sidebarActive: '#FB7185',
-    sidebarActiveBg: 'rgba(251,113,133,0.13)',
-    sidebarBorder: 'rgba(255,255,255,0.06)',
-    textColor: '#1A0810',
-    subtleText: '#9F485E',
-    borderColor: '#FCE4EB',
-    dark: false,
+  sage: {
+    name: '岩茶绿', label: 'Muted Green', colorPrimary: '#617C6A', primaryBg: 'rgba(97,124,106,0.10)',
+    colorBgBase: '#F5F7F5', colorBgContainer: '#FFFFFF', sidebar: '#FBFCFB', sidebarText: '#4B5563',
+    sidebarHover: '#F1F4F1', sidebarActive: '#506558', sidebarActiveBg: 'rgba(97,124,106,0.10)',
+    sidebarBorder: '#E3E7E3', textColor: '#17201A', subtleText: '#6B7280', borderColor: '#E3E7E3', dark: false,
   },
-  ember: {
-    name: '余烬', label: '暖焰',
-    colorPrimary: '#C2410C',
-    primaryBg: 'rgba(194,65,12,0.1)',
-    colorBgBase: '#FEF7F2',
-    colorBgContainer: '#FFFFFF',
-    sidebar: '#1A0D08',
-    sidebarText: '#FED7AA',
-    sidebarHover: '#2D1810',
-    sidebarActive: '#F97316',
-    sidebarActiveBg: 'rgba(249,115,22,0.13)',
-    sidebarBorder: 'rgba(255,255,255,0.06)',
-    textColor: '#1A0D08',
-    subtleText: '#9A4A25',
-    borderColor: '#FDE4D0',
-    dark: false,
-  },
-  ocean: {
-    name: '海洋', label: '冷蓝',
-    colorPrimary: '#0284C7',
-    primaryBg: 'rgba(2,132,199,0.1)',
-    colorBgBase: '#F0F9FF',
-    colorBgContainer: '#FFFFFF',
-    sidebar: '#0C4A6E',
-    sidebarText: '#BAE6FD',
-    sidebarHover: '#075985',
-    sidebarActive: '#38BDF8',
-    sidebarActiveBg: 'rgba(56,189,248,0.13)',
-    sidebarBorder: 'rgba(255,255,255,0.08)',
-    textColor: '#0C4A6E',
-    subtleText: '#0369A1',
-    borderColor: '#BAE6FD',
-    dark: false,
+  ink: {
+    name: '岩墨灰', label: 'Slate', colorPrimary: '#687482', primaryBg: 'rgba(104,116,130,0.10)',
+    colorBgBase: '#F5F6F7', colorBgContainer: '#FFFFFF', sidebar: '#FBFBFC', sidebarText: '#4B5563',
+    sidebarHover: '#F1F3F4', sidebarActive: '#535E69', sidebarActiveBg: 'rgba(104,116,130,0.10)',
+    sidebarBorder: '#E4E7EA', textColor: '#111827', subtleText: '#6B7280', borderColor: '#E4E7EA', dark: false,
   },
 }
 
@@ -92,13 +42,14 @@ const CSS_VARS = {
 }
 
 export const useThemeStore = defineStore('theme', () => {
-  const key = ref(localStorage.getItem('aiops_theme') || 'amber')
-  const t = computed(() => THEMES[key.value] ?? THEMES.amber)
+  const storedKey = localStorage.getItem('aiops_theme')
+  const key = ref(THEMES[storedKey] ? storedKey : 'stone')
+  const t = computed(() => THEMES[key.value] ?? THEMES.stone)
 
   function setTheme(newKey) {
     key.value = newKey
     localStorage.setItem('aiops_theme', newKey)
-    _apply(THEMES[newKey] ?? THEMES.amber)
+    _apply(THEMES[newKey] ?? THEMES.stone)
   }
 
   function _apply(thm) {
@@ -114,7 +65,10 @@ export const useThemeStore = defineStore('theme', () => {
       colorPrimary: t.value.colorPrimary,
       colorBgBase: t.value.colorBgBase,
       colorBgContainer: t.value.colorBgContainer,
-      borderRadius: 8,
+      colorText: t.value.textColor,
+      colorTextSecondary: t.value.subtleText,
+      colorBorder: t.value.borderColor,
+      borderRadius: 10,
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     },
   }))

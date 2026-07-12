@@ -5,7 +5,8 @@ from .models import AnalysisDeps, AnalysisResult, analysis_agent
 from .persistence import update_workflow_db
 from .state import WorkflowState
 from ...services.systems.restart import annotate_restart_action
-from ...services.workflows.execution import execute_workflow_action, verify_action_recovery
+from ...services.workflows.actions import normalize_action
+from ...services.workflows.execution import execute_workflow_action, verify_action_recovery_async
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ async def analyze_node(state: WorkflowState) -> dict:
             state["descriptor"],
             analysis.proposed_action.model_dump(),
         )
+        proposed_action = normalize_action(proposed_action, descriptor=state["descriptor"])
         log.info("[workflow:%s] 分析完成，提案类型=%s", state["thread_id"], proposed_action.get("type"))
         return {
             "diagnosis": analysis.diagnosis,
@@ -66,7 +68,7 @@ async def execute_node(state: WorkflowState) -> dict:
 
     try:
         execution_result = await execute_workflow_action(state, action)
-        recovered, verification = verify_action_recovery(state, action)
+        recovered, verification = await verify_action_recovery_async(state, action)
         combined_result = f"{execution_result}\n\n恢复回查：{verification}"
         final_status = "done" if recovered else "error"
         update_workflow_db(thread_id, final_status, combined_result, executed=True)

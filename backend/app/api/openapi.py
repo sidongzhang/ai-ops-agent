@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from sqlmodel import Session
 
 from app.core.database import get_session
@@ -12,7 +12,7 @@ from app.models.tokens import SystemToken
 from app.repositories.systems import get_system_by_key
 from app.repositories.tokens import get_token_by_hash
 from app.schemas.messages import SystemMessageOut
-from app.schemas.openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn
+from app.schemas.openapi import LogAnalysisResponse, OpenAlertIn, OpenHealthIn, OpenMessageIn
 from app.services.openapi import (
     get_open_message_by_request_id,
     list_open_messages,
@@ -20,6 +20,7 @@ from app.services.openapi import (
     submit_open_health,
     submit_open_message,
 )
+from app.services.log_analysis import analyze_uploaded_log
 
 router = APIRouter(prefix="/openapi/v1", tags=["openapi"])
 
@@ -60,6 +61,35 @@ def require_openapi_identity(
 def require_scope(identity: OpenApiIdentity, scope: str) -> None:
     if scope not in (identity.token.scopes or []):
         raise HTTPException(status.HTTP_403_FORBIDDEN, f"Token 缺少权限: {scope}")
+
+
+@router.post("/log-analysis", response_model=LogAnalysisResponse)
+async def analyze_log_file(
+    file: UploadFile = File(..., description="log.json 或文本日志，最大 2 MB"),
+    question: str = Form(default=""),
+    request_id: str = Form(default=""),
+    identity: OpenApiIdentity = Depends(require_openapi_identity),
+    session: Session = Depends(get_session),
+):
+    require_scope(identity, "log:analyze")
+    if not file.filename:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "请上传日志文件")
+    try:
+        raw = await file.read()
+        return analyze_uploaded_log(
+            session,
+            identity.system.id,
+            identity.system.org_id,
+            filename=file.filename,
+            raw=raw,
+            question=question,
+            request_id=request_id,
+            token_id=identity.token.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except Exception as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"日志分析失败：{exc}")
 
 
 @router.post("/alerts", response_model=SystemMessageOut, status_code=status.HTTP_201_CREATED)

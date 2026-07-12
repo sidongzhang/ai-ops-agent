@@ -24,6 +24,12 @@ _SQLITE_REQUIRED_COLUMNS = {
         "approved_at": "DATETIME",
         "executed_at": "DATETIME",
     },
+    "diagnosis_reports": {
+        "knowledge_refs": "JSON DEFAULT '[]'",
+    },
+    "system_messages": {
+        "incident_id": "INTEGER",
+    },
 }
 
 
@@ -48,6 +54,10 @@ def init_db():
         SQLModel.metadata.create_all(engine)
         _ensure_sqlite_schema()
     # Postgres 生产模式：schema 由 `alembic upgrade head` 管理，此处不 create_all
+    from app.services.incidents.service import backfill_incidents
+
+    with Session(engine) as session:
+        backfill_incidents(session)
 
 
 def get_session():

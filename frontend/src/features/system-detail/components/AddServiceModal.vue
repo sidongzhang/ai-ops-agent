@@ -4,6 +4,7 @@ import { message } from 'ant-design-vue'
 import api from '../../../api'
 import {
   buildServicePayload,
+  CONNECTOR_FIELDS,
   createDetailServiceDraft,
   SERVICE_COLORS,
   SERVICE_PRESETS,
@@ -155,7 +156,7 @@ watch(
         </div>
       </div>
 
-      <div v-if="SERVICE_PRESETS[newSvc.preset].inputs.length" class="add-field">
+      <div v-if="SERVICE_PRESETS[newSvc.preset].buildConfig && SERVICE_PRESETS[newSvc.preset].inputs.length" class="add-field">
         <label class="add-label">连接参数</label>
         <div class="params-row">
           <div
@@ -166,6 +167,25 @@ watch(
           >
             <span class="param-label">{{ inp.label }}</span>
             <a-input v-model:value="newSvc.fields[inp.key]" :placeholder="inp.placeholder" />
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="add-field">
+        <label class="add-label">连接器与访问参数</label>
+        <div class="params-row">
+          <div class="param-field connector-field">
+            <span class="param-label">连接器</span>
+            <a-select v-model:value="newSvc.connector" :options="Object.keys(CONNECTOR_FIELDS).map((key) => ({ value: key, label: key }))" />
+          </div>
+          <div
+            v-for="[key, label, placeholder] in CONNECTOR_FIELDS[newSvc.connector] || []"
+            :key="key"
+            class="param-field"
+            style="flex:1"
+          >
+            <span class="param-label">{{ label }}</span>
+            <a-input v-model:value="newSvc.customFields[key]" :placeholder="placeholder" />
           </div>
         </div>
       </div>

@@ -16,9 +16,11 @@ class ConnectionManager:
     def __init__(self) -> None:
         self._conns: dict[int, WebSocket] = {}           # collector_id → ws
         self._pending: dict[str, asyncio.Future] = {}    # request_id → future
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def connect(self, collector_id: int, ws: WebSocket) -> None:
         await ws.accept()
+        self._loop = asyncio.get_running_loop()
         self._conns[collector_id] = ws
 
     def disconnect(self, collector_id: int) -> None:
@@ -34,6 +36,7 @@ class ConnectionManager:
         args: Optional[dict] = None,
         timeout: float = 30.0,
     ) -> dict:
+        self._loop = asyncio.get_running_loop()
         ws = self._conns.get(collector_id)
         if not ws:
             raise RuntimeError("采集器未连接（WebSocket 未建立，采集器可能离线）")
@@ -48,6 +51,21 @@ class ConnectionManager:
             raise RuntimeError(f"采集器 {collector_id} 命令超时（{timeout}s）")
         finally:
             self._pending.pop(request_id, None)
+
+    def send_command_sync(
+        self,
+        collector_id: int,
+        cmd: str,
+        args: Optional[dict] = None,
+        timeout: float = 30.0,
+    ) -> dict:
+        if not self._loop:
+            raise RuntimeError("采集器命令循环尚未就绪，请确认平台 WebSocket 已建立连接")
+        future = asyncio.run_coroutine_threadsafe(
+            self.send_command(collector_id, cmd, args, timeout=timeout),
+            self._loop,
+        )
+        return future.result(timeout=timeout + 1)
 
     def resolve(self, data: dict) -> None:
         """由 WS 接收循环调用，解析采集器返回的结果并唤醒等待的协程。"""

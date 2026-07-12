@@ -1,14 +1,76 @@
 <script setup>
-defineProps({
+import { computed, onMounted, ref, watch } from 'vue'
+import api from '../../../api'
+import SparklineChart from '../../../components/SparklineChart.vue'
+
+const props = defineProps({
+  systemId: { type: [String, Number], required: true },
   metrics: { type: Object, default: null },
   metricsLoading: { type: Boolean, default: false },
+  services: { type: Array, default: () => [] },
+})
+
+const historyLoading = ref(false)
+const history = ref(null)
+const historyRange = ref('1h')
+const rangeOptions = [
+  { key: '1h', label: '近 1 小时' },
+  { key: '6h', label: '近 6 小时' },
+  { key: '24h', label: '近 24 小时' },
+]
+
+const registered = computed(() => props.services.filter((service) => service.enabled !== false))
+const hasService = (kind, port) => registered.value.some((service) => {
+  const name = String(service.name || '').toLowerCase()
+  const config = service.config || {}
+  return service.connector === kind || name.includes(kind) || Number(config.port) === port
+})
+
+const historySeriesByKey = computed(() => {
+  const map = new Map()
+  for (const series of history.value?.series || []) map.set(series.key, series)
+  return map
+})
+
+const historySeriesList = computed(() => history.value?.series || [])
+
+const historyStroke = {
+  mem_used_pct: '#557568',
+  cpu_usage_pct: '#9a6b3a',
+  redis_clients: '#2563eb',
+  kafka_lag: '#dc2626',
+}
+
+const canLoadHistory = computed(() => (
+  hasService('prometheus', 9090) || Boolean(props.metrics?.prometheus?.available)
+))
+
+async function loadHistory() {
+  if (!canLoadHistory.value) return
+  historyLoading.value = true
+  try {
+    const { data } = await api.get(`/systems/${props.systemId}/metrics/history`, {
+      params: { range: historyRange.value },
+    })
+    history.value = data
+  } catch {
+    history.value = null
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+onMounted(loadHistory)
+watch(historyRange, loadHistory)
+watch(() => props.metrics?.prometheus?.available, (available) => {
+  if (available) loadHistory()
 })
 </script>
 
 <template>
   <div v-if="metrics">
     <a-row :gutter="16">
-      <a-col :span="12">
+      <a-col v-if="canLoadHistory" :span="12">
         <a-card class="panel-card" size="small">
           <template #title>
             <span>系统资源</span>
@@ -54,12 +116,41 @@ defineProps({
                 </div>
               </div>
             </div>
+            <div v-if="history?.available" class="history-block">
+              <div class="history-head">
+                <span class="history-title">资源趋势</span>
+                <div class="history-range">
+                  <button
+                    v-for="option in rangeOptions"
+                    :key="option.key"
+                    :class="['range-chip', { active: historyRange === option.key }]"
+                    @click="historyRange = option.key"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
+              <a-spin v-if="historyLoading" size="small" />
+              <div v-else-if="historySeriesList.length" class="history-grid">
+                <div v-for="series in historySeriesList" :key="series.key" class="history-card">
+                  <div class="history-label">{{ series.label }}</div>
+                  <SparklineChart
+                    v-if="series.points?.length"
+                    :points="series.points"
+                    :unit="series.unit || ''"
+                    :stroke="historyStroke[series.key] || '#557568'"
+                  />
+                  <div v-else class="history-empty">暂无 {{ series.label }} 数据</div>
+                </div>
+              </div>
+              <div v-else class="history-empty">Prometheus 暂无可用的历史时序数据</div>
+            </div>
           </div>
           <a-empty v-else description="未注册 Prometheus 服务" :image-style="{ height: '40px' }" />
         </a-card>
       </a-col>
 
-      <a-col :span="12">
+      <a-col v-if="hasService('redis', 6379)" :span="12">
         <a-card class="panel-card" size="small">
           <template #title>
             <span>Redis</span>
@@ -94,7 +185,7 @@ defineProps({
     </a-row>
 
     <a-row :gutter="16" style="margin-top:16px">
-      <a-col :span="12">
+      <a-col v-if="hasService('kafka', 9092)" :span="12">
         <a-card v-if="metrics.kafka.available !== undefined" class="panel-card" size="small">
           <template #title>
             <span>Kafka</span>
@@ -136,7 +227,7 @@ defineProps({
         </a-card>
       </a-col>
 
-      <a-col :span="12">
+      <a-col v-if="hasService('mysql', 3306)" :span="12">
         <a-card v-if="metrics.mysql.available !== undefined" class="panel-card" size="small">
           <template #title>
             <span>MySQL</span>
@@ -264,4 +355,58 @@ defineProps({
 .http-svc-name { font-weight: 500; flex: 1; }
 .http-svc-code { font-weight: 600; }
 .http-svc-latency { color: var(--text-subtle); font-size: 12px; margin-left: auto; }
+.history-block {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-color);
+}
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.history-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.history-range { display: flex; gap: 6px; flex-wrap: wrap; }
+.range-chip {
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-subtle);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.range-chip.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.history-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--body-bg) 60%, var(--card-bg));
+}
+.history-label {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-bottom: 6px;
+}
+.history-empty {
+  color: var(--text-subtle);
+  font-size: 12px;
+  padding: 18px 0;
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .history-grid { grid-template-columns: 1fr; }
+}
 </style>

@@ -173,8 +173,10 @@ ai-ops-agent/
 - `POST /systems/{id}/collectors` — 注册采集器，返回一次性 key
 - `GET /systems/{id}/collectors` — 列出采集器
 - `DELETE /collectors/{id}` — 吊销采集器
-- `WS /ws/collector/{token}` — 采集器长连 WebSocket 网关
-- `POST /systems/{id}/collector/exec` — 通过采集器远程执行（fetch_logs/health_check）
+- `POST /systems/{id}/collectors/{collector_id}/bundle` — 下载带密钥的独立采集包
+- `WS /ws/collector?key={collector_key}` — 采集器长连 WebSocket 网关
+- `POST /systems/{id}/collector/exec` — 通过采集器远程执行（日志/健康/Prometheus 查询）
+- `GET /systems/{id}/logs?service=...` — 查看已注册服务日志（本机或远程采集器）
 
 ### Feishu
 - `POST /feishu/webhook` — 飞书事件接收（URL 验证 challenge + im.message.receive_v1）
@@ -272,6 +274,10 @@ kafka_topic_partition_under_replicated_partition
 - `/login` — 登录
 - `/systems` — 系统列表（卡片展示，健康徽章）
 - `/systems/:id` — 系统详情（4 Tab）
+- /messages — 消息中心（告警、通知、渠道发送结果，支持筛选和重试）
+- /audit — 审计记录（诊断、审批、执行、回查全过程追溯）
+- /efficiency — 效率分析（告警解决率、处理时间、诊断质量、拦截效果）
+- /docs — 接入文档（Token 指引、API 示例）
 
 **系统详情 4 Tab**：
 | Tab | 内容 |
@@ -315,12 +321,16 @@ class Connector(ABC):
 
 ## 十一、采集器（collector/run.py）
 
-- 部署在客户内网，出站连平台 `wss://[host]/ws/collector/{token}`
-- 启动后立即上报一次健康快照，之后每 60s 上报一次
+- 部署在客户内网，出站连平台 `wss://[host]/ws/collector?key=[collector_key]`
+- 启动后立即上报一次健康快照，之后按 `COLLECTOR_INTERVAL` 上报（默认 30s）
 - 接收平台下发的 JSON 指令并返回结果：
   - `fetch_logs` → `read_logs(service, lines)`
   - `search_logs` → `search_logs(service, keyword)`
   - `health_check` → `collect_health(descriptor)`
+  - `query_prometheus` → 查询已注册 Prometheus 的 PromQL
+  - `run_readonly_query` → 通过采集器在对方网络执行安全 SELECT
+  - `run_redis_command` / `run_kafka_command` → 执行白名单只读运维查询
+  - `restart_systemd` → 仅重启已注册的 systemd unit，需审批并自动回查
 
 ---
 
@@ -367,9 +377,11 @@ CELERY_BROKER_URL=redis://localhost:6380/0
 | mysqld-exporter | `localhost:9104` | ✅ Docker |
 | Cloudflare Tunnel | `webhook.tiancaizhaozhao.dpdns.org` | ✅ 运行中 |
 
-**测试账号**：`admin@aiops.dev` / `admin123`（org_id=1）
+**测试账号**：`admin@test.com` / `admin123`（org_id=1）
 
-**已注册系统**：ID=1，6个服务：MySQL(tcp:3306) / Redis(tcp:6379) / Kafka(tcp:9092) / Prometheus(http:9090) / NodeExporter(http:9100) / Platform-API(http:8000)
+**已注册系统**：ID=1，Docker真实本地环境，6个服务：MySQL(127.0.0.1:3306) / Redis(127.0.0.1:6379) / Kafka(127.0.0.1:9092) / Prometheus(http://127.0.0.1:9090) / NodeExporter(http://127.0.0.1:9100/metrics) / Platform-API(http://127.0.0.1:8000/healthz)
+
+**接入方式**：远程系统可先登记服务，再在系统详情创建采集器；采集器通过出站 HTTP/WebSocket 连接平台，负责健康检查、日志、Prometheus 查询和审批后的受限操作。每个系统可单独设置巡检周期，通知支持站内、飞书和邮件。
 
 ---
 
@@ -392,4 +404,4 @@ CELERY_BROKER_URL=redis://localhost:6380/0
 - [x] Alembic 迁移脚本补全（当前 dev 用 `create_all`）
 - [x] 采集器打包为可执行二进制（PyInstaller + Docker）
 - [x] 生产切换 Postgres（docker-compose + DATABASE_URL，依赖已安装）
-- [x] Celery Worker 告警任务补全（`tasks.py` 框架已有，巡检逻辑待完善）
+- [x] Celery Worker 告警任务补全（Beat 定时触发，按系统周期巡检并触发站内/飞书/邮件告警）

@@ -3,9 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.core.database import get_session
-from app.core.deps import get_current_org_id
+from app.core.deps import get_current_org_id, get_current_user, require_operator
 from app.schemas.tokens import SystemTokenCreate, SystemTokenCreated, SystemTokenOut
-from app.services.tokens import create_system_token, list_system_tokens, revoke_system_token
+from app.services.tokens import delete_system_token, create_system_token, list_system_tokens, revoke_system_token
 
 router = APIRouter(prefix="/systems/{system_id}/tokens", tags=["system-tokens"])
 
@@ -16,6 +16,7 @@ def create_token(
     body: SystemTokenCreate,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
+    user = Depends(require_operator),
 ):
     try:
         return create_system_token(session, system_id, org_id, body)
@@ -28,6 +29,7 @@ def list_tokens(
     system_id: int,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
+    user = Depends(get_current_user),
 ):
     try:
         return list_system_tokens(session, system_id, org_id)
@@ -41,8 +43,25 @@ def revoke_token(
     token_id: int,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
+    user = Depends(require_operator),
 ):
     try:
         return revoke_system_token(session, system_id, token_id, org_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+
+
+@router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_token(
+    system_id: int,
+    token_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user = Depends(require_operator),
+):
+    try:
+        delete_system_token(session, system_id, token_id, org_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))

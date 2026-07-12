@@ -3,18 +3,28 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from ..core.database import get_session
-from ..core.deps import get_current_org_id, get_current_user
+from ..core.deps import get_current_org_id, get_current_user, require_operator
 from ..models.auth import User
 from ..schemas import (
     DiagnosticTemplateOut,
     DiagnosticTemplateSettingsUpdate,
     DiagnoseRequest,
     DiagnoseResponse,
+    DiagnosisHistoryClearOut,
+    DiagnosisReportOut,
+    KnowledgeExportRequest,
+    KnowledgeDocOut,
 )
 from ..services.diagnostics.service import (
     diagnose_system as diagnose_system_record,
     list_diagnostic_templates,
     update_diagnostic_templates,
+)
+from ..services.diagnostics.reports import (
+    clear_diagnosis_reports,
+    export_report_to_knowledge,
+    get_diagnosis_report,
+    list_diagnosis_reports,
 )
 
 router = APIRouter(prefix="/systems", tags=["agent"])
@@ -37,6 +47,86 @@ def diagnose_system(system_id: int, body: DiagnoseRequest,
         raise HTTPException(404, str(exc))
 
 
+@router.get("/{system_id}/diagnosis-reports", response_model=list[DiagnosisReportOut])
+def list_diagnosis_history(
+    system_id: int,
+    limit: int = 50,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+):
+    try:
+        return list_diagnosis_reports(session, system_id, org_id, limit=limit)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.get("/{system_id}/diagnosis-reports/{report_id}", response_model=DiagnosisReportOut)
+def get_diagnosis_history_item(
+    system_id: int,
+    report_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+):
+    try:
+        return get_diagnosis_report(session, system_id, org_id, report_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.post(
+    "/{system_id}/diagnosis-reports/{report_id}/export-knowledge",
+    response_model=KnowledgeDocOut,
+)
+def export_diagnosis_to_knowledge(
+    system_id: int,
+    report_id: int,
+    body: KnowledgeExportRequest | None = None,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(require_operator),
+):
+    try:
+        from app.services.audit import record_audit_event
+
+        doc = export_report_to_knowledge(
+            session,
+            system_id,
+            org_id,
+            report_id,
+            doc_name=(body.doc_name if body else ""),
+        )
+        record_audit_event(
+            session,
+            org_id=org_id,
+            system_id=system_id,
+            actor_type="user",
+            actor_id=str(user.id),
+            event_type="knowledge.exported_from_diagnosis",
+            target_type="knowledge_doc",
+            target_id=doc.name,
+            status="success",
+            input={"report_id": report_id, "doc_name": doc.name},
+        )
+        session.commit()
+        return doc
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.delete("/{system_id}/diagnosis-reports", response_model=DiagnosisHistoryClearOut)
+def clear_diagnosis_history(
+    system_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
+):
+    try:
+        deleted = clear_diagnosis_reports(session, system_id, org_id)
+        return DiagnosisHistoryClearOut(deleted=deleted)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
 @router.get("/{system_id}/diagnostic-templates", response_model=list[DiagnosticTemplateOut])
 def get_templates(
     system_id: int,
@@ -55,7 +145,7 @@ def update_templates(
     body: DiagnosticTemplateSettingsUpdate,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_operator),
 ):
     try:
         return update_diagnostic_templates(

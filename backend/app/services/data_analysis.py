@@ -2,20 +2,22 @@
 from __future__ import annotations
 
 import re
+import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import create_engine, text
 from sqlmodel import Session
 
-from app.core.security import decrypt_sensitive_fields
-from app.core.security import encrypt_sensitive_fields, mask_sensitive_fields
+from app.core.security import decrypt_sensitive_fields, mask_sensitive_fields
 from app.schemas.diagnostics import DataAnalysisResponse, ReadonlyDatabaseConfig
 from app.services.audit import record_audit_event
 from app.repositories.systems import list_enabled_services_for_system
 from app.services.descriptors.builder import system_to_descriptor
 from app.services.descriptors.health import collect_health, read_service_logs
 from app.services.systems.service import require_system
+from app.services.collectors.exec import select_online_collector
+from app.services.realtime.websocket import manager
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _DANGEROUS_SQL = re.compile(
@@ -46,75 +48,6 @@ def get_readonly_database_config(session: Session, system_id: int, org_id: int) 
     return ReadonlyDatabaseConfig(**mask_sensitive_fields(config)) if config else ReadonlyDatabaseConfig()
 
 
-def update_readonly_database_config(
-    session: Session,
-    system_id: int,
-    org_id: int,
-    body: ReadonlyDatabaseConfig,
-) -> ReadonlyDatabaseConfig:
-    system = require_system(session, system_id, org_id)
-    infra = decrypt_sensitive_fields(system.infra or {})
-    previous = _data_source_config(infra)
-    config = body.model_dump()
-    if config.get("database_url") == "***":
-        config["database_url"] = previous.get("database_url", "")
-    if not config.get("enabled"):
-        config = {"enabled": False}
-    else:
-        _safe_identifier(config.get("table"), "table")
-        if config.get("timestamp_column"):
-            _safe_identifier(config.get("timestamp_column"), "timestamp_column")
-        for field in ("task_id_column", "status_column", "updated_at_column", "worker_column"):
-            if config.get(field):
-                _safe_identifier(config[field], field)
-        if config.get("task_analysis_enabled"):
-            if not config.get("status_column") or not config.get("updated_at_column"):
-                raise ValueError("任务卡住分析需要配置状态字段和最后更新时间字段")
-            config["processing_values"] = [
-                str(value).strip() for value in config.get("processing_values", []) if str(value).strip()
-            ]
-            if not config["processing_values"]:
-                raise ValueError("任务卡住分析至少需要一个处理中状态值")
-            config["stuck_threshold_minutes"] = max(
-                1,
-                min(int(config.get("stuck_threshold_minutes") or 30), 10080),
-            )
-        if not config.get("database_url"):
-            raise ValueError("只读数据源缺少 database_url")
-
-    infra["readonly_database"] = config
-    system.infra = encrypt_sensitive_fields(infra)
-    session.add(system)
-    session.commit()
-    session.refresh(system)
-    saved = _data_source_config(system.infra)
-    return ReadonlyDatabaseConfig(**mask_sensitive_fields(saved)) if saved else ReadonlyDatabaseConfig()
-
-
-def test_readonly_database_config(session: Session, system_id: int, org_id: int) -> dict:
-    system = require_system(session, system_id, org_id)
-    config = _data_source_config(system.infra)
-    if not config or not config.get("enabled"):
-        raise ValueError("当前系统未启用只读数据源")
-    table = _safe_identifier(config.get("table"), "table")
-    rows = run_readonly_query(config, f"SELECT COUNT(*) AS total FROM {table}", max_rows=1)
-    total = int(rows[0]["total"]) if rows else 0
-    task_columns = [
-        config.get(field)
-        for field in ("task_id_column", "status_column", "updated_at_column", "worker_column")
-        if config.get(field)
-    ]
-    if config.get("task_analysis_enabled"):
-        selected = ", ".join(_safe_identifier(column, "task_column") for column in task_columns)
-        run_readonly_query(config, f"SELECT {selected} FROM {table} LIMIT 1", max_rows=1)
-    return {
-        "ok": True,
-        "table": table,
-        "total": total,
-        "task_analysis_ready": bool(config.get("task_analysis_enabled")),
-    }
-
-
 def analyze_system_data(
     session: Session,
     system_id: int,
@@ -128,6 +61,7 @@ def analyze_system_data(
     config = _data_source_config(system.infra)
     if not config or config.get("enabled") is False:
         raise ValueError("当前系统未配置只读数据分析数据源")
+    remote_executor = _remote_query_executor(session, system)
     if is_stuck_task_question(question):
         return analyze_stuck_tasks(
             session,
@@ -136,6 +70,7 @@ def analyze_system_data(
             question,
             actor_type=actor_type,
             actor_id=actor_id,
+            remote_executor=remote_executor,
         )
 
     table = _safe_identifier(config.get("table"), "table")
@@ -151,15 +86,16 @@ def analyze_system_data(
         params["start_time"] = datetime.now().date().isoformat()
 
     count_sql = f"SELECT COUNT(*) AS total FROM {table}{where_sql}"
-    count_rows = run_readonly_query(config, count_sql, params, max_rows=1)
+    count_rows = run_readonly_query(config, count_sql, params, max_rows=1, executor=remote_executor)
     total = int(count_rows[0]["total"]) if count_rows else 0
 
     rows: list[dict[str, Any]] = []
     if _wants_recent(question):
         order_sql = f" ORDER BY {timestamp_column} DESC" if timestamp_column else ""
         sample_sql = f"SELECT * FROM {table}{where_sql}{order_sql} LIMIT :limit"
-        rows = run_readonly_query(config, sample_sql, {**params, "limit": max_rows}, max_rows=max_rows)
+        rows = run_readonly_query(config, sample_sql, {**params, "limit": max_rows}, max_rows=max_rows, executor=remote_executor)
         rows = _mask_rows(rows, config.get("sensitive_fields", []))
+        rows = _serialize_rows(rows)
 
     scope = "今天" if today_only else "当前条件"
     answer_lines = [
@@ -205,6 +141,7 @@ def analyze_stuck_tasks(
     *,
     actor_type: str = "user",
     actor_id: str = "",
+    remote_executor: Callable | None = None,
 ) -> DataAnalysisResponse:
     if not config.get("task_analysis_enabled"):
         raise ValueError("当前只读数据源尚未启用任务卡住专项分析")
@@ -245,8 +182,10 @@ def analyze_stuck_tasks(
         stuck_sql,
         {**status_params, "stuck_before": stuck_before.isoformat(), "limit": max_rows},
         max_rows=max_rows,
+        executor=remote_executor,
     )
     stuck_rows = _mask_rows(stuck_rows, config.get("sensitive_fields", []))
+    stuck_rows = _serialize_rows(stuck_rows)
 
     count_sql = (
         f"SELECT COUNT(*) AS total FROM {table} "
@@ -257,13 +196,14 @@ def analyze_stuck_tasks(
         count_sql,
         {**status_params, "stuck_before": stuck_before.isoformat()},
         max_rows=1,
+        executor=remote_executor,
     )
     stuck_count = int(count_rows[0]["total"]) if count_rows else 0
     status_sql = (
         f"SELECT {status_column} AS task_status, COUNT(*) AS total "
         f"FROM {table} GROUP BY {status_column} ORDER BY total DESC"
     )
-    status_summary = run_readonly_query(config, status_sql, max_rows=_MAX_LIMIT)
+    status_summary = run_readonly_query(config, status_sql, max_rows=_MAX_LIMIT, executor=remote_executor)
 
     descriptor = system_to_descriptor(
         system,
@@ -369,6 +309,7 @@ def run_readonly_query(
     params: dict[str, Any] | None = None,
     *,
     max_rows: int = _DEFAULT_LIMIT,
+    executor: Callable | None = None,
 ) -> list[dict[str, Any]]:
     normalized = _normalize_sql(sql)
     if not normalized.lower().startswith("select"):
@@ -377,6 +318,10 @@ def run_readonly_query(
         raise ValueError("只读数据分析不允许一次执行多条 SQL")
     if _DANGEROUS_SQL.search(normalized):
         raise ValueError("只读数据分析拒绝执行包含写入或结构变更的 SQL")
+
+    if executor:
+        rows = executor(normalized, params or {}, _limit(max_rows))
+        return rows[:_limit(max_rows)]
 
     url = config.get("database_url") or config.get("url")
     if not url:
@@ -389,6 +334,31 @@ def run_readonly_query(
         conn.rollback()
     engine.dispose()
     return rows
+
+
+def _remote_query_executor(session: Session, system) -> Callable | None:
+    """返回一个通过在线采集器执行只读 SQL 的闭包；不可用时保留直连回退。"""
+    if system.local:
+        return None
+    collector = select_online_collector(session, system.id)
+    if not collector or not manager.is_connected(collector.id):
+        return None
+
+    def execute(sql: str, params: dict, max_rows: int) -> list[dict[str, Any]]:
+        try:
+            result = asyncio.run(manager.send_command(
+                collector.id,
+                "run_readonly_query",
+                {"sql": sql, "params": params, "max_rows": max_rows},
+            ))
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"远程只读数据库查询失败：{exc}") from exc
+        if not result.get("ok"):
+            raise RuntimeError(f"远程只读数据库查询失败：{result.get('result', '未知错误')}")
+        rows = result.get("result", [])
+        return rows if isinstance(rows, list) else []
+
+    return execute
 
 
 def _data_source_config(infra: dict | None) -> dict:
@@ -414,6 +384,23 @@ def _limit(value: Any) -> int:
     except (TypeError, ValueError):
         limit = _DEFAULT_LIMIT
     return max(1, min(limit, _MAX_LIMIT))
+
+
+def _serialize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    serialized: list[dict[str, Any]] = []
+    for row in rows:
+        serialized.append({key: _serialize_value(value) for key, value in row.items()})
+    return serialized
+
+
+def _serialize_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, list):
+        return [_serialize_value(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _serialize_value(item) for key, item in value.items()}
+    return value
 
 
 def _connect_args(url: str, config: dict) -> dict:

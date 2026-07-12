@@ -5,9 +5,10 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.core.deps import get_current_org_id, get_current_user
 from app.models.auth import User
-from app.schemas.messages import SystemMessageOut
+from app.schemas.messages import SystemMessageOut, SystemMessagePageOut
 from app.services.messages import (
     ack_message,
+    count_system_messages,
     count_unread_messages,
     list_system_messages,
     mark_message_read,
@@ -18,19 +19,33 @@ from app.services.messages import (
 router = APIRouter(tags=["messages"])
 
 
-@router.get("/messages", response_model=list[SystemMessageOut])
+@router.get("/messages", response_model=SystemMessagePageOut)
 def list_messages(
     status: str | None = None,
     message_type: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
 ):
-    return list_system_messages(
+    items = list_system_messages(
         session,
         org_id,
         status=status,
         message_type=message_type,
+        limit=limit,
+        offset=offset,
+    )
+    total = count_system_messages(
+        session,
+        org_id,
+        status=status,
+        message_type=message_type,
+    )
+    return SystemMessagePageOut(
+        items=[SystemMessageOut(**item.model_dump()) for item in items],
+        total=total,
+        offset=offset,
         limit=limit,
     )
 

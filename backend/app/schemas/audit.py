@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.pagination import PageOut
+
 
 class AuditLogOut(BaseModel):
     id: int
@@ -17,3 +19,7 @@ class AuditLogOut(BaseModel):
     input: dict = Field(default_factory=dict)
     output: dict = Field(default_factory=dict)
     created_at: datetime
+
+
+class AuditLogPageOut(PageOut[AuditLogOut]):
+    pass

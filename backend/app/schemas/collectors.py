@@ -15,11 +15,16 @@ class CollectorCreated(BaseModel):
     collector_key: str
 
 
+class CollectorBundleRequest(BaseModel):
+    collector_key: str
+
+
 class CollectorOut(BaseModel):
     id: int
     name: str
     system_id: int
     last_seen: str | None = None
+    online: bool = False
 
 
 class CollectorConfig(BaseModel):
@@ -37,6 +42,7 @@ class CollectorReport(BaseModel):
 class CollectorExecRequest(BaseModel):
     cmd: str
     args: dict = Field(default_factory=dict)
+    collector_id: int | None = None
 
 
 class CollectorExecResponse(BaseModel):

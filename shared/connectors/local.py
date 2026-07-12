@@ -30,6 +30,9 @@ def _http_ok(url: str) -> bool:
 
 
 def _docker_logs(container: str, lines: int) -> str:
+    from .docker_logs import read_container_logs
+    if container and ('-' in container or container.endswith('-1')):
+        return read_container_logs(container, lines)
     try:
         r = subprocess.run(
             ['docker', 'compose', 'logs', '--tail', str(lines), '--no-color', container],

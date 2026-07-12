@@ -11,3 +11,4 @@ export {
   syncPresetDraft,
 } from './drafts'
 export { buildServicePayload } from './payloads'
+export { SYSTEM_TEMPLATES } from './systemTemplates'

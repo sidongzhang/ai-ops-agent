@@ -12,6 +12,7 @@ from app.models.systems import MonitoredSystem, Service
 from app.services.descriptors.builder import system_to_descriptor
 from app.services.descriptors.health import collect_health
 from app.services.notifications.alerts import alert_if_needed
+from app.services.systems.service import get_monitoring_config
 
 log = logging.getLogger(__name__)
 
@@ -27,13 +28,25 @@ def services_of(session: Session, system_id: int) -> list[Service]:
 
 
 def has_fresh_collector(system: MonitoredSystem, session: Session) -> bool:
-    collector = session.exec(
+    interval = get_monitoring_config(system).interval_seconds
+    now = utcnow()
+    collectors = session.exec(
         select(Collector).where(Collector.system_id == system.id)
-    ).first()
-    if not collector or not system.last_report_at:
-        return False
-    elapsed = (utcnow() - system.last_report_at.replace(tzinfo=timezone.utc)).total_seconds()
-    return elapsed < settings.health_check_interval * COLLECTOR_STALE_MULTIPLIER
+    ).all()
+    return any(
+        collector.last_seen
+        and (now - collector.last_seen.replace(tzinfo=timezone.utc)).total_seconds()
+        < interval * COLLECTOR_STALE_MULTIPLIER
+        for collector in collectors
+    )
+
+
+def is_due(system: MonitoredSystem) -> bool:
+    last = system.last_report_at
+    if not last:
+        return True
+    elapsed = (utcnow() - last.replace(tzinfo=timezone.utc)).total_seconds()
+    return elapsed >= get_monitoring_config(system).interval_seconds
 
 
 def run_scheduled_health_checks() -> dict:
@@ -44,6 +57,13 @@ def run_scheduled_health_checks() -> dict:
         systems = session.exec(select(MonitoredSystem)).all()
         for system in systems:
             try:
+                monitoring = get_monitoring_config(system)
+                if not monitoring.enabled:
+                    skipped += 1
+                    continue
+                if not is_due(system):
+                    skipped += 1
+                    continue
                 if has_fresh_collector(system, session):
                     skipped += 1
                     log.debug(f"[check] 系统「{system.name}」由采集器负责，跳过")

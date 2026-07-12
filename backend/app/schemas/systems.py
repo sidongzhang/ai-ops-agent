@@ -26,6 +26,11 @@ class NotifyConfig(BaseModel):
     smtp_tls: bool = True
 
 
+class MonitoringConfig(BaseModel):
+    enabled: bool = True
+    interval_seconds: int = Field(default=60, ge=15, le=86400)
+
+
 class SystemCreate(BaseModel):
     key: str
     name: str
@@ -68,6 +73,8 @@ class RestartPolicyOut(BaseModel):
 class RestartServiceOut(BaseModel):
     name: str
     container: str = ""
+    systemd_unit: str = ""
+    target_type: str = ""
     restartable: bool = False
 
 
@@ -80,6 +87,18 @@ class RestartCapabilityOut(BaseModel):
     services: list[RestartServiceOut] = Field(default_factory=list)
 
 
+class RestartExecuteIn(BaseModel):
+    service: str
+
+
+class RestartExecuteOut(BaseModel):
+    ok: bool = True
+    service: str
+    target_type: str
+    target_resource: str
+    detail: str
+
+
 class SystemOut(BaseModel):
     id: int
     org_id: int
@@ -88,6 +107,7 @@ class SystemOut(BaseModel):
     local: bool
     notify: dict
     infra: dict
+    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     restart_policy: RestartPolicyOut = Field(default_factory=RestartPolicyOut)
     restart_capability: RestartCapabilityOut = Field(default_factory=RestartCapabilityOut)
     services: list[ServiceOut] = Field(default_factory=list)

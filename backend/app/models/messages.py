@@ -14,6 +14,7 @@ class SystemMessage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     org_id: int = Field(foreign_key="orgs.id", index=True)
     system_id: int = Field(foreign_key="systems.id", index=True)
+    incident_id: Optional[int] = Field(default=None, foreign_key="incidents.id", index=True)
     message_type: str = Field(default="alert", index=True)
     severity: str = Field(default="warning", index=True)
     title: str

@@ -1,220 +1,99 @@
-<template>
-  <div class="docs-wrap">
-    <div class="docs-header">
-      <h1 class="docs-title">辅助文档</h1>
-      <p class="docs-subtitle">平台介绍 · 快速上手 · 常见问题</p>
-    </div>
-
-    <div class="docs-body">
-
-      <!-- 左侧目录 -->
-      <nav class="docs-toc">
-        <div
-          v-for="sec in sections" :key="sec.id"
-          :class="['toc-item', { 'toc-item--active': active === sec.id }]"
-          @click="scrollTo(sec.id)"
-        >{{ sec.title }}</div>
-      </nav>
-
-      <!-- 右侧内容 -->
-      <article class="docs-content">
-
-        <section id="intro" class="doc-section">
-          <h2>什么是 AIOps 平台？</h2>
-          <p>AIOps 是一个多租户智能运维平台，帮助你把分散在各处的服务（MySQL、Redis、Kafka、API 等）统一纳管，通过 AI 对话完成故障诊断，并在服务异常时自动推送告警。</p>
-          <div class="feature-grid">
-            <div class="feature-card">
-              <span class="feature-icon">🖥️</span>
-              <strong>统一监控</strong>
-              <p>一个界面看所有服务的健康状态，无需分别登录各个系统。</p>
-            </div>
-            <div class="feature-card">
-              <span class="feature-icon">🤖</span>
-              <strong>AI 诊断</strong>
-              <p>用自然语言提问，AI 自动调用工具检查服务状态、分析日志、给出建议。</p>
-            </div>
-            <div class="feature-card">
-              <span class="feature-icon">🔔</span>
-              <strong>自动告警</strong>
-              <p>服务异常时自动检测，通过飞书或 Webhook 推送通知，1 小时内不重复告警。</p>
-            </div>
-            <div class="feature-card">
-              <span class="feature-icon">🏢</span>
-              <strong>多租户隔离</strong>
-              <p>每个账号独立组织空间，数据完全隔离，互相看不到。</p>
-            </div>
-          </div>
-        </section>
-
-        <section id="quickstart" class="doc-section">
-          <h2>快速上手</h2>
-          <div class="steps">
-            <div class="step">
-              <div class="step-num">1</div>
-              <div class="step-body">
-                <strong>注册账号</strong>
-                <p>在登录页点击「注册」，填入邮箱和密码，系统自动为你创建独立的组织空间。</p>
-              </div>
-            </div>
-            <div class="step">
-              <div class="step-num">2</div>
-              <div class="step-body">
-                <strong>新建系统</strong>
-                <p>进入「监控系统」页面，点击右上角「新建系统」，填入名称和 Key（英文标识符）。</p>
-              </div>
-            </div>
-            <div class="step">
-              <div class="step-num">3</div>
-              <div class="step-body">
-                <strong>添加服务</strong>
-                <p>进入系统详情 → 配置 → 添加服务，选择连接器类型（TCP / HTTP），填入 Host 和 Port。</p>
-                <a-table
-                  :data-source="connectorExamples"
-                  :columns="connectorCols"
-                  size="small"
-                  :pagination="false"
-                  style="margin-top:12px"
-                />
-              </div>
-            </div>
-            <div class="step">
-              <div class="step-num">4</div>
-              <div class="step-body">
-                <strong>AI 诊断</strong>
-                <p>切换到「AI 诊断」Tab，用自然语言描述你的问题，AI 会自动检查并给出分析报告。</p>
-                <div class="example-queries">
-                  <span v-for="q in exampleQueries" :key="q" class="query-chip">{{ q }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="connector" class="doc-section">
-          <h2>连接器说明</h2>
-          <p>连接器决定平台如何探活和采集指标。平台服务器会发起连接，所以填写的地址需要从<strong>平台服务器</strong>角度可达。</p>
-          <a-table
-            :data-source="connectorDetail"
-            :columns="connectorDetailCols"
-            size="small"
-            :pagination="false"
-          />
-          <a-alert
-            message="注意：如果你的服务在平台所在的同一台机器上，host 填 localhost 即可。如果在其他机器，填该机器的内网 IP 或域名。"
-            type="info"
-            show-icon
-            style="margin-top:16px"
-          />
-        </section>
-
-        <section id="ai" class="doc-section">
-          <h2>AI 诊断使用技巧</h2>
-          <div class="tip-list">
-            <div class="tip" v-for="tip in aiTips" :key="tip.title">
-              <strong>{{ tip.title }}</strong>
-              <p>{{ tip.desc }}</p>
-              <code v-if="tip.example">{{ tip.example }}</code>
-            </div>
-          </div>
-        </section>
-
-        <section id="autofix" class="doc-section">
-          <h2>AI 辅助修复</h2>
-          <p>诊断发现问题后，点击右上角「🔧 申请修复」，AI 会分析情况并提出一个可执行的修复方案，等待你审批后再执行。</p>
-
-          <div class="flow-steps">
-            <div class="flow-step">
-              <div class="flow-icon">💬</div>
-              <div><strong>提问诊断</strong><p>先用 AI 诊断确认问题</p></div>
-            </div>
-            <div class="flow-arrow">→</div>
-            <div class="flow-step">
-              <div class="flow-icon">🔧</div>
-              <div><strong>申请修复</strong><p>AI 分析并提出方案</p></div>
-            </div>
-            <div class="flow-arrow">→</div>
-            <div class="flow-step">
-              <div class="flow-icon">✅</div>
-              <div><strong>审批执行</strong><p>你确认后平台执行</p></div>
-            </div>
-            <div class="flow-arrow">→</div>
-            <div class="flow-step">
-              <div class="flow-icon">📊</div>
-              <div><strong>回报结果</strong><p>执行结果直接显示</p></div>
-            </div>
-          </div>
-
-          <a-table
-            :data-source="fixActions"
-            :columns="fixActionCols"
-            size="small"
-            :pagination="false"
-            style="margin-top:20px"
-          />
-
-          <a-alert
-            message="安全说明：所有自动执行操作均需你点击「批准执行」才会运行。重启操作限于已注册的服务容器，Redis 命令限于运维类命令（不含删库等高危操作）。"
-            type="warning"
-            show-icon
-            style="margin-top:16px"
-          />
-        </section>
-
-        <section id="alert" class="doc-section">
-          <h2>告警配置</h2>
-          <p>进入系统详情 → 配置 → 告警通知，支持两种方式：</p>
-          <div class="alert-cards">
-            <div class="alert-card">
-              <strong>🔵 飞书</strong>
-              <p>填入飞书应用的 App ID、App Secret 和目标群的 Chat ID，服务异常时自动发送卡片消息。</p>
-            </div>
-            <div class="alert-card">
-              <strong>🟣 Webhook</strong>
-              <p>填入任意 HTTP 接口地址，平台 POST JSON 格式的告警数据，可接入钉钉、企业微信、自建系统等。</p>
-            </div>
-          </div>
-          <p style="margin-top:12px">默认冷却时间为 <strong>1 小时</strong>，同一系统在冷却期内不会重复发送告警。</p>
-        </section>
-
-        <section id="faq" class="doc-section">
-          <h2>常见问题</h2>
-          <a-collapse :bordered="false">
-            <a-collapse-panel v-for="faq in faqs" :key="faq.q" :header="faq.q">
-              <p>{{ faq.a }}</p>
-            </a-collapse-panel>
-          </a-collapse>
-        </section>
-
-      </article>
-    </div>
-  </div>
-</template>
-
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
-const active = ref('intro')
+const active = ref('entry')
 
 const sections = [
-  { id: 'intro',      title: '平台介绍' },
-  { id: 'quickstart', title: '快速上手' },
-  { id: 'connector',  title: '连接器说明' },
-  { id: 'ai',         title: 'AI 诊断技巧' },
-  { id: 'autofix',    title: 'AI 辅助修复' },
-  { id: 'alert',      title: '告警配置' },
-  { id: 'faq',        title: '常见问题' },
+  { id: 'entry', title: '接入路径' },
+  { id: 'local', title: '本机接入' },
+  { id: 'remote', title: '远程接入' },
+  { id: 'monitor', title: '巡检与告警' },
+  { id: 'diagnosis', title: '诊断与处置' },
+  { id: 'faq', title: '常见问题' },
 ]
 
+const connectorColumns = [
+  { title: '服务类型', dataIndex: 'service', width: 120 },
+  { title: '推荐接入', dataIndex: 'connector', width: 120 },
+  { title: '填写示例', dataIndex: 'example' },
+]
+
+const connectorRows = [
+  { key: 'api', service: '后端 / API', connector: 'HTTP', example: 'http://10.0.0.12:8080/actuator/health' },
+  { key: 'mysql', service: 'MySQL', connector: 'TCP', example: '10.0.0.12:3306' },
+  { key: 'redis', service: 'Redis', connector: 'TCP', example: '10.0.0.15:6379' },
+  { key: 'kafka', service: 'Kafka', connector: 'TCP', example: '10.0.0.21:9092' },
+  { key: 'prom', service: 'Prometheus', connector: 'HTTP', example: 'http://10.0.0.30:9090/-/healthy' },
+]
+
+const remotePlan = [
+  {
+    title: '先登记系统和服务',
+    desc: '先把业务系统名称、环境和核心服务录入平台，平台据此生成监控视图与采集范围。',
+  },
+  {
+    title: '在对方环境部署采集器',
+    desc: '采集器主动连回平台，不要求你能直接 SSH 到对方内网，适合客户机房、云主机和办公电脑。',
+  },
+  {
+    title: '按授权读取日志与状态',
+    desc: '优先读取健康检查、Prometheus、只读日志和只读查询，减少对业务系统的打扰。',
+  },
+  {
+    title: '需要动作时走审批',
+    desc: '重启、受控命令等动作先给建议，再审批执行，并留下审计记录。',
+  },
+]
+
+const monitorCards = [
+  { key: 'health', title: '定时巡检', desc: '按系统独立设置巡检周期，自动刷新服务健康状态。' },
+  { key: 'notify', title: '三路告警', desc: '支持站内、飞书、邮件。未配外部渠道时，消息仍保留在平台内。' },
+  { key: 'incident', title: '事故归并', desc: '同类异常可汇总为事故，避免消息四散，方便统一跟进。' },
+]
+
+const diagnosisCards = [
+  { key: 'metrics', title: '指标分析', desc: '优先利用 Prometheus、Redis、Kafka 等已注册能力做快速定位。' },
+  { key: 'logs', title: '日志汇总', desc: '已接入服务才能展示日志和运行状态，未接入的不占界面位置。' },
+  { key: 'ai', title: 'AI 建议', desc: '诊断结果需要附带证据来源，建议可继续追问，并沉淀到知识库。' },
+  { key: 'ops', title: '受控处置', desc: '在得到授权的前提下，可做重启和受限运维动作，不直接开放高危写操作。' },
+]
+
+const faqItems = [
+  {
+    q: '一个业务系统里有前端、Spring、MySQL、Redis，应该怎么登记？',
+    a: '先创建一个系统，再把这些服务逐个加到该系统下。平台按系统汇总视图，按服务做探测和诊断。',
+  },
+  {
+    q: '对方服务不在平台本机，怎么接？',
+    a: '优先用远程采集器。它从对方环境主动连回平台，适合不能开放入站端口的场景。',
+  },
+  {
+    q: '为什么有的卡片看不到？',
+    a: '平台按已注册服务动态显示功能。没有接入 Prometheus、日志或数据库时，对应模块不会出现。',
+  },
+  {
+    q: '邮件告警怎么用？',
+    a: '在系统详情的告警通知里填写收件邮箱和 SMTP 参数，保存后即可发送测试通知和正式告警。',
+  },
+]
+
+const quickSummary = computed(() => [
+  '先把系统和核心服务接进来',
+  '本机服务直接探测，远程服务走采集器',
+  '先启用巡检和告警，再做诊断与处置',
+])
+
 function scrollTo(id) {
-  const el = document.getElementById(id)
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function onScroll() {
-  const els = sections.map(s => document.getElementById(s.id)).filter(Boolean)
-  for (let i = els.length - 1; i >= 0; i--) {
-    if (els[i].getBoundingClientRect().top < 120) {
-      active.value = sections[i].id
+  const visible = sections
+    .map((item) => ({ ...item, el: document.getElementById(item.id) }))
+    .filter((item) => item.el)
+  for (let i = visible.length - 1; i >= 0; i -= 1) {
+    if (visible[i].el.getBoundingClientRect().top < 130) {
+      active.value = visible[i].id
       return
     }
   }
@@ -223,251 +102,394 @@ function onScroll() {
 
 onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
 onUnmounted(() => window.removeEventListener('scroll', onScroll))
-
-const connectorCols = [
-  { title: '服务', dataIndex: 'svc', width: 100 },
-  { title: '连接器', dataIndex: 'conn', width: 90 },
-  { title: 'Host', dataIndex: 'host' },
-  { title: 'Port', dataIndex: 'port', width: 80 },
-]
-const connectorExamples = [
-  { key: '1', svc: 'Redis',      conn: 'TCP',  host: 'localhost', port: 6379 },
-  { key: '2', svc: 'MySQL',      conn: 'TCP',  host: 'localhost', port: 3306 },
-  { key: '3', svc: 'Kafka',      conn: 'TCP',  host: 'localhost', port: 9092 },
-  { key: '4', svc: 'Prometheus', conn: 'HTTP', host: 'http://localhost:9090/metrics', port: '-' },
-]
-
-const connectorDetailCols = [
-  { title: '类型', dataIndex: 'type', width: 80 },
-  { title: '探活方式', dataIndex: 'probe' },
-  { title: '适用场景', dataIndex: 'usecase' },
-]
-const connectorDetail = [
-  { key: '1', type: 'TCP',  probe: '建立 TCP 连接，成功即为健康', usecase: 'MySQL、Redis、Kafka、自定义端口' },
-  { key: '2', type: 'HTTP', probe: 'GET 请求，2xx 响应为健康',     usecase: 'API 服务、Prometheus、自定义 HTTP 端点' },
-]
-
-const exampleQueries = [
-  'Redis 内存使用情况怎么样？',
-  'Kafka 有没有消息积压？',
-  '系统整体健康状态',
-  'MySQL 连接数正常吗？',
-  '最近有没有报错日志？',
-]
-
-const aiTips = [
-  {
-    title: '直接描述问题现象',
-    desc: '不需要懂技术术语，直接说你观察到的现象，AI 会自行推断检查方向。',
-    example: '感觉系统变慢了，帮我查一下',
-  },
-  {
-    title: '问整体概览',
-    desc: '不确定从哪里查起时，先问整体状态，AI 会扫描所有服务给出全局报告。',
-    example: '系统整体健康状态怎么样？',
-  },
-  {
-    title: '追问细节',
-    desc: 'AI 给出报告后，可以继续追问，它会保留上下文进一步深入分析。',
-    example: 'Redis 峰值为什么这么高？和哪些操作有关？',
-  },
-  {
-    title: '服务专项分析',
-    desc: '针对某个服务单独提问，AI 会重点检查该服务的各项指标和日志。',
-    example: 'Kafka 消费者组 ops-consumer-group 的 lag 情况',
-  },
-]
-
-const fixActionCols = [
-  { title: '动作类型', dataIndex: 'type', width: 140 },
-  { title: '触发场景', dataIndex: 'when' },
-  { title: '风险等级', dataIndex: 'risk', width: 90 },
-]
-const fixActions = [
-  { key: '1', type: '🔄 重启容器',         when: '服务崩溃、端口不通、进程无响应',      risk: '⬇️ 低' },
-  { key: '2', type: '⚡ Redis 命令',        when: '内存过高需清理、配置调整',             risk: '⬆️ 中' },
-  { key: '3', type: '📋 拉取日志',          when: '需要查看服务最近报错详情',             risk: '✅ 无' },
-  { key: '4', type: '🩺 健康检查',          when: '修复后验证服务是否恢复',               risk: '✅ 无' },
-  { key: '5', type: '📝 人工操作指引',      when: '需要数据迁移、配置修改等复杂操作',    risk: '⚠️ 人工' },
-]
-
-const faqs = [
-  {
-    q: '注册后看不到任何系统，怎么办？',
-    a: '注册后系统是空的，需要自己新建。进入「监控系统」→「新建系统」，填入名称和要监控的服务地址即可。',
-  },
-  {
-    q: '填 localhost 能连上服务吗？',
-    a: '可以。localhost 指的是平台服务器（运行 AIOps 的那台机器），不是你自己的电脑。如果你的服务和平台在同一台机器上，填 localhost 即可访问。',
-  },
-  {
-    q: 'AI 诊断需要多长时间？',
-    a: '通常 10~30 秒，取决于问题复杂度和需要调用的工具数量。复杂问题（如全面健康巡检）可能需要 30~60 秒。',
-  },
-  {
-    q: '告警一直在发，怎么停？',
-    a: '默认冷却 1 小时，同一系统不会重复告警。如果持续发，说明服务一直处于不同的异常状态。修复服务后告警会自动停止。',
-  },
-  {
-    q: '我的数据和其他用户隔离吗？',
-    a: '完全隔离。每个账号注册时自动创建独立的组织（Org），系统、服务、诊断记录都属于该组织，其他用户无法访问。',
-  },
-]
 </script>
 
+<template>
+  <div class="guide-page">
+    <header class="guide-hero">
+      <div>
+        <p class="hero-eyebrow">接入与使用</p>
+        <h1>把系统接进来，再把巡检和处置跑通</h1>
+        <p class="hero-sub">
+          这页只保留真正有用的操作路径：怎么登记系统、怎么接本机或远程服务、怎么开巡检、怎么做诊断和受控处置。
+        </p>
+      </div>
+      <div class="hero-card">
+        <span class="hero-card-label">当前推荐顺序</span>
+        <ol>
+          <li v-for="item in quickSummary" :key="item">{{ item }}</li>
+        </ol>
+      </div>
+    </header>
+
+    <div class="guide-layout">
+      <nav class="guide-nav">
+        <button
+          v-for="item in sections"
+          :key="item.id"
+          type="button"
+          :class="['nav-item', { active: active === item.id }]"
+          @click="scrollTo(item.id)"
+        >
+          {{ item.title }}
+        </button>
+      </nav>
+
+      <main class="guide-content">
+        <section id="entry" class="guide-section">
+          <div class="section-head">
+            <h2>先定清楚系统边界</h2>
+            <p>平台管理的是“系统”下面的一组服务，不是单独几个端口。先把业务系统独立出来，后续巡检、告警、日志和诊断才有归属。</p>
+          </div>
+          <div class="entry-grid">
+            <article class="entry-card">
+              <span class="entry-step">01</span>
+              <h3>创建系统</h3>
+              <p>用业务名称创建系统，例如“慧眼系统”“Kafka 文件系统”，一个系统对应一套独立业务。</p>
+            </article>
+            <article class="entry-card">
+              <span class="entry-step">02</span>
+              <h3>登记核心服务</h3>
+              <p>优先登记前端、后端、数据库、Redis、Kafka、Prometheus 这些会直接影响业务可用性的组件。</p>
+            </article>
+            <article class="entry-card">
+              <span class="entry-step">03</span>
+              <h3>按服务显示能力</h3>
+              <p>平台会根据已注册服务决定展示哪些功能，没有接进来的服务不会占界面空间。</p>
+            </article>
+          </div>
+          <a-table :data-source="connectorRows" :columns="connectorColumns" :pagination="false" size="small" />
+        </section>
+
+        <section id="local" class="guide-section">
+          <div class="section-head">
+            <h2>本机接入</h2>
+            <p>平台能直接访问的服务，优先走本机托管。部署最轻，验证最快，适合先跑通第一套系统。</p>
+          </div>
+          <div class="plan-card">
+            <ul>
+              <li>服务和平台在同机或同网段时，直接填服务地址即可。</li>
+              <li>测试通过后再启用监控，避免把错误配置带进巡检。</li>
+              <li>Prometheus 已部署时，优先接入 Prometheus，后续很多分析都能直接复用。</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="remote" class="guide-section">
+          <div class="section-head">
+            <h2>远程接入</h2>
+            <p>远程系统不要求你能直接进入对方网络。更合理的方案是让采集器从对方环境主动连回平台，双方都更省事。</p>
+          </div>
+          <div class="timeline">
+            <article v-for="item in remotePlan" :key="item.title" class="timeline-item">
+              <div class="timeline-dot" />
+              <div>
+                <h3>{{ item.title }}</h3>
+                <p>{{ item.desc }}</p>
+              </div>
+            </article>
+          </div>
+          <a-alert
+            type="info"
+            show-icon
+            message="推荐做法"
+            description="远程场景下，平台不直接要求开放 SSH 或数据库写权限。先用采集器读取状态、日志和指标，只有在你明确授权时才执行受控动作。"
+          />
+        </section>
+
+        <section id="monitor" class="guide-section">
+          <div class="section-head">
+            <h2>巡检与告警</h2>
+            <p>一套系统接进来后，真正让它可运营的是定时巡检和告警闭环，而不是只把服务名字挂在页面上。</p>
+          </div>
+          <div class="capability-grid">
+            <article v-for="item in monitorCards" :key="item.key" class="capability-card">
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.desc }}</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="diagnosis" class="guide-section">
+          <div class="section-head">
+            <h2>诊断与处置</h2>
+            <p>平台的价值不只是发现问题，还要把证据、建议和动作串起来，并把高风险动作控制住。</p>
+          </div>
+          <div class="capability-grid diagnosis-grid">
+            <article v-for="item in diagnosisCards" :key="item.key" class="capability-card">
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.desc }}</p>
+            </article>
+          </div>
+          <div class="plan-card subtle">
+            <strong>推荐闭环</strong>
+            <p>巡检发现异常 -> 站内 / 飞书 / 邮件提醒 -> 查看系统状态、指标和日志 -> AI 汇总原因和建议 -> 审批后执行重启或受限动作 -> 再次回查是否恢复。</p>
+          </div>
+        </section>
+
+        <section id="faq" class="guide-section">
+          <div class="section-head">
+            <h2>常见问题</h2>
+            <p>这里保留最常会卡住接入进度的几个点，避免在页面里堆很多没必要的说明。</p>
+          </div>
+          <a-collapse :bordered="false" class="faq-collapse">
+            <a-collapse-panel v-for="item in faqItems" :key="item.q" :header="item.q">
+              <p>{{ item.a }}</p>
+            </a-collapse-panel>
+          </a-collapse>
+        </section>
+      </main>
+    </div>
+  </div>
+</template>
+
 <style scoped>
-.docs-wrap {
-  max-width: 1100px;
+.guide-page {
+  max-width: 1120px;
   margin: 0 auto;
 }
-.docs-header {
-  margin-bottom: 32px;
+
+.guide-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.9fr);
+  gap: 16px;
+  margin-bottom: 28px;
 }
-.docs-title {
-  font-size: 26px;
+
+.hero-eyebrow {
+  font-size: 12px;
   font-weight: 700;
-  margin-bottom: 6px;
+  color: var(--primary);
+  margin-bottom: 8px;
 }
-.docs-subtitle {
-  color: var(--text-secondary, #888);
+
+.guide-hero h1 {
+  font-size: 28px;
+  line-height: 1.2;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.hero-sub {
+  color: var(--text-subtle);
   font-size: 14px;
+  line-height: 1.7;
+  max-width: 720px;
 }
 
-/* 两栏布局 */
-.docs-body {
-  display: flex;
-  gap: 32px;
-  align-items: flex-start;
+.hero-card {
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 18px;
+  align-self: start;
 }
 
-/* 目录 */
-.docs-toc {
-  width: 150px;
-  flex-shrink: 0;
+.hero-card-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-subtle);
+  margin-bottom: 10px;
+}
+
+.hero-card ol {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.guide-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 28px;
+}
+
+.guide-nav {
   position: sticky;
   top: 24px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  align-self: start;
 }
-.toc-item {
-  padding: 7px 12px;
-  border-radius: 6px;
+
+.nav-item {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-subtle);
+  border-radius: 10px;
+  padding: 9px 12px;
+  text-align: left;
   font-size: 13px;
   cursor: pointer;
-  color: var(--text-secondary, #666);
-  transition: background 0.15s, color 0.15s;
 }
-.toc-item:hover { background: var(--sidebar-hover, rgba(0,0,0,0.05)); }
-.toc-item--active {
-  background: var(--primary-bg);
+
+.nav-item:hover {
+  background: color-mix(in srgb, var(--primary) 4%, var(--card-bg));
+}
+
+.nav-item.active {
+  border-color: color-mix(in srgb, var(--primary) 20%, var(--border-color));
+  background: color-mix(in srgb, var(--primary) 8%, var(--card-bg));
   color: var(--primary);
+  font-weight: 700;
+}
+
+.guide-content {
+  min-width: 0;
+}
+
+.guide-section {
+  margin-bottom: 44px;
+  scroll-margin-top: 90px;
+}
+
+.section-head {
+  margin-bottom: 16px;
+}
+
+.section-head h2 {
+  font-size: 19px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.section-head p {
+  color: var(--text-subtle);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.entry-grid,
+.capability-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.diagnosis-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.entry-card,
+.capability-card,
+.plan-card {
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  border-radius: 12px;
+}
+
+.entry-card,
+.capability-card {
+  padding: 16px;
+}
+
+.entry-step {
+  display: inline-flex;
+  min-width: 36px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--card-bg));
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.entry-card h3,
+.capability-card h3,
+.timeline-item h3 {
+  font-size: 15px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.entry-card p,
+.capability-card p,
+.timeline-item p,
+.plan-card p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-subtle);
+}
+
+.plan-card {
+  padding: 16px 18px;
+}
+
+.plan-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.plan-card.subtle strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 2px 0;
+}
+
+.timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin-top: 6px;
+}
+
+.faq-collapse {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--card-bg);
+  overflow: hidden;
+}
+
+.faq-collapse :deep(.ant-collapse-header) {
   font-weight: 600;
 }
 
-/* 内容区 */
-.docs-content {
-  flex: 1;
-  min-width: 0;
-}
-.doc-section {
-  margin-bottom: 52px;
-  scroll-margin-top: 80px;
-}
-.doc-section h2 {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border, #f0f0f0);
-}
-.doc-section p {
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--text, #333);
-  margin-bottom: 12px;
+.faq-collapse :deep(.ant-collapse-content-box) {
+  color: var(--text-subtle);
+  line-height: 1.7;
 }
 
-/* 特性卡片 */
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
-  margin-top: 16px;
-}
-.feature-card {
-  background: var(--card-bg, #fafafa);
-  border: 1px solid var(--border, #f0f0f0);
-  border-radius: 10px;
-  padding: 16px;
-}
-.feature-card p { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary, #666); }
-.feature-icon { font-size: 22px; display: block; margin-bottom: 8px; }
+@media (max-width: 960px) {
+  .guide-hero,
+  .guide-layout,
+  .entry-grid,
+  .capability-grid,
+  .diagnosis-grid {
+    grid-template-columns: 1fr;
+  }
 
-/* 步骤 */
-.steps { display: flex; flex-direction: column; gap: 20px; }
-.step { display: flex; gap: 16px; }
-.step-num {
-  width: 30px; height: 30px; border-radius: 50%;
-  background: var(--primary);
-  color: #fff; font-weight: 700; font-size: 14px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; margin-top: 2px;
-}
-.step-body strong { font-size: 15px; }
-.step-body p { margin: 4px 0 0; font-size: 13px; color: var(--text-secondary, #666); }
-
-/* 示例问题 */
-.example-queries { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.query-chip {
-  background: var(--primary-bg);
-  color: var(--primary);
-  border-radius: 20px;
-  padding: 4px 12px;
-  font-size: 12px;
-  cursor: default;
-}
-
-/* AI 技巧 */
-.tip-list { display: flex; flex-direction: column; gap: 20px; }
-.tip { background: var(--card-bg, #fafafa); border-radius: 8px; padding: 14px 16px; border-left: 3px solid var(--primary); }
-.tip strong { font-size: 14px; }
-.tip p { margin: 4px 0 8px; font-size: 13px; color: var(--text-secondary, #666); }
-.tip code { background: var(--code-bg, #f5f5f5); padding: 4px 10px; border-radius: 5px; font-size: 12px; }
-
-/* 告警卡片 */
-.alert-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.alert-card { background: var(--card-bg, #fafafa); border: 1px solid var(--border, #f0f0f0); border-radius: 10px; padding: 14px 16px; }
-.alert-card p { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary, #666); }
-
-/* 修复流程图 */
-.flow-steps {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-}
-.flow-step {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 12px 14px;
-  flex: 1;
-  min-width: 120px;
-}
-.flow-step p { margin: 2px 0 0; font-size: 12px; color: var(--text-subtle); }
-.flow-step strong { font-size: 13px; }
-.flow-icon { font-size: 22px; flex-shrink: 0; }
-.flow-arrow { font-size: 18px; color: var(--text-subtle); flex-shrink: 0; }
-
-/* 移动端 */
-@media (max-width: 767px) {
-  .docs-toc { display: none; }
-  .feature-grid { grid-template-columns: 1fr; }
-  .alert-cards { grid-template-columns: 1fr; }
+  .guide-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }
 </style>

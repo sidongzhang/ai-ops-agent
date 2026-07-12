@@ -19,6 +19,17 @@ class OpenHealthIn(BaseModel):
     services: list[HealthItem]
 
 
+class LogAnalysisResponse(BaseModel):
+    request_id: str
+    system_id: int
+    filename: str
+    log_format: str
+    report: str
+    model: str = ""
+    duration_ms: int = 0
+    truncated: bool = False
+
+
 class OpenMessageIn(BaseModel):
     request_id: str
     title: str

@@ -48,11 +48,14 @@ def list_restartable_services(services: list[dict | Service]) -> list[dict[str, 
     for service in services:
         name = service.name if isinstance(service, Service) else str(service.get("name", ""))
         runtime = get_service_runtime(service)
+        target_type = "container" if runtime["container"] else "systemd" if runtime["systemd_unit"] else ""
         items.append(
             {
                 "name": name,
                 "container": runtime["container"],
-                "restartable": bool(runtime["container"]),
+                "systemd_unit": runtime["systemd_unit"],
+                "target_type": target_type,
+                "restartable": bool(target_type),
             }
         )
     return items
@@ -72,7 +75,7 @@ def build_restart_capability(
 
     reason = ""
     if not has_targets:
-        reason = "当前系统没有配置可重启的 Docker 容器"
+        reason = "当前系统没有配置可重启的 Docker 容器或 systemd 服务"
     elif not system.local and not collector:
         reason = "该远程系统未安装采集器，无法执行重启"
     elif not system.local and not collector_online:
@@ -91,9 +94,13 @@ def build_restart_capability(
 def resolve_registered_restart_target(descriptor: dict, action: dict) -> dict[str, str]:
     service_name = str(action.get("service", "") or "").strip()
     container = str(action.get("args", {}).get("container", "") or "").strip()
+    unit = str(action.get("args", {}).get("unit", "") or "").strip()
+    action_type = action.get("type", "restart_container")
     if not service_name:
         raise RuntimeError("未指定服务名，无法执行重启")
-    if not container:
+    if action_type == "restart_systemd" and not unit:
+        raise RuntimeError("未指定 systemd 服务名（args.unit）")
+    if action_type != "restart_systemd" and not container:
         raise RuntimeError("未指定容器名（args.container）")
 
     service = next(
@@ -104,6 +111,19 @@ def resolve_registered_restart_target(descriptor: dict, action: dict) -> dict[st
         raise RuntimeError(f"系统中不存在服务「{service_name}」")
 
     runtime = get_service_runtime(service)
+    if action_type == "restart_systemd":
+        expected_unit = runtime["systemd_unit"]
+        if not expected_unit:
+            raise RuntimeError(f"服务「{service_name}」未配置 systemd_unit，暂不支持重启")
+        if unit != expected_unit:
+            raise RuntimeError(f"systemd 服务「{unit}」与系统注册配置不一致")
+        return {
+            "service": service_name,
+            "unit": expected_unit,
+            "target_type": "systemd",
+            "execution_mode": "local" if descriptor.get("local") else "collector",
+        }
+
     expected_container = runtime["container"]
     if not expected_container:
         raise RuntimeError(f"服务「{service_name}」未配置 config.container，暂不支持重启")
@@ -113,12 +133,13 @@ def resolve_registered_restart_target(descriptor: dict, action: dict) -> dict[st
     return {
         "service": service_name,
         "container": expected_container,
+        "target_type": "container",
         "execution_mode": "local" if descriptor.get("local") else "collector",
     }
 
 
 def annotate_restart_action(descriptor: dict, action: dict) -> dict[str, Any]:
-    if action.get("type") != "restart_container":
+    if action.get("type") not in ("restart_container", "restart_systemd"):
         return action
 
     enriched = dict(action)
@@ -126,14 +147,20 @@ def annotate_restart_action(descriptor: dict, action: dict) -> dict[str, Any]:
     try:
         target = resolve_registered_restart_target(descriptor, action)
         enriched["service"] = target["service"]
-        enriched["args"]["container"] = target["container"]
         enriched["execution_mode"] = target["execution_mode"]
         enriched["restart_ready"] = True
         enriched["restart_blocker"] = ""
-        enriched["target_resource"] = target["container"]
+        if action.get("type") == "restart_systemd":
+            enriched["args"]["unit"] = target["unit"]
+            enriched["target_resource"] = target["unit"]
+        else:
+            enriched["args"]["container"] = target["container"]
+            enriched["target_resource"] = target["container"]
     except RuntimeError as exc:
         enriched["execution_mode"] = "local" if descriptor.get("local") else "collector"
         enriched["restart_ready"] = False
         enriched["restart_blocker"] = str(exc)
-        enriched["target_resource"] = str(action.get("args", {}).get("container", "") or "")
+        enriched["target_resource"] = str(
+            action.get("args", {}).get("unit" if action.get("type") == "restart_systemd" else "container", "") or ""
+        )
     return enriched

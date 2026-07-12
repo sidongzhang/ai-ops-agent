@@ -148,11 +148,11 @@ async function doRegister() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--body-bg, #FAFAF8);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 16%, transparent), transparent 42%),
+    radial-gradient(circle at bottom right, color-mix(in srgb, var(--primary) 10%, transparent), transparent 38%),
+    var(--body-bg, #F4F9FF);
   position: relative;
-  /* 微纹理：细格网 */
-  background-image: radial-gradient(circle, var(--border-color, #E7E5E4) 1px, transparent 1px);
-  background-size: 28px 28px;
 }
 
 /* 主题切换条 */
@@ -181,10 +181,10 @@ async function doRegister() {
 .card {
   width: 400px;
   background: var(--card-bg, #fff);
-  border: 1px solid var(--border-color, #E7E5E4);
-  border-radius: 16px;
+  border: 1px solid var(--border-color, #E2E8F0);
+  border-radius: 18px;
   padding: 36px 36px 24px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.04);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 /* 品牌区 */

@@ -1,7 +1,9 @@
 """
 采集器 WebSocket 下行通道。
 
-采集器连接此端点后，平台可主动下发命令（fetch_logs / search_logs / health_check）。
+采集器连接此端点后，平台可主动下发命令（fetch_logs / search_logs / health_check /
+query_prometheus / run_readonly_query / run_redis_command / run_kafka_command /
+restart_container / restart_systemd）。
 Auth：采集器将 X-Collector-Key 作为 query 参数 key 传入（WebSocket 握手阶段无法传 Header）。
 """
 import logging

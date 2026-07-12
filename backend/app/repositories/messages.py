@@ -4,6 +4,42 @@ from sqlmodel import Session, func, select
 from app.models.messages import SystemMessage
 
 
+def _message_query(
+    session: Session,
+    org_id: int,
+    *,
+    system_id: int | None = None,
+    status: str | None = None,
+    message_type: str | None = None,
+):
+    query = select(SystemMessage).where(SystemMessage.org_id == org_id)
+    if system_id is not None:
+        query = query.where(SystemMessage.system_id == system_id)
+    if status:
+        query = query.where(SystemMessage.status == status)
+    if message_type:
+        query = query.where(SystemMessage.message_type == message_type)
+    return query
+
+
+def count_messages_for_org(
+    session: Session,
+    org_id: int,
+    *,
+    system_id: int | None = None,
+    status: str | None = None,
+    message_type: str | None = None,
+) -> int:
+    query = _message_query(
+        session,
+        org_id,
+        system_id=system_id,
+        status=status,
+        message_type=message_type,
+    )
+    return session.exec(select(func.count()).select_from(query.subquery())).one()
+
+
 def list_messages_for_org(
     session: Session,
     org_id: int,
@@ -12,15 +48,16 @@ def list_messages_for_org(
     status: str | None = None,
     message_type: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[SystemMessage]:
-    query = select(SystemMessage).where(SystemMessage.org_id == org_id)
-    if system_id is not None:
-        query = query.where(SystemMessage.system_id == system_id)
-    if status:
-        query = query.where(SystemMessage.status == status)
-    if message_type:
-        query = query.where(SystemMessage.message_type == message_type)
-    query = query.order_by(SystemMessage.created_at.desc()).limit(limit)
+    query = _message_query(
+        session,
+        org_id,
+        system_id=system_id,
+        status=status,
+        message_type=message_type,
+    )
+    query = query.order_by(SystemMessage.created_at.desc()).offset(max(offset, 0)).limit(limit)
     return list(session.exec(query))
 
 

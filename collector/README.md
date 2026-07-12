@@ -27,6 +27,14 @@
    COLLECTOR_INTERVAL=30 \
    python collector/run.py
    ```
+   也可以在仓库根目录构建 Docker 镜像后运行：
+   ```bash
+   docker build -f collector/Dockerfile -t aiops-collector:local .
+   docker run -d --restart=unless-stopped \
+     -e PLATFORM_URL=https://platform.example.com \
+     -e COLLECTOR_KEY=xxxx \
+     --name aiops-collector aiops-collector:local
+   ```
    测试可加 `--once` 只跑一轮（跳过 WebSocket 启动）。
 
 之后控制台对该系统的健康面板会显示「采集器上报」的快照（含上报时间）。
@@ -51,6 +59,13 @@ POST /systems/{id}/collector/exec
 | `fetch_logs` | `service`, `lines`（默认 50） | 日志文本（string） |
 | `search_logs` | `service`, `keyword`, `lines`（默认 200） | 匹配行（string） |
 | `health_check` | `service`（空=全部） | 健康状态列表（list） |
+| `query_prometheus` | `service`, `query`（PromQL） | 在对方内网查询 Prometheus 即时指标 |
+| `query_prometheus_range` | `service`, `query`, `start`, `end`, `step` | 查询 Prometheus 时序范围数据 |
+| `run_readonly_query` | `sql`, `params`, `max_rows` | 在对方网络执行单条 SELECT，最多返回 100 行 |
+| `run_redis_command` | `service`, `command` | 执行白名单 Redis 只读命令 |
+| `run_kafka_command` | `service`, `command` | 执行白名单 Kafka topics/consumer-groups 查询 |
+| `restart_systemd` | `service`, `unit` | 仅重启服务注册配置中的 systemd unit（需审批） |
+| `restart_container` | `service`, `container` | 仅重启注册配置中完全匹配的容器；必须经过平台审批 |
 
 **如果 `websockets` 包未安装**：下行通道跳过，上行轮询照常工作。
 **`COLLECTOR_WS=false`**：手动禁用下行通道。

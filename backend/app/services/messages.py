@@ -5,7 +5,12 @@ from sqlmodel import Session
 
 from app.models.messages import SystemMessage
 from app.models.systems import MonitoredSystem
-from app.repositories.messages import count_unread_messages_for_org, get_message_for_org, list_messages_for_org
+from app.repositories.messages import (
+    count_messages_for_org,
+    count_unread_messages_for_org,
+    get_message_for_org,
+    list_messages_for_org,
+)
 from app.services.audit import record_audit_event
 
 
@@ -14,12 +19,28 @@ def utcnow() -> datetime:
 
 
 def build_alert_suggestion(failed_services: list[str]) -> list[str]:
+    suggestions = []
+    for service in failed_services:
+        name = str(service)
+        lowered = name.lower()
+        if "redis" in lowered:
+            suggestions.append(f"{name}：先检查内存占用、连接数和慢查询；确认无误后再考虑重启。")
+        elif "mysql" in lowered or "数据库" in name:
+            suggestions.append(f"{name}：检查数据库连接数、磁盘空间和 mysqld 日志，优先确认是否为连接耗尽。")
+        elif "kafka" in lowered or "消息" in name:
+            suggestions.append(f"{name}：检查 Broker 状态、消费者组积压和磁盘空间，先定位积压来源再处理。")
+        elif any(marker in lowered for marker in ("api", "spring", "http", "nginx", "web")):
+            suggestions.append(f"{name}：先查看最近 ERROR/Exception 日志并重新探活，确认依赖服务和健康端点。")
+        else:
+            suggestions.append(f"{name}：重新探活并查看最近日志，确认网络、进程和依赖服务状态。")
+
     services = "、".join(failed_services)
-    return [
+    suggestions.extend([
         f"先在系统详情页重新探活，确认 {services} 是否仍然异常。",
-        "查看监控页最近 CPU、内存、连接数、积压等指标是否同步异常。",
-        "进入 AI 诊断页追问异常服务，获取更完整的日志和指标分析。",
-    ]
+        "如果服务已配置授权重启目标，可在 AI 诊断提出方案后审批执行；不要直接重复重启。",
+        "进入 AI 诊断页追问异常服务，获取日志、指标和具体恢复步骤。",
+    ])
+    return suggestions
 
 
 def create_alert_message(
@@ -45,6 +66,8 @@ def create_alert_message(
     )
     session.add(message)
     session.flush()
+    from app.services.incidents.service import attach_message_to_incident
+    attach_message_to_incident(session, system, message, failed_services)
     return message
 
 
@@ -56,8 +79,10 @@ def list_system_messages(
     status: str | None = None,
     message_type: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[SystemMessage]:
     limit = max(1, min(limit, 200))
+    offset = max(0, offset)
     return list_messages_for_org(
         session,
         org_id,
@@ -65,6 +90,24 @@ def list_system_messages(
         status=status,
         message_type=message_type,
         limit=limit,
+        offset=offset,
+    )
+
+
+def count_system_messages(
+    session: Session,
+    org_id: int,
+    *,
+    system_id: int | None = None,
+    status: str | None = None,
+    message_type: str | None = None,
+) -> int:
+    return count_messages_for_org(
+        session,
+        org_id,
+        system_id=system_id,
+        status=status,
+        message_type=message_type,
     )
 
 
@@ -119,6 +162,10 @@ def ack_message(
     session.add(message)
     session.commit()
     session.refresh(message)
+    if message.incident_id:
+        from app.services.incidents.service import sync_incident_status
+        sync_incident_status(session, message.incident_id)
+        session.commit()
     record_audit_event(
         session,
         org_id=org_id,
@@ -152,6 +199,10 @@ def resolve_message(
     session.add(message)
     session.commit()
     session.refresh(message)
+    if message.incident_id:
+        from app.services.incidents.service import sync_incident_status
+        sync_incident_status(session, message.incident_id)
+        session.commit()
     record_audit_event(
         session,
         org_id=org_id,

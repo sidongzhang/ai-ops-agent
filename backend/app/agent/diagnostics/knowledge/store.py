@@ -178,31 +178,93 @@ def _get_index(system_id: str) -> dict | None:
 
 def get_relevant_context(query: str, system_id: str, max_chars: int = MAX_CHARS) -> str:
     """语义检索知识库，返回相关段落拼接文本；无结果或失败返回空字符串。"""
-    index = _get_index(system_id)
-    if not index:
-        return _keyword_fallback(query, system_id, max_chars)
+    hits = search_knowledge_hits(query, system_id, max_chars=max_chars)
+    if not hits:
+        return ""
+    return "\n\n".join(hit["snippet"] for hit in hits)
 
+
+def search_knowledge_hits(query: str, system_id: str, max_chars: int = MAX_CHARS) -> list[dict]:
+    """检索知识库，返回 [{name, snippet, score}]，按相关度排序、同文档去重。"""
+    index = _get_index(system_id)
+    if index:
+        hits = _semantic_hits(query, index, max_chars)
+        if hits:
+            return _dedupe_hits(hits)
+    hits = _keyword_hits(query, system_id, max_chars)
+    return _dedupe_hits(hits)
+
+
+def _dedupe_hits(hits: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    result: list[dict] = []
+    for hit in sorted(hits, key=lambda item: item.get("score", 0), reverse=True):
+        name = hit.get("name") or ""
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        result.append(hit)
+    return result
+
+
+def _semantic_hits(query: str, index: dict, max_chars: int) -> list[dict]:
     query_vec = _embed([query])
     if query_vec is None:
-        return _keyword_fallback(query, system_id, max_chars)
+        return []
 
     qv = query_vec[0]
     scored = sorted(
         ((i, _cosine(qv, ev)) for i, ev in enumerate(index["embeddings"])),
-        key=lambda x: x[1], reverse=True,
+        key=lambda x: x[1],
+        reverse=True,
     )
 
-    result, total = [], 0
-    for idx, score in scored[:TOP_K]:
-        if score < 0.3:   # 低相似度截断
+    hits: list[dict] = []
+    total = 0
+    for idx, score in scored[:TOP_K * 2]:
+        if score < 0.3:
             break
         chunk = index["chunks"][idx]
         if total + len(chunk) > max_chars:
             break
-        result.append(chunk)
+        hits.append(
+            {
+                "name": index["metas"][idx],
+                "snippet": chunk,
+                "score": round(score, 4),
+            }
+        )
         total += len(chunk)
+    return hits
 
-    return "\n\n".join(result)
+
+def _keyword_hits(query: str, system_id: str, max_chars: int) -> list[dict]:
+    docs_dir = _docs_dir(system_id)
+    if not docs_dir.exists():
+        return []
+    keywords = set(re.findall(r"[\w一-鿿]+", query.lower()))
+    if not keywords:
+        return []
+
+    scored: list[tuple[int, str, str]] = []
+    for file_path in list(docs_dir.glob("*.md")) + list(docs_dir.glob("*.txt")):
+        if file_path.name == "vectors.json":
+            continue
+        content = file_path.read_text(encoding="utf-8")
+        for para in [p.strip() for p in re.split(r"\n{2,}", content) if p.strip()]:
+            score = sum(1 for kw in keywords if kw in para.lower())
+            if score:
+                scored.append((score, file_path.name, para))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    hits: list[dict] = []
+    total = 0
+    for score, name, chunk in scored[:8]:
+        if total + len(chunk) > max_chars:
+            break
+        hits.append({"name": name, "snippet": chunk, "score": float(score)})
+        total += len(chunk)
+    return hits
 
 
 def append_runbook_entry(system_id: str, entry: str) -> None:
@@ -215,8 +277,7 @@ def append_runbook_entry(system_id: str, entry: str) -> None:
     with runbook.open("a", encoding="utf-8") as f:
         f.write(f"\n{entry}\n")
     # 清除缓存，下次访问触发重建
-    with _lock:
-        _cache.pop(system_id, None)
+    invalidate_index(system_id)
     log.info(f"[rag] system={system_id} runbook 已更新")
 
 
@@ -227,6 +288,20 @@ def list_docs(system_id: str) -> list[str]:
         return []
     return [f.name for f in docs_dir.iterdir()
             if f.suffix in (".md", ".txt") and f.name != "vectors.json"]
+
+
+def read_doc(system_id: str, name: str) -> str | None:
+    """读取单个知识文档内容；不存在时返回 None。"""
+    path = _docs_dir(system_id) / Path(name).name
+    if not path.exists() or path.suffix not in (".md", ".txt"):
+        return None
+    return path.read_text(encoding="utf-8")
+
+
+def invalidate_index(system_id: str) -> None:
+    """文档变更后清除内存缓存，下次检索时重建索引。"""
+    with _lock:
+        _cache.pop(system_id, None)
 
 
 def _keyword_fallback(query: str, system_id: str, max_chars: int) -> str:

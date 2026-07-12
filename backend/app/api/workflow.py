@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from ..core.database import get_session
-from ..core.deps import get_current_org_id, get_current_user
+from ..core.deps import get_current_org_id, get_current_user, require_operator
 from ..models.auth import User
 from ..schemas import WorkflowDecision, WorkflowOut, WorkflowStart
 from ..services.workflows.service import (
@@ -64,7 +64,7 @@ async def decide_workflow(
     body: WorkflowDecision,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_operator),
 ):
     try:
         return await decide_workflow_record(session, system_id, wf_id, org_id, body, user)

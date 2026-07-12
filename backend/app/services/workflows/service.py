@@ -8,22 +8,41 @@ from app.agent.workflows.runner import resume_workflow, start_workflow
 from app.models.auth import User
 from app.models.workflows import ActionWorkflow
 from app.repositories.systems import list_enabled_services_for_system
-from app.repositories.workflows import get_workflow_for_org, list_workflows_for_system
+from app.repositories.workflows import (
+    count_workflows_for_org,
+    get_workflow_for_org,
+    list_workflows_for_org,
+    list_workflows_for_system,
+)
 from app.schemas import WorkflowDecision, WorkflowOut, WorkflowStart
+from app.schemas.workflows import WorkflowPageOut
 from app.services.descriptors.builder import system_to_descriptor
 from app.services.audit import record_audit_event
 from app.services.systems.restart import annotate_restart_action, has_restart_permission
 from app.services.systems.service import require_system
+from app.services.workflows.actions import list_action_catalog, normalize_action
+from app.models.systems import MonitoredSystem
+from sqlmodel import select
 
 
-def to_workflow_out(workflow: ActionWorkflow) -> WorkflowOut:
+def _system_names(session: Session, system_ids: set[int]) -> dict[int, str]:
+    if not system_ids:
+        return {}
+    rows = session.exec(select(MonitoredSystem).where(MonitoredSystem.id.in_(system_ids))).all()
+    return {row.id: row.name for row in rows}
+
+
+def to_workflow_out(workflow: ActionWorkflow, *, system_name: str = "") -> WorkflowOut:
+    proposed_action = normalize_action(workflow.proposed_action)
     return WorkflowOut(
         id=workflow.id,
+        system_id=workflow.system_id,
+        system_name=system_name,
         thread_id=workflow.thread_id,
         status=workflow.status,
         question=workflow.question,
         diagnosis=workflow.diagnosis,
-        proposed_action=workflow.proposed_action,
+        proposed_action=proposed_action,
         requested_by_user_id=workflow.requested_by_user_id,
         approved_by_user_id=workflow.approved_by_user_id,
         target_service=workflow.target_service,
@@ -38,6 +57,7 @@ def to_workflow_out(workflow: ActionWorkflow) -> WorkflowOut:
 
 def _apply_action_metadata(workflow: ActionWorkflow, descriptor: dict, proposed_action: dict) -> None:
     enriched = annotate_restart_action(descriptor, proposed_action)
+    enriched = normalize_action(enriched, descriptor=descriptor)
     workflow.proposed_action = enriched
     workflow.target_service = str(enriched.get("service", "") or "")
     workflow.target_resource = str(enriched.get("target_resource", "") or "")
@@ -146,19 +166,62 @@ async def create_workflow(
     )
     session.commit()
     session.refresh(workflow)
-    return to_workflow_out(workflow)
+    return to_workflow_out(workflow, system_name=system.name)
+
+
+def _workflow_outputs(session: Session, workflows: list[ActionWorkflow]) -> list[WorkflowOut]:
+    names = _system_names(session, {item.system_id for item in workflows})
+    return [
+        to_workflow_out(item, system_name=names.get(item.system_id, f"系统 #{item.system_id}"))
+        for item in workflows
+    ]
 
 
 def list_workflows(session: Session, system_id: int, org_id: int) -> list[WorkflowOut]:
     require_system(session, system_id, org_id)
-    return [to_workflow_out(workflow) for workflow in list_workflows_for_system(session, system_id)]
+    rows = list_workflows_for_system(session, system_id)
+    return _workflow_outputs(session, rows)
+
+
+def list_org_workflows(
+    session: Session,
+    org_id: int,
+    *,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> WorkflowPageOut:
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    rows = list_workflows_for_org(session, org_id, status=status, limit=limit, offset=offset)
+    total = count_workflows_for_org(session, org_id, status=status)
+    return WorkflowPageOut(
+        items=_workflow_outputs(session, rows),
+        total=total,
+        offset=offset,
+        limit=limit,
+    )
+
+
+def list_pending_workflows(
+    session: Session,
+    org_id: int,
+    limit: int = 50,
+    offset: int = 0,
+) -> WorkflowPageOut:
+    return list_org_workflows(session, org_id, status="pending", limit=limit, offset=offset)
+
+
+def get_action_catalog() -> list[dict]:
+    return list_action_catalog()
 
 
 def get_workflow(session: Session, system_id: int, workflow_id: int, org_id: int) -> WorkflowOut:
     workflow = get_workflow_for_org(session, workflow_id, system_id, org_id)
     if not workflow:
         raise LookupError("工作流不存在")
-    return to_workflow_out(workflow)
+    system = session.get(MonitoredSystem, system_id)
+    return to_workflow_out(workflow, system_name=system.name if system else "")
 
 
 async def decide_workflow(
@@ -176,7 +239,7 @@ async def decide_workflow(
         raise ValueError(f"工作流已结束（status={workflow.status}），不可重复决策")
 
     system = require_system(session, system_id, org_id)
-    if workflow.proposed_action.get("type") == "restart_container" and not has_restart_permission(current_user, system):
+    if workflow.proposed_action.get("type") in ("restart_container", "restart_systemd") and not has_restart_permission(current_user, system):
         raise PermissionError("当前用户没有该系统的重启权限")
 
     if not body.approved:
@@ -199,7 +262,7 @@ async def decide_workflow(
         )
         session.commit()
         session.refresh(workflow)
-        return to_workflow_out(workflow)
+        return to_workflow_out(workflow, system_name=system.name)
 
     workflow.status = "approved"
     workflow.approved_by_user_id = current_user.id
@@ -261,4 +324,4 @@ async def decide_workflow(
         commit=True,
     )
     session.refresh(workflow)
-    return to_workflow_out(workflow)
+    return to_workflow_out(workflow, system_name=system.name)

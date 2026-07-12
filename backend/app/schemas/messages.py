@@ -3,11 +3,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.pagination import PageOut
+
 
 class SystemMessageOut(BaseModel):
     id: int
     org_id: int
     system_id: int
+    incident_id: int | None = None
     message_type: str
     severity: str
     title: str
@@ -23,4 +26,8 @@ class SystemMessageOut(BaseModel):
     read_at: datetime | None = None
     ack_at: datetime | None = None
     resolved_at: datetime | None = None
+
+
+class SystemMessagePageOut(PageOut[SystemMessageOut]):
+    pass
 

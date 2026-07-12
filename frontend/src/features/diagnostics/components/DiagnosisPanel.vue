@@ -1,31 +1,54 @@
 <script setup>
+import { watch } from 'vue'
 import { useDiagnosisChat } from '../useDiagnosisChat'
+import DiagnosisEvidenceChain from './DiagnosisEvidenceChain.vue'
 
 const props = defineProps({
   systemId: { type: String, required: true },
   restartCapability: { type: Object, default: null },
+  draftQuestion: { type: String, default: '' },
 })
 
 const {
   ask,
-  analyzeData,
   requestFix,
   decide,
   chatBox,
   clearMessages,
+  loadHistory,
   diagnosing,
-  analyzingData,
   fixing,
+  historyLoading,
   messages,
   question,
   renderMd,
   lastQuestion,
 } = useDiagnosisChat(props.systemId)
 
+watch(
+  () => props.draftQuestion,
+  (value) => {
+    if (value && value.trim()) question.value = value
+  },
+  { immediate: true },
+)
+
+const EVIDENCE_LABELS = {
+  health_check: '健康检查',
+  read_logs: '日志分析',
+  search_logs: '日志检索',
+  query_prometheus: 'Prometheus 指标',
+  run_redis_command: 'Redis 只读命令',
+  run_kafka_command: 'Kafka 只读命令',
+  run_readonly_query: '只读 SQL',
+  query_business_data: '只读业务数据',
+}
+
 const ACTION_LABELS = {
   fetch_logs:        { icon: '📋', label: '拉取日志' },
   health_check:      { icon: '🩺', label: '健康检查' },
   restart_container: { icon: '🔄', label: '重启容器' },
+  restart_systemd:  { icon: '🔄', label: '重启 systemd 服务' },
   run_redis_command: { icon: '⚡', label: '执行 Redis 命令' },
   manual:            { icon: '📝', label: '人工操作' },
 }
@@ -39,7 +62,7 @@ const STATUS_LABELS = {
 }
 
 function isRestartAction(message) {
-  return message?.action?.type === 'restart_container'
+  return ['restart_container', 'restart_systemd'].includes(message?.action?.type)
 }
 
 function canApproveAction(message) {
@@ -70,6 +93,14 @@ function restartModeLabel(message) {
 <template>
   <a-card class="panel-card diagnose-card" title="AI 智能诊断">
     <template #extra>
+      <a-tooltip title="重新加载服务端诊断历史">
+        <a-button
+          size="small"
+          :loading="historyLoading"
+          @click="loadHistory"
+          style="margin-right:6px"
+        >历史</a-button>
+      </a-tooltip>
       <a-tooltip title="AI 分析并提出修复方案（需审批后执行）">
         <a-button
           size="small"
@@ -79,12 +110,14 @@ function restartModeLabel(message) {
           style="margin-right:6px"
         >🔧 申请修复</a-button>
       </a-tooltip>
-      <a-tooltip title="清空对话">
+      <a-tooltip title="清空服务端诊断历史">
         <a-button type="text" size="small" :disabled="messages.length === 0" @click="clearMessages">🧹</a-button>
       </a-tooltip>
     </template>
 
     <div ref="chatBox" class="chat-box chat-box--tall">
+      <a-spin v-if="historyLoading && messages.length === 0" class="history-spin" tip="加载诊断历史..." />
+
       <a-alert
         v-if="restartCapability"
         class="restart-alert"
@@ -109,15 +142,20 @@ function restartModeLabel(message) {
           :class="['msg-row', message.role === 'user' ? 'msg-row--user' : 'msg-row--agent']">
           <span v-if="message.role === 'user'" class="bubble bubble--user">{{ message.text }}</span>
           <div v-else class="agent-response">
-            <div v-if="message.templateDescription || message.evidenceSources?.length" class="diagnosis-context">
-              <span v-if="message.templateDescription" class="context-template">
-                {{ message.templateDescription }}
-              </span>
-              <span v-if="message.evidenceSources?.length">
-                依据：{{ message.evidenceSources.join('、') }}
-              </span>
-              <span v-if="message.durationMs">耗时 {{ (message.durationMs / 1000).toFixed(1) }} 秒</span>
-            </div>
+            <DiagnosisEvidenceChain
+              v-if="message.role === 'agent' && (message.evidence?.length || message.evidenceSources?.length || message.templateDescription || message.knowledgeRefs?.length)"
+              :system-id="systemId"
+              :template-description="message.templateDescription"
+              :model="message.model"
+              :duration-ms="message.durationMs"
+              :total-tokens="message.totalTokens"
+              :evidence-sources="message.evidenceSources"
+              :evidence-steps="message.evidenceSteps"
+              :evidence="message.evidence"
+              :knowledge-refs="message.knowledgeRefs"
+              :report-id="message.reportId"
+              :report-type="message.reportType"
+            />
             <div class="bubble bubble--agent" v-html="renderMd(message.text)" />
           </div>
         </div>
@@ -139,6 +177,16 @@ function restartModeLabel(message) {
           </div>
 
           <p class="action-card__diagnosis">{{ message.diagnosis }}</p>
+
+          <div v-if="message.evidence?.length" class="evidence-block">
+            <div class="evidence-block__title">诊断证据</div>
+            <div class="evidence-list">
+              <div v-for="(item, idx) in message.evidence" :key="idx" class="evidence-item">
+                <span class="evidence-item__type">{{ EVIDENCE_LABELS[item.type] || item.type }}</span>
+                <span class="evidence-item__content">{{ item.detail }}</span>
+              </div>
+            </div>
+          </div>
 
           <div class="action-card__desc">
             <strong>建议操作：</strong>{{ message.action?.description }}
@@ -191,18 +239,10 @@ function restartModeLabel(message) {
         placeholder="例如：Redis 内存多少？Kafka 有积压吗？今天任务数据到了没？"
         enter-button="发 送"
         :loading="diagnosing"
-        :disabled="analyzingData"
+        :disabled="fixing"
         @search="ask"
         class="chat-input"
       />
-      <a-button
-        class="data-analysis-btn"
-        :loading="analyzingData"
-        :disabled="diagnosing || fixing || !question.trim()"
-        @click="analyzeData"
-      >
-        只读数据分析
-      </a-button>
     </div>
   </a-card>
 </template>
@@ -231,6 +271,10 @@ function restartModeLabel(message) {
   height: calc(100vh - 360px);
   min-height: 400px;
 }
+.history-spin {
+  display: block;
+  margin: 80px auto;
+}
 .restart-alert {
   margin-bottom: 12px;
 }
@@ -238,22 +282,6 @@ function restartModeLabel(message) {
 .msg-row--user { text-align: right; }
 .msg-row--agent { text-align: left; }
 .agent-response { max-width: 88%; }
-.diagnosis-context {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  margin: 0 0 6px 2px;
-  color: var(--text-subtle);
-  font-size: 12px;
-}
-.context-template {
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  color: var(--primary);
-  font-weight: 600;
-}
 .bubble { display: inline-block; max-width: 85%; font-size: 14px; line-height: 1.65; }
 .agent-response .bubble { max-width: 100%; }
 .bubble--user {
@@ -323,6 +351,37 @@ function restartModeLabel(message) {
   font-size: 13.5px;
   line-height: 1.6;
 }
+.evidence-block {
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border-color));
+  background: color-mix(in srgb, var(--primary) 5%, var(--card-bg));
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.evidence-block__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 8px;
+}
+.evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.evidence-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.evidence-item__type {
+  font-weight: 700;
+  color: var(--text);
+}
+.evidence-item__content {
+  color: var(--text-subtle);
+}
 .action-meta {
   display: flex;
   flex-wrap: wrap;
@@ -369,9 +428,6 @@ function restartModeLabel(message) {
 .chat-input {
   min-width: 0;
   flex: 1;
-}
-.data-analysis-btn {
-  flex-shrink: 0;
 }
 .bubble--agent :deep(p) { margin: 0 0 8px; }
 .bubble--agent :deep(p:last-child) { margin-bottom: 0; }
@@ -426,9 +482,6 @@ function restartModeLabel(message) {
 @media (max-width: 720px) {
   .chat-input-row {
     flex-direction: column;
-  }
-  .data-analysis-btn {
-    width: 100%;
   }
 }
 </style>

@@ -28,6 +28,13 @@ def get_current_org_id(user: User = Depends(get_current_user)) -> int:
     return user.org_id
 
 
+def require_operator(user: User = Depends(get_current_user)) -> User:
+    """写入系统配置、接入凭据和服务清单至少需要 operator 权限。"""
+    if user.role not in {"owner", "operator"}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "当前账号只有查看权限，无法修改运维配置")
+    return user
+
+
 def get_current_collector(
     x_collector_key: str = Header(..., alias="X-Collector-Key"),
     session: Session = Depends(get_session),

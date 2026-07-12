@@ -1,7 +1,9 @@
 import axios from 'axios'
 
-// 开发期直连控制面（控制面已开放 CORS）。生产用 VITE_API_BASE 指向网关。
-const baseURL = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
+// 生产走同域相对路径；开发默认直连本地控制面。
+const baseURL =
+  import.meta.env.VITE_API_BASE?.trim() ||
+  (import.meta.env.PROD ? '' : 'http://localhost:8000')
 
 const api = axios.create({ baseURL })
 

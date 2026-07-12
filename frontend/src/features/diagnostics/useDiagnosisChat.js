@@ -1,4 +1,5 @@
 import { nextTick, onMounted, ref } from 'vue'
+import { message } from 'ant-design-vue'
 import api from '../../api'
 
 let markedParser = null
@@ -36,27 +37,114 @@ async function ensureMarked() {
   return markedParser
 }
 
+function buildAgentMessageFromReport(report) {
+  return {
+    role: 'agent',
+    reportId: report.id,
+    reportType: report.report_type,
+    text: report.answer,
+    templateName: report.template_name,
+    templateDescription: report.template_description,
+    model: report.model,
+    durationMs: report.duration_ms,
+    totalTokens: report.total_tokens,
+    evidenceSources: report.evidence_sources || [],
+    evidenceSteps: report.evidence_steps || [],
+    evidence: report.evidence || [],
+    toolCalls: report.tool_calls || [],
+    knowledgeRefs: report.knowledge_refs || [],
+    createdAt: report.created_at,
+  }
+}
+
+function buildAgentMessageFromDiagnose(data) {
+  return {
+    role: 'agent',
+    reportId: data.id,
+    reportType: 'diagnose',
+    text: data.answer,
+    templateName: data.template_name,
+    templateDescription: data.template_description,
+    model: data.model,
+    durationMs: data.duration_ms,
+    totalTokens: data.total_tokens,
+    evidenceSources: data.evidence_sources || [],
+    evidenceSteps: data.evidence_steps || [],
+    evidence: data.evidence || [],
+    toolCalls: data.tool_calls || [],
+    knowledgeRefs: data.knowledge_refs || [],
+  }
+}
+
+function buildActionMessageFromWorkflow(workflow) {
+  return {
+    role: 'action',
+    wfId: workflow.id,
+    diagnosis: workflow.diagnosis,
+    action: workflow.proposed_action,
+    status: workflow.status,
+    result: workflow.execution_result || '',
+    createdAt: workflow.created_at,
+  }
+}
+
+function mergeTimelineMessages(reportMessages, workflowMessages) {
+  const merged = [...reportMessages, ...workflowMessages]
+  merged.sort((left, right) => {
+    const leftTime = new Date(left.createdAt || 0).getTime()
+    const rightTime = new Date(right.createdAt || 0).getTime()
+    return leftTime - rightTime
+  })
+  return merged
+}
+
 export function useDiagnosisChat(systemId) {
-  const storageKey = () => `aiops_chat_${systemId}`
   const question = ref('')
-  const messages = ref(JSON.parse(localStorage.getItem(storageKey()) || '[]'))
+  const messages = ref([])
+  const historyLoading = ref(false)
   const diagnosing = ref(false)
-  const analyzingData = ref(false)
   const fixing = ref(false)
   const chatBox = ref(null)
   const markdownReady = ref(false)
   const lastQuestion = ref('')
-  const lastAnalysisContext = ref(null)
 
-  function saveMessages() {
-    localStorage.setItem(storageKey(), JSON.stringify(messages.value))
+  async function loadHistory() {
+    historyLoading.value = true
+    try {
+      const [{ data: reports }, { data: workflows }] = await Promise.all([
+        api.get(`/systems/${systemId}/diagnosis-reports`, { params: { limit: 50 } }),
+        api.get(`/systems/${systemId}/workflow`),
+      ])
+      const rebuilt = []
+      for (const report of reports) {
+        rebuilt.push({ role: 'user', text: report.question, createdAt: report.created_at })
+        rebuilt.push({ ...buildAgentMessageFromReport(report), createdAt: report.created_at })
+      }
+      const workflowMessages = workflows.map(buildActionMessageFromWorkflow)
+      messages.value = mergeTimelineMessages(rebuilt, workflowMessages)
+      const lastUser = [...rebuilt].reverse().find((item) => item.role === 'user')
+      if (lastUser?.text) lastQuestion.value = lastUser.text
+    } catch (error) {
+      message.error(extractErrorMessage(error, '诊断历史加载失败'))
+    } finally {
+      historyLoading.value = false
+    }
   }
 
-  function clearMessages() {
+  async function clearMessages() {
+    try {
+      await api.delete(`/systems/${systemId}/diagnosis-reports`)
+    } catch (error) {
+      message.error(extractErrorMessage(error, '清空诊断历史失败'))
+      return
+    }
     messages.value = []
     lastQuestion.value = ''
-    lastAnalysisContext.value = null
-    localStorage.removeItem(storageKey())
+    message.success('诊断历史已清空')
+  }
+
+  function persistWorkflowMessages() {
+    // 工作流已持久化到服务端，保留空实现以兼容现有调用。
   }
 
   function renderMd(text) {
@@ -73,110 +161,34 @@ export function useDiagnosisChat(systemId) {
     const q = question.value.trim()
     if (!q) return
     lastQuestion.value = q
-    lastAnalysisContext.value = null
     messages.value.push({ role: 'user', text: q })
-    saveMessages()
     question.value = ''
     diagnosing.value = true
     await scrollBottom()
     try {
       const { data } = await api.post(`/systems/${systemId}/diagnose`, { question: q })
-      messages.value.push({
-        role: 'agent',
-        text: data.answer,
-        templateName: data.template_name,
-        templateDescription: data.template_description,
-        durationMs: data.duration_ms,
-        evidenceSources: data.evidence_sources || [],
-      })
+      messages.value.push(buildAgentMessageFromDiagnose(data))
     } catch (error) {
       messages.value.push({
         role: 'agent',
         text: `⚠️ 诊断失败：${extractErrorMessage(error, '诊断失败')}`,
       })
     } finally {
-      saveMessages()
       diagnosing.value = false
       await scrollBottom()
     }
   }
 
-  function formatDataEvidence(evidence) {
-    if (!evidence) return ''
-    if (evidence.analysis_type === 'stuck_tasks') {
-      const lines = [
-        '',
-        '专项分析依据：',
-        `- 数据源：${evidence.data_source || '-'}`,
-        `- 表：${evidence.table || '-'}`,
-        `- 卡住标准：${evidence.stuck_threshold_minutes} 分钟未更新`,
-        `- 卡住任务：${evidence.stuck_count ?? 0} 条`,
-      ]
-      if (evidence.worker_health?.length) {
-        lines.push(`- Worker：${evidence.worker_health.map((item) => `${item.name}${item.ok ? '正常' : '异常'}`).join('、')}`)
-      }
-      if (evidence.sample_rows?.length) {
-        lines.push(`- 样例：返回 ${evidence.sample_rows.length} 条，敏感字段已脱敏`)
-      }
-      return lines.join('\n')
-    }
-    const lines = [
-      '',
-      '查询依据：',
-      `- 数据源：${evidence.data_source || '-'}`,
-      `- 表：${evidence.table || '-'}`,
-      `- 查询范围：${evidence.today_only ? '今天' : '当前条件'}`,
-      `- 记录数：${evidence.total ?? '-'}`,
-    ]
-    if (evidence.sample_rows?.length) {
-      lines.push(`- 样例：返回 ${evidence.sample_rows.length} 条，敏感字段已脱敏`)
-    }
-    return lines.join('\n')
-  }
-
-  async function analyzeData() {
-    const q = question.value.trim()
-    if (!q) return
-    lastQuestion.value = q
-    lastAnalysisContext.value = null
-    messages.value.push({ role: 'user', text: q })
-    saveMessages()
-    question.value = ''
-    analyzingData.value = true
-    await scrollBottom()
-    try {
-      const { data } = await api.post(`/systems/${systemId}/data-analysis`, { question: q })
-      lastAnalysisContext.value = data.evidence?.analysis_type === 'stuck_tasks'
-        ? {
-            analysis_type: 'stuck_tasks',
-            stuck_count: data.evidence.stuck_count,
-            stuck_threshold_minutes: data.evidence.stuck_threshold_minutes,
-            worker_health: data.evidence.worker_health || [],
-          }
-        : null
-      messages.value.push({ role: 'agent', text: `${data.answer}${formatDataEvidence(data.evidence)}` })
-    } catch (error) {
-      messages.value.push({
-        role: 'agent',
-        text: `只读数据分析失败：${extractErrorMessage(error, '数据分析失败')}`,
-      })
-    } finally {
-      saveMessages()
-      analyzingData.value = false
-      await scrollBottom()
-    }
-  }
-
-  // 申请自动修复：调 workflow API，AI 分析并给出可执行提案
   async function requestFix() {
     const q = lastQuestion.value || '请分析当前系统状态并提出修复方案'
     fixing.value = true
     messages.value.push({ role: 'fix-loading', text: '' })
+    persistWorkflowMessages()
     await scrollBottom()
     try {
       const { data } = await api.post(`/systems/${systemId}/workflow`, {
         question: q,
-        context: lastAnalysisContext.value || {},
+        context: {},
       })
       messages.value.splice(messages.value.length - 1, 1, {
         role: 'action',
@@ -185,6 +197,7 @@ export function useDiagnosisChat(systemId) {
         action: data.proposed_action,
         status: data.status,
         result: data.execution_result || '',
+        createdAt: data.created_at,
       })
     } catch (error) {
       messages.value.splice(messages.value.length - 1, 1, {
@@ -193,12 +206,11 @@ export function useDiagnosisChat(systemId) {
       })
     } finally {
       fixing.value = false
-      saveMessages()
+      persistWorkflowMessages()
       await scrollBottom()
     }
   }
 
-  // 批准或拒绝修复提案
   async function decide(msgIndex, approve) {
     const msg = messages.value[msgIndex]
     if (!msg || msg.role !== 'action') return
@@ -208,6 +220,7 @@ export function useDiagnosisChat(systemId) {
         { approved: approve },
       )
       messages.value[msgIndex] = { ...msg, status: data.status, result: data.execution_result || '' }
+      window.dispatchEvent(new Event('aiops:approvals-changed'))
     } catch (error) {
       messages.value[msgIndex] = {
         ...msg,
@@ -215,7 +228,7 @@ export function useDiagnosisChat(systemId) {
         result: `操作失败：${extractErrorMessage(error, '操作失败')}`,
       }
     } finally {
-      saveMessages()
+      persistWorkflowMessages()
       await scrollBottom()
     }
   }
@@ -223,18 +236,20 @@ export function useDiagnosisChat(systemId) {
   onMounted(async () => {
     await ensureMarked()
     markdownReady.value = true
+    await loadHistory()
+    await scrollBottom()
   })
 
   return {
     ask,
-    analyzeData,
     requestFix,
     decide,
     chatBox,
     clearMessages,
+    loadHistory,
     diagnosing,
-    analyzingData,
     fixing,
+    historyLoading,
     messages,
     question,
     renderMd,

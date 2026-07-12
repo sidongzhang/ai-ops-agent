@@ -2,8 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
+# Build from the repository root:
+# docker build -f collector/Dockerfile -t aiops-collector:local .
+COPY collector/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy collector and shared modules

@@ -16,6 +16,7 @@ dependencies = [
     "pydantic-ai-slim[openai]>=0.0.20",
     "alembic>=1.13",
     "psycopg2-binary>=2.9",
+    "pymysql>=1.1",
     "celery[redis]>=5.3",
     "redis>=5.0",
     "cryptography>=42.0",
@@ -29,3 +30,14 @@ include = ["app*"]
 
 [tool.uv]
 package = false
+default-groups = ["dev"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+# Tests cover the standalone collector and shared connector packages as well
+# as the backend package, so the repository root must be importable.
+pythonpath = [".."]

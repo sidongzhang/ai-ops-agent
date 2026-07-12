@@ -12,6 +12,7 @@ class SystemTokenCreate(BaseModel):
         "message:read",
         "message:send",
         "report:submit",
+        "log:analyze",
     ])
     allowed_ips: list[str] = Field(default_factory=list)
     expires_at: datetime | None = None

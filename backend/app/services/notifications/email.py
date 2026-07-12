@@ -13,6 +13,7 @@ def send_email(
     body: str,
     *,
     smtp_cls: type[smtplib.SMTP] = smtplib.SMTP,
+    smtp_ssl_cls: type[smtplib.SMTP_SSL] = smtplib.SMTP_SSL,
 ) -> None:
     recipients = _split_recipients(cfg.get("email_to", ""))
     host = cfg.get("smtp_host", "")
@@ -21,6 +22,7 @@ def send_email(
     password = cfg.get("smtp_password", "")
     sender = cfg.get("smtp_from") or username
     use_tls = bool(cfg.get("smtp_tls", True))
+    use_ssl = port == 465
 
     if not recipients:
         raise ValueError("邮件配置不完整（email_to）")
@@ -33,7 +35,14 @@ def send_email(
     message["To"] = ", ".join(recipients)
     message.set_content(body)
 
-    with smtp_cls(host, port, timeout=10) as smtp:
+    if use_ssl:
+        with smtp_ssl_cls(host, port, timeout=15) as smtp:
+            if username or password:
+                smtp.login(username, password)
+            smtp.send_message(message)
+        return
+
+    with smtp_cls(host, port, timeout=15) as smtp:
         if use_tls:
             smtp.starttls()
         if username or password:

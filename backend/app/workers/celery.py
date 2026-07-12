@@ -13,7 +13,8 @@ celery = Celery(
 celery.conf.beat_schedule = {
     "health-check-all-systems": {
         "task": "app.tasks.health_check_all_systems",
-        "schedule": float(settings.health_check_interval),
+        # Beat 只负责高频触发，具体系统是否到巡检时间由 monitoring.interval_seconds 决定。
+        "schedule": 15.0,
     },
 }
 celery.conf.timezone = "UTC"

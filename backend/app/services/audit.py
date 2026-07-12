@@ -2,8 +2,8 @@
 from sqlmodel import Session
 
 from app.models.audit import AuditLog
-from app.repositories.audit import list_audit_logs_for_org
-from app.schemas.audit import AuditLogOut
+from app.repositories.audit import count_audit_logs_for_org, list_audit_logs_for_org
+from app.schemas.audit import AuditLogOut, AuditLogPageOut
 
 
 def record_audit_event(
@@ -49,15 +49,27 @@ def list_audit_logs(
     system_id: int | None = None,
     event_type: str | None = None,
     limit: int = 100,
-) -> list[AuditLogOut]:
+    offset: int = 0,
+) -> AuditLogPageOut:
     limit = max(1, min(limit, 200))
-    return [
-        AuditLogOut(**log.model_dump())
-        for log in list_audit_logs_for_org(
-            session,
-            org_id,
-            system_id=system_id,
-            event_type=event_type,
-            limit=limit,
-        )
-    ]
+    offset = max(0, offset)
+    rows = list_audit_logs_for_org(
+        session,
+        org_id,
+        system_id=system_id,
+        event_type=event_type,
+        limit=limit,
+        offset=offset,
+    )
+    total = count_audit_logs_for_org(
+        session,
+        org_id,
+        system_id=system_id,
+        event_type=event_type,
+    )
+    return AuditLogPageOut(
+        items=[AuditLogOut(**log.model_dump()) for log in rows],
+        total=total,
+        offset=offset,
+        limit=limit,
+    )

@@ -120,6 +120,16 @@ onMounted(loadAnalytics)
           <strong>{{ data.notification_success_rate_pct }}%</strong>
           <span>{{ data.notification_failures }} 次仍失败，自动重试 {{ data.notification_retries }} 次</span>
         </div>
+        <div class="metric-item">
+          <span class="metric-label">操作闭环率</span>
+          <strong>{{ data.operation_closure_rate_pct }}%</strong>
+          <span>{{ data.workflows_verified }}/{{ data.workflows_executed }} 次已闭环</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">自动补全信息</span>
+          <strong>{{ data.auto_completion_rate_pct }}%</strong>
+          <span>{{ data.alerts_with_context }}/{{ data.alerts_total }} 条告警含上下文</span>
+        </div>
       </section>
 
       <section class="panel trend-panel">

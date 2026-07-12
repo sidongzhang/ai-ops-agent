@@ -7,14 +7,17 @@ from types import SimpleNamespace
 
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from app.core.deps import require_operator
 from app.models.auth import User
 from app.models.messages import SystemMessage
 from app.models.systems import MonitoredSystem, Service
 from app.models.tokens import SystemToken
 from app.models.workflows import ActionWorkflow
 from app.models.audit import AuditLog
+from app.models.diagnostics import DiagnosisReport
 from app.models import Collector as CollectorExport
 from app.schemas import (
+    MonitoringConfig,
     NotifyConfig,
     RestartPolicyUpdate,
     ServiceIn,
@@ -25,21 +28,17 @@ from app.schemas import (
 from app.schemas.diagnostics import (
     DiagnosticTemplateSettingsUpdate,
     DiagnoseResponse,
-    ReadonlyDatabaseConfig,
 )
 from app.schemas.collectors import CollectorCreate, CollectorReport
 from app.schemas.health import HealthItem
 from app.schemas.tokens import SystemTokenCreate
 from app.schemas.openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn
 from app.schemas import CollectorExecRequest
-from app.services.collectors.exec import execute_collector_command
-from app.services.collectors.service import create_collector, record_collector_report
+from app.services.collectors.exec import execute_collector_command, select_online_collector
+from app.services.collectors.service import build_collector_bundle, create_collector, delete_collector, record_collector_report
 from app.services.data_analysis import (
     analyze_system_data,
-    get_readonly_database_config,
     run_readonly_query,
-    test_readonly_database_config,
-    update_readonly_database_config,
 )
 import app.services.data_analysis as data_analysis_service
 from app.services.diagnostics.service import (
@@ -64,6 +63,7 @@ from app.services.notifications import alerts as alerts_service
 from app.services.notifications.alerts import alert_if_needed, send_alert_channel_with_retry
 from app.services.messages import (
     ack_message,
+    build_alert_suggestion,
     create_alert_message,
     resolve_message,
     retry_failed_notifications,
@@ -72,7 +72,9 @@ from app.services.systems import service as systems_service
 from app.services.systems.restart import annotate_restart_action, build_restart_capability
 from app.services.systems.service import create_system, update_notify, update_restart_policy
 from app.repositories.systems import list_enabled_services_for_system
-from app.services.tokens import create_system_token, list_system_tokens, revoke_system_token
+from app.services.tokens import create_system_token, delete_system_token, list_system_tokens, revoke_system_token
+from app.services.audit import list_audit_logs, record_audit_event
+
 from app.services.openapi import (
     get_open_message_by_request_id,
     list_open_messages,
@@ -109,6 +111,15 @@ class SystemServiceTests(unittest.TestCase):
         db_path = Path(tmpdir.name) / "test.db"
         self.engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
         SQLModel.metadata.create_all(self.engine)
+
+    def test_viewer_cannot_pass_operator_write_guard(self) -> None:
+        viewer = User(id=7, email="viewer@example.com", hashed_password="x", org_id=1, role="viewer")
+        operator = User(id=8, email="operator@example.com", hashed_password="x", org_id=1, role="operator")
+
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException):
+            require_operator(viewer)
+        self.assertIs(require_operator(operator), operator)
 
     def test_create_system_masks_sensitive_fields(self) -> None:
         body = SystemCreate(
@@ -206,7 +217,7 @@ class SystemServiceTests(unittest.TestCase):
         try:
             systems_service.get_connector = lambda service, descriptor: _FakeConnector(service, descriptor)
             with Session(self.engine) as session:
-                system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API")
+                system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API", local=True)
                 session.add(system)
                 session.commit()
                 session.refresh(system)
@@ -250,7 +261,7 @@ class SystemServiceTests(unittest.TestCase):
         try:
             systems_service.get_connector = lambda *args, **kwargs: _FakeConnector()
             with Session(self.engine) as session:
-                system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API")
+                system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API", local=True)
                 session.add(system)
                 session.commit()
                 session.refresh(system)
@@ -276,6 +287,52 @@ class SystemServiceTests(unittest.TestCase):
         self.assertEqual(updated.probe_status, "draft")
         self.assertIsNone(updated.tested_at)
 
+    def test_remote_service_draft_uses_threadsafe_collector_command(self) -> None:
+        collector = CollectorExport(
+            id=9,
+            org_id=1,
+            system_id=1,
+            name="remote-agent",
+            token_hash="hash",
+        )
+        calls: list[tuple[int, str, dict]] = []
+        original_primary = systems_service._get_primary_collector
+        original_is_connected = systems_service.manager.is_connected
+        original_send_sync = systems_service.manager.send_command_sync
+        try:
+            systems_service._get_primary_collector = lambda *args, **kwargs: collector
+            systems_service.manager.is_connected = lambda collector_id: collector_id == collector.id
+
+            def _fake_send_sync(collector_id, cmd, args=None, timeout=30.0):
+                calls.append((collector_id, cmd, args or {}))
+                return {
+                    "ok": True,
+                    "result": [{"name": "Remote API", "ok": True, "detail": "remote-ok"}],
+                }
+
+            systems_service.manager.send_command_sync = _fake_send_sync
+
+            with Session(self.engine) as session:
+                system = MonitoredSystem(org_id=1, key="remote-api", name="远程 API", local=False)
+                session.add(system)
+                session.commit()
+                session.refresh(system)
+                draft = systems_service.add_service(
+                    session,
+                    system.id,
+                    1,
+                    ServiceIn(name="Remote API", connector="http", config={"health_url": "http://127.0.0.1:8000/healthz"}),
+                )
+                result = systems_service.test_service_draft(session, system.id, draft.id, 1)
+        finally:
+            systems_service._get_primary_collector = original_primary
+            systems_service.manager.is_connected = original_is_connected
+            systems_service.manager.send_command_sync = original_send_sync
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.detail, "remote-ok")
+        self.assertEqual(calls, [(collector.id, "health_check", {"service": "Remote API"})])
+
     def test_create_system_rejects_service_that_fails_probe(self) -> None:
         class _FailedConnector:
             def health(self):
@@ -292,6 +349,7 @@ class SystemServiceTests(unittest.TestCase):
                         SystemCreate(
                             key="broken-system",
                             name="异常系统",
+                            local=True,
                             services=[
                                 ServiceIn(
                                     name="API",
@@ -308,6 +366,40 @@ class SystemServiceTests(unittest.TestCase):
             systems_service.get_connector = original_get_connector
 
         self.assertEqual(systems, [])
+
+    def test_remote_system_can_register_services_before_collector_probe(self) -> None:
+        with Session(self.engine) as session:
+            created = create_system(
+                session,
+                1,
+                SystemCreate(
+                    key="remote-before-collector",
+                    name="远程业务系统",
+                    local=False,
+                    services=[ServiceIn(name="Spring API", connector="http", config={"health_url": "http://private/health"})],
+                ),
+            )
+
+        self.assertEqual(len(created.services), 1)
+        self.assertFalse(created.services[0].enabled)
+        self.assertEqual(created.services[0].probe_status, "waiting_collector")
+
+    def test_monitoring_config_is_persisted_in_system(self) -> None:
+        with Session(self.engine) as session:
+            system = MonitoredSystem(org_id=1, key="monitoring", name="巡检系统")
+            session.add(system)
+            session.commit()
+            session.refresh(system)
+            updated = systems_service.update_monitoring_config(
+                session,
+                system.id,
+                1,
+                MonitoringConfig(enabled=False, interval_seconds=300),
+            )
+            session.refresh(system)
+
+        self.assertFalse(updated.enabled)
+        self.assertEqual(systems_service.get_monitoring_config(system).interval_seconds, 300)
 
 
 class NotifyServiceTests(unittest.TestCase):
@@ -441,6 +533,13 @@ class MessageServiceTests(unittest.TestCase):
         self.assertIn("MySQL", message.summary)
         self.assertTrue(message.suggestion)
 
+    def test_alert_suggestions_include_service_specific_recovery_steps(self) -> None:
+        suggestions = build_alert_suggestion(["Redis", "Kafka", "Spring API"])
+
+        self.assertTrue(any("内存占用" in item for item in suggestions))
+        self.assertTrue(any("消费者组积压" in item for item in suggestions))
+        self.assertTrue(any("ERROR/Exception" in item for item in suggestions))
+
     def test_message_ack_and_resolve_update_status(self) -> None:
         with Session(self.engine) as session:
             system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API")
@@ -491,6 +590,56 @@ class MessageServiceTests(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].message_type, "alert")
         self.assertIn("Redis", messages[0].summary)
+
+    def test_alert_if_needed_auto_resolves_after_all_failed_services_recover(self) -> None:
+        with Session(self.engine) as session:
+            system = MonitoredSystem(
+                org_id=1,
+                key="prod-api",
+                name="生产 API",
+                last_health={
+                    "services": [
+                        {"name": "Redis", "ok": True},
+                        {"name": "MySQL", "ok": True},
+                    ]
+                },
+                notify={"type": "none"},
+            )
+            session.add(system)
+            session.commit()
+            session.refresh(system)
+            alert_if_needed(
+                system,
+                [
+                    {"name": "Redis", "ok": False, "detail": "down"},
+                    {"name": "MySQL", "ok": False, "detail": "down"},
+                ],
+                session,
+            )
+            system.last_health = {
+                "services": [
+                    {"name": "Redis", "ok": False},
+                    {"name": "MySQL", "ok": False},
+                ]
+            }
+            session.add(system)
+            session.commit()
+            alert_if_needed(
+                system,
+                [
+                    {"name": "Redis", "ok": True, "detail": "ok"},
+                    {"name": "MySQL", "ok": True, "detail": "ok"},
+                ],
+                session,
+            )
+            session.commit()
+            message = session.exec(
+                select(SystemMessage).where(SystemMessage.system_id == system.id)
+            ).one()
+
+        self.assertEqual(message.status, "resolved")
+        self.assertIsNotNone(message.resolved_at)
+        self.assertIn("已恢复", message.summary)
 
     def test_alert_if_needed_records_webhook_channel_status(self) -> None:
         original_post = alerts_service.httpx.post
@@ -613,6 +762,21 @@ class SystemTokenServiceTests(unittest.TestCase):
         self.assertEqual(len(listed), 1)
         self.assertFalse(hasattr(listed[0], "token"))
         self.assertEqual(revoked.status, "revoked")
+
+    def test_delete_system_token_requires_revoke_then_removes_it(self) -> None:
+        with Session(self.engine) as session:
+            system = MonitoredSystem(org_id=1, key="delete-token", name="待删除系统")
+            session.add(system)
+            session.commit()
+            session.refresh(system)
+            created = create_system_token(session, system.id, 1, SystemTokenCreate(name="temporary"))
+
+            with self.assertRaisesRegex(ValueError, "先禁用"):
+                delete_system_token(session, system.id, created.id, 1)
+
+            revoke_system_token(session, system.id, created.id, 1)
+            delete_system_token(session, system.id, created.id, 1)
+            self.assertEqual(list_system_tokens(session, system.id, 1), [])
 
     def test_submit_open_alert_is_idempotent_by_request_id(self) -> None:
         with Session(self.engine) as session:
@@ -977,6 +1141,45 @@ class MonitoringServiceTests(unittest.TestCase):
         self.assertEqual(services[0].latency_ms, 50)
         self.assertFalse(services[1].ok)
 
+    def test_prometheus_metrics_can_use_remote_query_reader(self) -> None:
+        queries = []
+
+        def remote_query(promql: str):
+            queries.append(promql)
+            if promql == "up":
+                return [{"value": ["0", "1"]}]
+            if "MemTotal" in promql:
+                return [{"value": ["0", "104857600"]}]
+            if "MemAvailable" in promql:
+                return [{"value": ["0", "52428800"]}]
+            return [{"value": ["0", "10"]}]
+
+        metrics = monitoring_service.collect_prometheus_metrics("", remote_query)
+
+        self.assertTrue(metrics.available)
+        self.assertEqual(metrics.targets_up, 1)
+        self.assertEqual(metrics.targets_total, 1)
+        self.assertGreater(metrics.mem_used_pct, 0)
+        self.assertIn("up", queries)
+
+    def test_mysql_metrics_are_available_when_remote_prometheus_is_used(self) -> None:
+        def remote_query(promql: str):
+            if promql.startswith("mysql_") or promql.startswith("rate(mysql_"):
+                return [{"value": ["0", "12"]}]
+            return []
+
+        metrics = monitoring_service.collect_mysql_metrics(
+            {
+                "services": [{"name": "MySQL", "connector": "tcp", "config": {"host": "db.internal", "port": 3306}}]
+            },
+            "",
+            remote_query,
+        )
+
+        self.assertTrue(metrics.available)
+        self.assertTrue(metrics.reachable)
+        self.assertEqual(metrics.connections, 12)
+
 
 class WorkflowServiceTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -1175,6 +1378,89 @@ class CollectorAndHealthServiceTests(unittest.TestCase):
         self.assertIsNotNone(system.last_report_at)
         self.assertIsNotNone(collector.last_seen)
 
+    def test_paused_remote_monitoring_does_not_create_alert_from_report(self) -> None:
+        import app.services.collectors.service as collector_service
+
+        original_alert = collector_service.alert_if_needed
+        calls = []
+        try:
+            collector_service.alert_if_needed = lambda *args, **kwargs: calls.append(True)
+            with Session(self.engine) as session:
+                system = MonitoredSystem(
+                    org_id=1,
+                    key="paused-remote",
+                    name="暂停巡检系统",
+                    local=False,
+                    infra={"monitoring": {"enabled": False, "interval_seconds": 60}},
+                )
+                session.add(system)
+                session.commit()
+                session.refresh(system)
+                created = create_collector(session, system.id, 1, CollectorCreate(name="agent"))
+                collector = session.get(CollectorExport, created.id)
+                record_collector_report(
+                    session,
+                    collector,
+                    CollectorReport(services=[HealthItem(name="API", ok=False, detail="down")]),
+                )
+        finally:
+            collector_service.alert_if_needed = original_alert
+
+        self.assertEqual(calls, [])
+
+    def test_delete_collector_removes_collector_and_rejects_wrong_org(self) -> None:
+        with Session(self.engine) as session:
+            system = MonitoredSystem(org_id=1, key="delete-test", name="删除测试系统", local=False)
+            session.add(system)
+            session.commit()
+            session.refresh(system)
+
+            created = create_collector(session, system.id, 1, CollectorCreate(name="agent"))
+            collector_id = created.id
+            self.assertIsNotNone(session.get(CollectorExport, collector_id))
+
+            delete_collector(session, collector_id, 1)
+            self.assertIsNone(session.get(CollectorExport, collector_id))
+
+            from fastapi import HTTPException
+            with self.assertRaises(HTTPException):
+                delete_collector(session, 99999, 1)
+
+            created2 = create_collector(session, system.id, 1, CollectorCreate(name="agent2"))
+            with self.assertRaises(HTTPException):
+                delete_collector(session, created2.id, 999)
+
+            other_system = MonitoredSystem(org_id=1, key="other", name="另一套系统", local=False)
+            session.add(other_system)
+            session.commit()
+            session.refresh(other_system)
+            with self.assertRaises(HTTPException):
+                delete_collector(session, created2.id, 1, system_id=other_system.id)
+
+    def test_collector_bundle_requires_key_and_contains_runtime_files(self) -> None:
+        with Session(self.engine) as session:
+            system = MonitoredSystem(org_id=1, key="bundle", name="采集包系统", local=False)
+            session.add(system)
+            session.commit()
+            session.refresh(system)
+            created = create_collector(session, system.id, 1, CollectorCreate(name="bundle-agent"))
+
+            with self.assertRaisesRegex(ValueError, "密钥不正确"):
+                build_collector_bundle(session, system.id, created.id, 1, "wrong", "http://localhost:8000")
+            bundle = build_collector_bundle(
+                session, system.id, created.id, 1, created.collector_key, "http://localhost:8000"
+            )
+
+        from io import BytesIO
+        from zipfile import ZipFile
+
+        with ZipFile(BytesIO(bundle)) as archive:
+            names = set(archive.namelist())
+            self.assertIn("collector/run.py", names)
+            self.assertIn("shared/connectors/docker_logs.py", names)
+            self.assertIn("shared/connectors/prometheus.py", names)
+            self.assertIn(created.collector_key, archive.read("run_collector.sh").decode())
+
     def test_get_system_health_prefers_collector_snapshot(self) -> None:
         with Session(self.engine) as session:
             system = MonitoredSystem(
@@ -1188,7 +1474,7 @@ class CollectorAndHealthServiceTests(unittest.TestCase):
             session.commit()
             session.refresh(system)
             create_collector(session, system.id, 1, CollectorCreate(name="agent-1"))
-            system.last_report_at = system.created_at
+            system.last_report_at = datetime.now(timezone.utc)
             session.add(system)
             session.commit()
 
@@ -1197,6 +1483,30 @@ class CollectorAndHealthServiceTests(unittest.TestCase):
         self.assertEqual(health.source, "collector")
         self.assertFalse(health.healthy)
         self.assertEqual(health.services[0].name, "API")
+
+    def test_multiple_collectors_choose_online_recent_collector(self) -> None:
+        original_is_connected = workflow_execution.manager.is_connected
+        try:
+            with Session(self.engine) as session:
+                system = MonitoredSystem(org_id=1, key="multi", name="多采集器系统", local=False)
+                session.add(system)
+                session.commit()
+                session.refresh(system)
+                first = create_collector(session, system.id, 1, CollectorCreate(name="旧采集器"))
+                second = create_collector(session, system.id, 1, CollectorCreate(name="在线采集器"))
+                old = session.get(CollectorExport, first.id)
+                fresh = session.get(CollectorExport, second.id)
+                old.last_seen = datetime.now(timezone.utc) - timedelta(minutes=20)
+                fresh.last_seen = datetime.now(timezone.utc) - timedelta(seconds=5)
+                session.add(old)
+                session.add(fresh)
+                session.commit()
+
+                workflow_execution.manager.is_connected = lambda collector_id: collector_id == fresh.id
+                selected = select_online_collector(session, system.id)
+                self.assertEqual(selected.id, fresh.id)
+        finally:
+            workflow_execution.manager.is_connected = original_is_connected
 
     def test_collector_restart_command_restarts_registered_container_only(self) -> None:
         original_run = collector_ws_client.subprocess.run
@@ -1221,6 +1531,118 @@ class CollectorAndHealthServiceTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["result"]["target"], "redis-main")
 
+    def test_collector_restarts_only_registered_systemd_unit(self) -> None:
+        original_run = collector_ws_client.subprocess.run
+        try:
+            collector_ws_client.subprocess.run = lambda *args, **kwargs: SimpleNamespace(
+                returncode=0, stdout="active\n", stderr=""
+            )
+            descriptor = {
+                "services": [{
+                    "name": "Spring API",
+                    "connector": "local",
+                    "config": {"systemd_unit": "spring-api.service"},
+                    "runtime": {"systemd_unit": "spring-api.service"},
+                }]
+            }
+            result = collector_ws_client._handle_command(
+                "restart_systemd",
+                {"service": "Spring API", "unit": "spring-api.service"},
+                descriptor,
+            )
+            blocked = collector_ws_client._handle_command(
+                "restart_systemd",
+                {"service": "Spring API", "unit": "other.service"},
+                descriptor,
+            )
+        finally:
+            collector_ws_client.subprocess.run = original_run
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["result"]["target"], "spring-api.service")
+        self.assertFalse(blocked["ok"])
+
+    def test_collector_reads_registered_redis_without_allowing_write_commands(self) -> None:
+        class _FakeSocket:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def sendall(self, payload):
+                self.payload = payload
+
+            def recv(self, _size):
+                return b"$2\r\nOK\r\n"
+
+        original_connect = collector_ws_client.socket.create_connection
+        collector_ws_client.socket.create_connection = lambda *args, **kwargs: _FakeSocket()
+        try:
+            descriptor = {
+                "services": [{
+                    "name": "Redis",
+                    "connector": "tcp",
+                    "config": {"host": "redis.internal", "port": 6379},
+                }]
+            }
+            result = collector_ws_client._handle_command(
+                "run_redis_command", {"service": "Redis", "command": "INFO memory"}, descriptor
+            )
+            blocked = collector_ws_client._handle_command(
+                "run_redis_command", {"service": "Redis", "command": "FLUSHALL"}, descriptor
+            )
+            blocked_config = collector_ws_client._handle_command(
+                "run_redis_command", {"service": "Redis", "command": "CONFIG SET maxmemory 1mb"}, descriptor
+            )
+        finally:
+            collector_ws_client.socket.create_connection = original_connect
+
+        self.assertTrue(result["ok"])
+        self.assertIn("OK", result["result"])
+        self.assertFalse(blocked["ok"])
+        self.assertFalse(blocked_config["ok"])
+
+    def test_collector_rejects_kafka_write_command(self) -> None:
+        result = collector_ws_client._handle_command(
+            "run_kafka_command",
+            {"service": "Kafka", "command": "topics --delete --topic demo"},
+            {"services": [{"name": "Kafka", "config": {"container": "kafka"}}]},
+        )
+        self.assertFalse(result["ok"])
+        self.assertIn("安全限制", result["result"])
+
+    def test_collector_runs_readonly_sql_against_registered_database(self) -> None:
+        db_path = Path(self.engine.url.database).with_name("remote-business.db")
+        business = create_engine(f"sqlite:///{db_path}")
+        with business.begin() as connection:
+            connection.exec_driver_sql("CREATE TABLE arrivals (id INTEGER, status TEXT)")
+            connection.exec_driver_sql("INSERT INTO arrivals VALUES (1, 'received'), (2, 'received')")
+        business.dispose()
+
+        descriptor = {
+            "infra": {
+                "readonly_database": {
+                    "database_url": f"sqlite:///{db_path}",
+                }
+            },
+            "services": [],
+        }
+        result = collector_ws_client._handle_command(
+            "run_readonly_query",
+            {"sql": "SELECT COUNT(*) AS total FROM arrivals", "max_rows": 1},
+            descriptor,
+        )
+        blocked = collector_ws_client._handle_command(
+            "run_readonly_query",
+            {"sql": "UPDATE arrivals SET status='bad'"},
+            descriptor,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["result"][0]["total"], 2)
+        self.assertFalse(blocked["ok"])
+
 
 class CompatibilitySurfaceTests(unittest.TestCase):
     def test_schema_compatibility_module_reexports(self) -> None:
@@ -1232,6 +1654,7 @@ class CompatibilitySurfaceTests(unittest.TestCase):
         prompt = build_prompt(descriptor)
         self.assertIn("运维平台", prompt)
         self.assertIn("接入模式", prompt)
+        self.assertIn("知识库使用规则", prompt)
 
     def test_restart_annotation_and_capability_use_registered_container(self) -> None:
         system = MonitoredSystem(org_id=7, key="ops", name="运维平台", local=True, restart_policy={"authorized_user_ids": [9]})
@@ -1260,6 +1683,20 @@ class CompatibilitySurfaceTests(unittest.TestCase):
         self.assertEqual(action["execution_mode"], "local")
         self.assertTrue(capability["enabled"])
         self.assertTrue(capability["has_permission"])
+
+        systemd_action = annotate_restart_action(
+            {
+                "local": False,
+                "services": [{
+                    "name": "Spring API",
+                    "config": {"systemd_unit": "spring-api.service"},
+                    "runtime": {"systemd_unit": "spring-api.service"},
+                }],
+            },
+            {"type": "restart_systemd", "service": "Spring API", "args": {"unit": "spring-api.service"}},
+        )
+        self.assertTrue(systemd_action["restart_ready"])
+        self.assertEqual(systemd_action["target_resource"], "spring-api.service")
 
     def test_restart_recovery_verification_reports_success_and_failure(self) -> None:
         original_collect_health = workflow_execution.collect_health
@@ -1344,48 +1781,6 @@ class DataAnalysisServiceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "写入或结构变更"):
             run_readonly_query({"url": f"sqlite:///{self.business_db}"}, "SELECT * FROM tasks WHERE status = 'drop'")
-
-    def test_readonly_database_config_masks_and_preserves_url(self) -> None:
-        with Session(self.engine) as session:
-            system = MonitoredSystem(org_id=1, key="task-app", name="任务系统")
-            session.add(system)
-            session.commit()
-            session.refresh(system)
-
-            saved = update_readonly_database_config(
-                session,
-                system.id,
-                1,
-                ReadonlyDatabaseConfig(
-                    enabled=True,
-                    name="任务库",
-                    database_url=f"sqlite:///{self.business_db}",
-                    table="tasks",
-                    timestamp_column="created_at",
-                ),
-            )
-            loaded = get_readonly_database_config(session, system.id, 1)
-            test_result = test_readonly_database_config(session, system.id, 1)
-
-            preserved = update_readonly_database_config(
-                session,
-                system.id,
-                1,
-                ReadonlyDatabaseConfig(
-                    enabled=True,
-                    name="任务库-新名称",
-                    database_url="***",
-                    table="tasks",
-                    timestamp_column="created_at",
-                ),
-            )
-            session.refresh(system)
-
-        self.assertEqual(saved.database_url, "***")
-        self.assertEqual(loaded.database_url, "***")
-        self.assertEqual(preserved.database_url, "***")
-        self.assertEqual(test_result["total"], 2)
-        self.assertEqual(system.infra["readonly_database"]["database_url"], f"sqlite:///{self.business_db}")
 
     def test_diagnose_data_question_uses_readonly_analysis(self) -> None:
         with Session(self.engine) as session:
@@ -1484,31 +1879,6 @@ class DataAnalysisServiceTests(unittest.TestCase):
         self.assertIn("先恢复异常 Worker", result.answer)
         self.assertEqual(audit.output["stuck_count"], 1)
 
-    def test_readonly_config_validates_task_analysis_columns(self) -> None:
-        with Session(self.engine) as session:
-            system = MonitoredSystem(org_id=1, key="task-app", name="任务系统")
-            session.add(system)
-            session.commit()
-            session.refresh(system)
-            update_readonly_database_config(
-                session,
-                system.id,
-                1,
-                ReadonlyDatabaseConfig(
-                    enabled=True,
-                    database_url=f"sqlite:///{self.business_db}",
-                    table="tasks",
-                    task_analysis_enabled=True,
-                    task_id_column="id",
-                    status_column="status",
-                    updated_at_column="updated_at",
-                    processing_values=["processing"],
-                ),
-            )
-            test_result = test_readonly_database_config(session, system.id, 1)
-
-        self.assertTrue(test_result["task_analysis_ready"])
-
     def test_diagnose_routes_stuck_task_question_to_specialized_analysis(self) -> None:
         with Session(self.engine) as session:
             system = MonitoredSystem(
@@ -1565,6 +1935,7 @@ class DiagnoseAndWebhookServiceTests(unittest.TestCase):
                 audit = session.exec(
                     select(AuditLog).where(AuditLog.event_type == "diagnosis.completed")
                 ).one()
+                report = session.exec(select(DiagnosisReport)).one()
         finally:
             diagnose_service.diagnose_with_details = original_diagnose
 
@@ -1575,6 +1946,12 @@ class DiagnoseAndWebhookServiceTests(unittest.TestCase):
         self.assertEqual(response.duration_ms, 12)
         self.assertEqual(audit.input["template_name"], "performance_analysis")
         self.assertEqual(audit.output["tool_calls"][0]["tool"], "query_prometheus")
+        self.assertEqual(report.question, "为什么慢")
+        self.assertEqual(report.model, "test-model")
+        self.assertEqual(report.tool_calls[0]["tool"], "query_prometheus")
+        self.assertEqual(response.id, report.id)
+        self.assertEqual(len(response.evidence), 1)
+        self.assertEqual(response.evidence[0].type, "query_prometheus")
 
     def test_diagnostic_templates_can_be_disabled_per_system(self) -> None:
         with Session(self.engine) as session:
@@ -1615,6 +1992,22 @@ class DiagnoseAndWebhookServiceTests(unittest.TestCase):
                         system.id,
                         1,
                         CollectorExecRequest(cmd="rm_all", args={}),
+                )
+            )
+
+    def test_execute_collector_command_rejects_collector_from_another_system(self) -> None:
+        with Session(self.engine) as session:
+            system = MonitoredSystem(org_id=1, key="ops", name="运维平台", local=False)
+            session.add(system)
+            session.commit()
+            session.refresh(system)
+            with self.assertRaisesRegex(LookupError, "不属于当前系统"):
+                self._run_async(
+                    execute_collector_command(
+                        session,
+                        system.id,
+                        1,
+                        CollectorExecRequest(cmd="health_check", collector_id=99999),
                     )
                 )
 
@@ -1661,6 +2054,53 @@ class DiagnoseAndWebhookServiceTests(unittest.TestCase):
         import asyncio
 
         return asyncio.run(coro)
+
+
+
+class AuditServiceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        db_path = Path(tmpdir.name) / "audit.db"
+        self.engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+        SQLModel.metadata.create_all(self.engine)
+
+    def test_record_and_list_audit_logs_with_filters(self) -> None:
+        with Session(self.engine) as session:
+            log1 = record_audit_event(
+                session, org_id=1, event_type="test.event", system_id=1,
+                actor_type="user", actor_id="1", target_type="system",
+                target_id="1", status="success", input={"key": "val"},
+            )
+            log2 = record_audit_event(
+                session, org_id=1, event_type="diagnosis.completed", system_id=2,
+                actor_type="agent", actor_id="agent-1", status="success",
+            )
+            log3 = record_audit_event(
+                session, org_id=2, event_type="test.event", system_id=3,
+                actor_type="user", actor_id="2", status="failed",
+            )
+            session.commit()
+
+            all_org1 = list_audit_logs(session, 1)
+            self.assertEqual(len(all_org1.items), 2)
+
+            sys1_logs = list_audit_logs(session, 1, system_id=1)
+            self.assertEqual(len(sys1_logs.items), 1)
+            self.assertEqual(sys1_logs.items[0].id, log1.id)
+
+            diag_logs = list_audit_logs(session, 1, event_type="diagnosis.completed")
+            self.assertEqual(len(diag_logs.items), 1)
+            self.assertEqual(diag_logs.items[0].id, log2.id)
+
+            org2_logs = list_audit_logs(session, 2)
+            self.assertEqual(len(org2_logs.items), 1)
+
+            log_out = all_org1.items[1]
+            self.assertEqual(log_out.org_id, 1)
+            self.assertEqual(log_out.event_type, "test.event")
+            self.assertEqual(log_out.input, {"key": "val"})
+            self.assertEqual(log_out.status, "success")
 
 
 if __name__ == "__main__":

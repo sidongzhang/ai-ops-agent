@@ -1,2 +1,5 @@
 requests
 websockets>=10.0
+SQLAlchemy>=2.0
+pymysql>=1.1
+psycopg2-binary>=2.9

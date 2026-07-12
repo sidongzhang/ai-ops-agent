@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '../../../api'
 import {
@@ -9,6 +9,7 @@ import {
   createSystemServiceDraft,
   SERVICE_COLORS,
   SERVICE_PRESETS,
+  SYSTEM_TEMPLATES,
   syncPresetDraft,
 } from '../../services'
 
@@ -20,12 +21,33 @@ const emit = defineEmits(['update:open', 'created'])
 
 const form = reactive({ key: '', name: '', local: false, services: [] })
 const state = reactive({ submitting: false })
+const selectedTemplate = reactive({ key: '' })
+const accessModeOptions = [
+  {
+    value: 'local',
+    title: '平台本机托管',
+    desc: '服务就在当前平台机器或同网段，注册后可直接探活、巡检与诊断。',
+  },
+  {
+    value: 'remote',
+    title: '远程系统接入',
+    desc: '客户服务器或别人电脑上的服务，先登记服务，再部署采集器出站连接平台。',
+  },
+]
+const filledServicesCount = computed(() => form.services.filter((service) => service.name).length)
+const nextStepText = computed(() => (
+  form.local
+    ? '注册完成后可直接在详情页测试服务并启用监控。'
+    : '注册完成后请到详情页创建采集器，让对方机器执行部署命令。'
+))
+const selectedTemplateInfo = computed(() => SYSTEM_TEMPLATES.find((item) => item.key === selectedTemplate.key) || null)
 
 watch(
   () => props.open,
   (open) => {
     if (open) {
       Object.assign(form, { key: '', name: '', local: false, services: [createSystemServiceDraft()] })
+      selectedTemplate.key = ''
     }
   },
   { immediate: true },
@@ -47,15 +69,38 @@ function onPresetChange(service) {
   syncPresetDraft(service)
 }
 
+function applyTemplate(templateKey) {
+  selectedTemplate.key = templateKey
+  const template = SYSTEM_TEMPLATES.find((item) => item.key === templateKey)
+  if (!template) return
+  form.services = template.presets.map((item) => ({
+    ...createSystemServiceDraft(item.preset),
+    name: item.name,
+    preset: item.preset,
+    connector: item.connector,
+    fields: { ...(item.fields || {}) },
+    customFields: { ...(item.customFields || {}) },
+  }))
+}
+
+function setAccessMode(mode) {
+  form.local = mode === 'local'
+}
+
 async function submit() {
   if (!form.key || !form.name) return message.warning('请填写系统名称和 Key')
   const services = form.services.filter((service) => service.name).map(buildServicePayload)
   state.submitting = true
   try {
-    await api.post('/systems', { key: form.key, name: form.name, local: form.local, services })
-    message.success('系统已注册')
+    const { data } = await api.post('/systems', { key: form.key, name: form.name, local: form.local, services })
+    message.success({
+      content: form.local
+        ? '系统已注册，正在进入详情页继续接入'
+        : '系统已注册，请在详情页创建采集器完成远程接入',
+      duration: 4,
+    })
     close()
-    emit('created')
+    emit('created', data)
   } catch (error) {
     message.error(error?.response?.data?.detail || '注册失败')
   } finally {
@@ -78,6 +123,19 @@ async function submit() {
   >
     <div class="modal-body">
       <div class="section">
+        <div class="mode-grid">
+          <button
+            v-for="option in accessModeOptions"
+            :key="option.value"
+            class="mode-card"
+            :class="{ active: form.local === (option.value === 'local') }"
+            @click="setAccessMode(option.value)"
+          >
+            <div class="mode-title">{{ option.title }}</div>
+            <div class="mode-desc">{{ option.desc }}</div>
+          </button>
+        </div>
+
         <a-row :gutter="12">
           <a-col :span="11">
             <a-form-item label="系统名称" required style="margin-bottom:0">
@@ -90,10 +148,43 @@ async function submit() {
             </a-form-item>
           </a-col>
           <a-col :span="2" style="display:flex;flex-direction:column;align-items:center;padding-top:22px">
-            <div style="font-size:10px;color:var(--text-subtle);margin-bottom:6px;white-space:nowrap">托管</div>
+            <div style="font-size:10px;color:var(--text-subtle);margin-bottom:6px;white-space:nowrap">本机托管</div>
             <a-switch v-model:checked="form.local" size="small" />
           </a-col>
         </a-row>
+      </div>
+
+      <a-alert
+        v-if="!form.local"
+        type="info"
+        show-icon
+        message="远程系统：先注册服务，再安装采集器"
+        description="平台不要求直接访问对方内网。注册后在系统详情页创建采集器，对方机器出站连接平台，平台再通过采集器检查服务和读取日志。"
+        style="margin-bottom:16px"
+      />
+
+      <div class="section-divider">
+        <span>系统模板</span>
+      </div>
+
+      <div class="template-grid">
+        <button
+          v-for="template in SYSTEM_TEMPLATES"
+          :key="template.key"
+          class="template-card"
+          :class="{ active: selectedTemplate.key === template.key }"
+          @click="applyTemplate(template.key)"
+        >
+          <div class="template-title">{{ template.label }}</div>
+          <div class="template-desc">{{ template.description }}</div>
+          <div class="template-meta">{{ template.presets.length }} 个服务草稿</div>
+        </button>
+      </div>
+
+      <div v-if="selectedTemplateInfo" class="template-summary">
+        <span class="template-summary-label">当前模板</span>
+        <strong>{{ selectedTemplateInfo.label }}</strong>
+        <span class="template-summary-detail">{{ selectedTemplateInfo.description }}</span>
       </div>
 
       <div class="section-divider">
@@ -172,6 +263,18 @@ async function submit() {
         </svg>
         添加服务
       </button>
+
+      <div class="summary-card">
+        <div class="summary-item">
+          <span class="summary-label">接入方式</span>
+          <strong>{{ form.local ? '平台本机托管' : '远程采集接入' }}</strong>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">已填写服务</span>
+          <strong>{{ filledServicesCount }} 个</strong>
+        </div>
+        <div class="summary-next">{{ nextStepText }}</div>
+      </div>
     </div>
   </a-modal>
 </template>
@@ -179,6 +282,31 @@ async function submit() {
 <style scoped>
 .modal-body { padding: 4px 0 0; }
 .section { padding: 0 0 16px; }
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.mode-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--card-bg);
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s, box-shadow .16s, transform .16s;
+}
+.mode-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border-color));
+  transform: translateY(-1px);
+}
+.mode-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.mode-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.mode-desc { font-size: 12px; line-height: 1.55; color: var(--text-subtle); }
 .section-divider {
   display: flex; align-items: center; gap: 10px;
   margin: 4px 0 16px;
@@ -190,6 +318,66 @@ async function submit() {
 .section-divider::after {
   content: ''; flex: 1;
   height: 1px; background: var(--border-color);
+}
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.template-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--card-bg);
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s, box-shadow .16s, transform .16s;
+}
+.template-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 44%, var(--border-color));
+  transform: translateY(-1px);
+}
+.template-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.template-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.template-desc {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-subtle);
+  min-height: 56px;
+}
+.template-meta {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--primary);
+  font-weight: 600;
+}
+.template-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border-color));
+  background: color-mix(in srgb, var(--primary) 5%, var(--card-bg));
+}
+.template-summary-label {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+.template-summary-detail {
+  font-size: 12px;
+  color: var(--text-subtle);
 }
 .services-list { display: flex; flex-direction: column; gap: 10px; }
 .svc-card {
@@ -260,5 +448,33 @@ async function submit() {
   border-color: var(--primary);
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 4%, var(--card-bg));
+}
+.summary-card {
+  margin-top: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--body-bg) 82%, white);
+  padding: 12px 14px;
+}
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.summary-item + .summary-item { margin-top: 8px; }
+.summary-label { color: var(--text-subtle); }
+.summary-next {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-color);
+  font-size: 12px;
+  color: var(--text-subtle);
+  line-height: 1.6;
+}
+@media (max-width: 720px) {
+  .mode-grid { grid-template-columns: 1fr; }
+  .template-grid { grid-template-columns: 1fr; }
 }
 </style>

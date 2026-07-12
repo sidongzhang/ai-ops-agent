@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.pagination import PageOut
+
 
 class WorkflowStart(BaseModel):
     question: str
@@ -11,6 +13,8 @@ class WorkflowStart(BaseModel):
 
 class WorkflowOut(BaseModel):
     id: int
+    system_id: int
+    system_name: str = ""
     thread_id: str
     status: str
     question: str
@@ -30,3 +34,7 @@ class WorkflowOut(BaseModel):
 class WorkflowDecision(BaseModel):
     approved: bool
     reason: str = ""
+
+
+class WorkflowPageOut(PageOut[WorkflowOut]):
+    pass

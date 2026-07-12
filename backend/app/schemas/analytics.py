@@ -42,5 +42,14 @@ class EfficiencyAnalyticsOut(BaseModel):
     invalid_configs_blocked: int = 0
     workflow_executions: int = 0
     workflow_success_rate_pct: float = 0
+    # ── 操作闭环率 ──
+    workflows_proposed: int = 0
+    workflows_approved: int = 0
+    workflows_executed: int = 0
+    workflows_verified: int = 0
+    operation_closure_rate_pct: float = 0
+    # ── 自动补全 ──
+    alerts_with_context: int = 0
+    auto_completion_rate_pct: float = 0
     trend: list[EfficiencyTrendPoint] = Field(default_factory=list)
     systems: list[SystemEfficiencyRow] = Field(default_factory=list)

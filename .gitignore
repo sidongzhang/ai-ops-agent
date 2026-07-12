@@ -11,18 +11,24 @@ __pycache__/
 
 # data / runtime artifacts
 agent/chroma_db/
+backend/app/agent/diagnostics/knowledge/docs/*
+!backend/app/agent/diagnostics/knowledge/docs/.gitkeep
 logs/
 pids/
+.dev-stack/
 *.log
 *.db
 
 # node / frontend build
 node_modules/
 dist/
+dist-prod/
+/package-lock.json
 
 # editors / OS
 .idea/
 .vscode/
+.cursor/
 .DS_Store
 
 # PyInstaller build artifacts

@@ -23,6 +23,7 @@ export function useNotifyConfig(systemId, reloadSystem) {
   const notifyEditingSecret = reactive({ app: false, smtp: false })
   const notifyLoading = ref(false)
   const notifyTestLoading = ref(false)
+  const notifyTestResult = ref(null)
 
   function syncNotifyFromSystem(system) {
     const notify = system?.notify || {}
@@ -45,9 +46,14 @@ export function useNotifyConfig(systemId, reloadSystem) {
     notifyCfg.smtp_password = ''
     notifyCfg.smtp_from = notify.smtp_from || ''
     notifyCfg.smtp_tls = notify.smtp_tls !== false
+    notifyTestResult.value = null
   }
 
-  function onNotifyTypeChange() {
+  function toggleNotifyChannel(channel) {
+    const next = new Set(notifyCfg.channels)
+    if (next.has(channel)) next.delete(channel)
+    else next.add(channel)
+    notifyCfg.channels = [...next]
     notifyCfg.type = notifyCfg.channels[0] || 'none'
   }
 
@@ -71,6 +77,7 @@ export function useNotifyConfig(systemId, reloadSystem) {
       }
       await api.put(`/systems/${systemId}/notify`, body)
       message.success('通知配置已保存')
+      notifyTestResult.value = null
       await reloadSystem()
     } catch (error) {
       message.error(error?.response?.data?.detail || '保存失败')
@@ -82,9 +89,16 @@ export function useNotifyConfig(systemId, reloadSystem) {
   async function testNotify() {
     notifyTestLoading.value = true
     try {
-      await api.post(`/systems/${systemId}/notify/test`)
-      message.success('所有已启用渠道的测试通知均已发送')
+      const { data } = await api.post(`/systems/${systemId}/notify/test`)
+      notifyTestResult.value = data
+      const successCount = data?.channels?.filter((item) => item.status === 'success').length || 0
+      message.success(`测试通知已发送：${successCount} 个渠道成功`)
     } catch (error) {
+      notifyTestResult.value = {
+        ok: false,
+        message: error?.response?.data?.detail || '发送失败，请检查配置',
+        channels: [],
+      }
       message.error(error?.response?.data?.detail || '发送失败，请检查配置')
     } finally {
       notifyTestLoading.value = false
@@ -97,7 +111,8 @@ export function useNotifyConfig(systemId, reloadSystem) {
     notifyLoading,
     notifySecretAlreadySet,
     notifyTestLoading,
-    onNotifyTypeChange,
+    notifyTestResult,
+    toggleNotifyChannel,
     saveNotify,
     startEditingNotifySecret,
     syncNotifyFromSystem,

@@ -4,10 +4,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import httpx
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.security import decrypt_sensitive_fields
+from app.models.messages import SystemMessage
 from app.models.systems import MonitoredSystem
 from app.services.audit import record_audit_event
 from app.services.messages import create_alert_message
@@ -31,6 +32,52 @@ def newly_failed_services(old_health: dict, new_results: list[dict]) -> list[str
         for result in new_results
         if not result["ok"] and old_map.get(result["name"], True)
     ]
+
+
+def recovered_services(old_health: dict, new_results: list[dict]) -> list[str]:
+    old_map = {service["name"]: service.get("ok", True) for service in old_health.get("services", [])}
+    return [
+        result["name"]
+        for result in new_results
+        if result.get("ok") and old_map.get(result["name"], True) is False
+    ]
+
+
+def resolve_recovered_alerts(system: MonitoredSystem, recovered: list[str], session: Session) -> None:
+    if not recovered:
+        return
+    recovered_set = set(recovered)
+    active = session.exec(
+        select(SystemMessage).where(
+            SystemMessage.system_id == system.id,
+            SystemMessage.org_id == system.org_id,
+            SystemMessage.message_type == "alert",
+            SystemMessage.status != "resolved",
+        )
+    ).all()
+    now = utcnow()
+    for message in active:
+        failed = set((message.related or {}).get("failed_services") or [])
+        if not failed or not failed.issubset(recovered_set):
+            continue
+        message.status = "resolved"
+        message.read_at = message.read_at or now
+        message.ack_at = message.ack_at or now
+        message.resolved_at = now
+        message.summary = f"已恢复：{'、'.join(sorted(failed))}"
+        message.content = f"系统「{system.name}」异常服务已恢复：{'、'.join(sorted(failed))}。"
+        session.add(message)
+        record_audit_event(
+            session,
+            org_id=system.org_id,
+            system_id=system.id,
+            event_type="message.auto_resolved",
+            actor_type="system",
+            actor_id="health-check",
+            target_type="message",
+            target_id=message.id,
+            output={"recovered_services": sorted(failed)},
+        )
 
 
 def send_webhook_alert(url: str, system_name: str, failed_services: list[str]) -> dict:
@@ -154,6 +201,7 @@ def alert_if_needed(
     new_results: list[dict],
     session: Session,
 ) -> None:
+    resolve_recovered_alerts(system, recovered_services(system.last_health or {}, new_results), session)
     failed = newly_failed_services(system.last_health or {}, new_results)
     if not failed:
         return

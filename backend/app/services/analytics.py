@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 from app.models.audit import AuditLog
 from app.models.messages import SystemMessage
 from app.models.systems import MonitoredSystem
+from app.models.workflows import ActionWorkflow
 from app.schemas.analytics import EfficiencyAnalyticsOut, EfficiencyTrendPoint, SystemEfficiencyRow
 
 
@@ -134,6 +135,29 @@ def get_efficiency_analytics(
         )
     system_rows.sort(key=lambda item: (-item.unresolved, -item.alerts, item.system_name))
 
+    # ── 操作闭环统计 ──
+    workflow_query = select(ActionWorkflow).where(
+        ActionWorkflow.org_id == org_id,
+        ActionWorkflow.created_at >= since,
+    )
+    if system_id is not None:
+        workflow_query = workflow_query.where(ActionWorkflow.system_id == system_id)
+    all_workflows = list(session.exec(workflow_query))
+    workflows_approved_count = sum(1 for w in all_workflows if w.status in ("approved", "completed"))
+    workflows_executed_count = sum(1 for w in all_workflows if w.status == "completed" or w.executed_at is not None)
+    # "verified" = completed workflow with post-execution audit event
+    workflow_verify_events = {
+        a.system_id for a in audits
+        if a.event_type in {"workflow.resolve.rechecked", "workflow.executed"}
+        and a.status == "success"
+    }
+    workflows_verified_count = sum(1 for w in all_workflows if w.status == "completed")
+
+    # ── 自动补全统计 ──
+    systems_with_diagnosis = {a.system_id for a in diagnosis_logs}
+    alerts_with_context_count = sum(1 for a in alerts if a.system_id in systems_with_diagnosis)
+
+
     trend_map = {
         (now - timedelta(days=offset)).date(): {"alerts": 0, "resolved": 0, "diagnoses": 0}
         for offset in range(days - 1, -1, -1)
@@ -181,4 +205,13 @@ def get_efficiency_analytics(
         workflow_success_rate_pct=_rate(len(successful_workflows), len(workflow_events)),
         trend=[EfficiencyTrendPoint(date=day, **values) for day, values in trend_map.items()],
         systems=system_rows,
+        # ── 操作闭环率 ──
+        workflows_proposed=len(all_workflows),
+        workflows_approved=workflows_approved_count,
+        workflows_executed=workflows_executed_count,
+        workflows_verified=workflows_verified_count,
+        operation_closure_rate_pct=_rate(workflows_verified_count, workflows_executed_count),
+        # ── 自动补全 ──
+        alerts_with_context=alerts_with_context_count,
+        auto_completion_rate_pct=_rate(alerts_with_context_count, len(alerts)),
     )

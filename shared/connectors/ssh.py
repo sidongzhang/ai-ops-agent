@@ -5,6 +5,7 @@ SSH 连接器：裸机/VM 进程的 agentless 探活与读日志。
             health_cmd | systemd_unit | process
 """
 import os
+import shlex
 import subprocess
 
 from .base import Connector
@@ -72,3 +73,15 @@ class SshConnector(Connector):
         kw = keyword.replace("'", '')
         rc, out = self._run(f"tail -n {int(lines)} {path} | grep -i '{kw}' | tail -50")
         return out.strip() or f"未找到 '{keyword}'"
+
+    def restart_systemd(self) -> tuple[bool, str]:
+        """Restart only the systemd unit explicitly registered for this service."""
+        unit = str(self.service.get('systemd_unit', '') or '').strip()
+        if not unit:
+            return False, '未配置 systemd_unit'
+        safe_unit = shlex.quote(unit)
+        rc, out = self._run(
+            f"sudo -n systemctl restart {safe_unit} && sudo -n systemctl is-active {safe_unit}",
+            timeout=30,
+        )
+        return rc == 0 and out.strip().splitlines()[-1:] == ['active'], out.strip() or '重启失败'
