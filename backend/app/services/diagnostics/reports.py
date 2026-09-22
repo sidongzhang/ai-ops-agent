@@ -20,6 +20,7 @@ def save_diagnosis_report(
     user_id: int | None,
     report_type: str,
     question: str,
+    external_request_id: str = "",
     answer: str = "",
     status: str = "success",
     template_name: str = "",
@@ -32,6 +33,7 @@ def save_diagnosis_report(
     tool_calls: list[dict] | None = None,
     evidence: list[dict] | None = None,
     knowledge_refs: list[dict] | None = None,
+    business_context: dict | None = None,
     error_message: str = "",
     commit: bool = True,
 ) -> DiagnosisReport:
@@ -39,6 +41,7 @@ def save_diagnosis_report(
         org_id=org_id,
         system_id=system_id,
         user_id=user_id,
+        external_request_id=external_request_id,
         report_type=report_type,
         status=status,
         question=question,
@@ -53,6 +56,7 @@ def save_diagnosis_report(
         tool_calls=tool_calls or [],
         evidence=evidence or [],
         knowledge_refs=knowledge_refs or [],
+        business_context=business_context or {},
         error_message=error_message,
     )
     session.add(report)
@@ -71,12 +75,18 @@ def list_diagnosis_reports(
     org_id: int,
     *,
     limit: int = 50,
+    external_request_id: str = "",
 ) -> list[DiagnosisReportOut]:
     require_system(session, system_id, org_id)
     limit = max(1, min(limit, 100))
+    statement = select(DiagnosisReport).where(
+        DiagnosisReport.org_id == org_id,
+        DiagnosisReport.system_id == system_id,
+    )
+    if external_request_id:
+        statement = statement.where(DiagnosisReport.external_request_id == external_request_id)
     rows = session.exec(
-        select(DiagnosisReport)
-        .where(DiagnosisReport.org_id == org_id, DiagnosisReport.system_id == system_id)
+        statement
         .order_by(DiagnosisReport.created_at.desc())
         .limit(limit)
     ).all()

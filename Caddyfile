@@ -1,4 +1,7 @@
 :80 {
+	# 压缩：经过 cloudflared 隧道访问时，前端资源 1.4MB -> ~440KB（省 68%）
+	encode zstd gzip
+
 	# 后端 API
 	@api {
 		path /auth/*

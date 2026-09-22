@@ -5,9 +5,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
 
-from ...core.config import settings
+from app.agent.llm import default_endpoint, make_chat_model
 
 
 class ProposedAction(BaseModel):
@@ -29,13 +28,7 @@ class AnalysisDeps:
 
 
 def make_analysis_model() -> OpenAIChatModel:
-    return OpenAIChatModel(
-        settings.agent_model,
-        provider=OpenAIProvider(
-            base_url=settings.deepseek_base_url,
-            api_key=settings.deepseek_api_key,
-        ),
-    )
+    return make_chat_model(default_endpoint())
 
 
 analysis_agent = Agent(

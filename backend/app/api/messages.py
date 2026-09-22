@@ -5,13 +5,17 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.core.deps import get_current_org_id, get_current_user
 from app.models.auth import User
+from app.repositories.messages import get_message_for_org
 from app.schemas.messages import SystemMessageOut, SystemMessagePageOut
+from app.schemas.notifications import NotificationDeliveryOut
+from app.services.notifications.deliveries import list_message_deliveries
 from app.services.messages import (
     ack_message,
     count_system_messages,
     count_unread_messages,
     list_system_messages,
     mark_message_read,
+    retry_message_processing,
     retry_failed_notifications,
     resolve_message,
 )
@@ -134,3 +138,34 @@ def retry_message_notifications(
         raise HTTPException(404, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+@router.post("/messages/{message_id}/retry-processing", response_model=SystemMessageOut)
+def retry_processing(
+    message_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
+):
+    try:
+        return retry_message_processing(
+            session,
+            message_id,
+            org_id,
+            actor_id=str(user.id),
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.get("/messages/{message_id}/deliveries", response_model=list[NotificationDeliveryOut])
+def list_message_notification_deliveries(
+    message_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+):
+    if not get_message_for_org(session, message_id, org_id):
+        raise HTTPException(404, "消息不存在")
+    return list_message_deliveries(session, message_id=message_id, org_id=org_id)

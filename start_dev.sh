@@ -11,8 +11,11 @@ cd "$REPO_DIR/backend"
 .venv/bin/alembic upgrade head
 
 # 2. 启动后端（screen 会话，持久运行）
-echo "→ 启动后端 :8000..."
-screen -dmS aiops-backend .venv/bin/uvicorn app.main:app --port 8000 --reload
+BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
+BACKEND_PUBLIC_HOST="${BACKEND_PUBLIC_HOST:-$(ipconfig getifaddr en0 2>/dev/null || echo localhost)}"
+
+echo "→ 启动后端 ${BACKEND_HOST}:8000..."
+screen -dmS aiops-backend .venv/bin/uvicorn app.main:app --host "$BACKEND_HOST" --port 8000 --reload
 sleep 2
 if curl -s http://localhost:8000/healthz > /dev/null 2>&1; then
   echo "   ✅ 后端运行中"
@@ -39,8 +42,8 @@ fi
 
 echo ""
 echo "=== 服务已启动 ==="
-echo "后端 API:   http://localhost:8000"
-echo "API 文档:   http://localhost:8000/docs"
+echo "后端 API:   http://${BACKEND_PUBLIC_HOST}:8000"
+echo "API 文档:   http://${BACKEND_PUBLIC_HOST}:8000/docs"
 echo "前端控制台: http://localhost:5173"
 echo ""
 echo "停止: screen -X -S aiops-backend quit; screen -X -S aiops-frontend quit"

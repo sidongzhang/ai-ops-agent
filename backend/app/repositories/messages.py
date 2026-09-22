@@ -82,6 +82,13 @@ def count_unread_messages_for_org(session: Session, org_id: int) -> int:
 def find_message_by_request_id(session: Session, system_id: int, request_id: str) -> SystemMessage | None:
     if not request_id:
         return None
+    # Public message listings also contain alerts generated internally by AIOps.
+    # Those records have no related.request_id, so accept their numeric database
+    # id only when the token's system_id owns the message.
+    if request_id.isdigit():
+        message = session.get(SystemMessage, int(request_id))
+        if message and message.system_id == system_id:
+            return message
     messages = session.exec(
         select(SystemMessage).where(
             SystemMessage.system_id == system_id,
@@ -101,10 +108,26 @@ def list_messages_for_system_public(
     status: str | None = None,
     message_type: str | None = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[SystemMessage]:
     query = select(SystemMessage).where(SystemMessage.system_id == system_id)
     if status:
         query = query.where(SystemMessage.status == status)
     if message_type:
         query = query.where(SystemMessage.message_type == message_type)
-    return list(session.exec(query.order_by(SystemMessage.created_at.desc()).limit(limit)))
+    return list(session.exec(query.order_by(SystemMessage.created_at.desc()).offset(max(offset, 0)).limit(limit)))
+
+
+def count_messages_for_system_public(
+    session: Session,
+    system_id: int,
+    *,
+    status: str | None = None,
+    message_type: str | None = None,
+) -> int:
+    query = select(SystemMessage).where(SystemMessage.system_id == system_id)
+    if status:
+        query = query.where(SystemMessage.status == status)
+    if message_type:
+        query = query.where(SystemMessage.message_type == message_type)
+    return session.exec(select(func.count()).select_from(query.subquery())).one()

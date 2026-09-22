@@ -22,7 +22,7 @@ Browser ──HTTPS──▶  frontend (Vue3 + Ant Design Vue 4)
                      ├── Auth (JWT)
                      ├── 系统/服务注册 CRUD
                      ├── 健康探测（直连 or 采集器上报）
-                     ├── AI 诊断（Pydantic AI + DeepSeek）
+                     ├── AI 诊断（Pydantic AI + OpenAI 兼容 LLM：本地/API）
                      ├── 审批工作流（LangGraph）
                      ├── 实时指标聚合（Prometheus/Redis/Kafka/MySQL）
                      ├── 飞书 Webhook 接收（/feishu/webhook）
@@ -337,11 +337,19 @@ class Connector(ABC):
 ## 十二、环境配置（.env 关键字段）
 
 ```
-# AI 模型
-DEEPSEEK_API_KEY=sk-...
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-AGENT_MODEL=deepseek-chat
-ADVANCED_AGENT_MODEL=deepseek-reasoner
+# AI 模型：远程 API 或本地部署二选一
+LLM_MODE=api
+LLM_API_BASE_URL=https://api.deepseek.com
+LLM_API_KEY=sk-...
+LLM_API_MODEL=deepseek-chat
+
+# 本地部署示例（Ollama/vLLM/LM Studio 等 OpenAI 兼容服务）
+LLM_MODE=local
+LLM_LOCAL_BASE_URL=http://localhost:11434/v1
+LLM_LOCAL_API_KEY=ollama
+LLM_LOCAL_MODEL=qwen2.5:0.5b
+
+# 当前 Docker 内存较小时默认使用 qwen2.5:0.5b；内存调到 6GB+ 后可切到 qwen2.5:3b/7b 提升诊断质量。
 
 # 飞书
 FEISHU_APP_ID=cli_aabbbd87b2b91cba

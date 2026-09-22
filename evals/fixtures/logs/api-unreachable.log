@@ -1,0 +1,8 @@
+2024-05-06 09:12:03 INFO  [main] starting api service, bind 0.0.0.0:8000
+2024-05-06 09:12:03 ERROR [main] OSError: [Errno 48] Address already in use: bind 0.0.0.0:8000
+2024-05-06 09:12:03 ERROR [main] service startup failed, port 8000 is occupied by a stale process
+2024-05-06 09:12:04 WARN  [health] self check failed: connect ECONNREFUSED 127.0.0.1:8000 (connection refused)
+2024-05-06 09:13:10 WARN  [health] self check failed: connect ECONNREFUSED 127.0.0.1:8000 (connection refused)
+2024-05-06 09:14:11 WARN  [health] self check failed: connect ECONNREFUSED 127.0.0.1:8000 (connection refused)
+2024-05-06 09:14:12 INFO  [deps] redis ping ok 127.0.0.1:6379
+2024-05-06 09:14:12 INFO  [deps] mysql ping ok 127.0.0.1:3306

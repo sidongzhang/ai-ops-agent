@@ -2,8 +2,8 @@
 import logging
 
 from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
 
+from app.agent.llm import advanced_endpoint, default_endpoint, endpoint_for_choice, make_chat_model
 from ...core.config import settings
 
 log = logging.getLogger(__name__)
@@ -14,30 +14,23 @@ ADVANCED_KEYWORDS = {
 }
 
 
-def make_model(model_name: str, base_url: str, api_key: str) -> OpenAIChatModel:
-    return OpenAIChatModel(
-        model_name,
-        provider=OpenAIProvider(base_url=base_url, api_key=api_key),
-    )
-
-
 def default_model() -> OpenAIChatModel:
-    return make_model(
-        settings.agent_model,
-        settings.deepseek_base_url,
-        settings.deepseek_api_key,
-    )
+    return make_chat_model(default_endpoint())
 
 
 def advanced_model() -> OpenAIChatModel:
-    return make_model(
-        settings.advanced_agent_model,
-        settings.advanced_agent_base_url or settings.deepseek_base_url,
-        settings.advanced_agent_api_key or settings.deepseek_api_key,
-    )
+    return make_chat_model(advanced_endpoint())
 
 
-def pick_model(question: str) -> OpenAIChatModel:
+def pick_model(question: str, model_mode: str = "auto", model_name: str = "") -> OpenAIChatModel:
+    selected_endpoint = endpoint_for_choice(model_mode, model_name)
+    if selected_endpoint:
+        log.info(
+            "[model-routing] 使用用户选择模型 mode=%s model=%r",
+            selected_endpoint.mode,
+            selected_endpoint.model,
+        )
+        return make_chat_model(selected_endpoint)
     if settings.advanced_agent_model and any(keyword in question for keyword in ADVANCED_KEYWORDS):
         log.info(f"[model-routing] 升档至高级模型 {settings.advanced_agent_model!r}")
         return advanced_model()

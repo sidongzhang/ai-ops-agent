@@ -12,6 +12,7 @@ from app.models.messages import SystemMessage
 from app.models.systems import MonitoredSystem
 from app.services.audit import record_audit_event
 from app.services.messages import create_alert_message
+from app.services.notifications.deliveries import record_notification_delivery
 from .email import send_email
 from .feishu import FeishuAlerter
 
@@ -135,6 +136,44 @@ def send_email_alert(cfg: dict, system_name: str, failed_services: list[str]) ->
         return {"type": "email", "status": "failed", "detail": str(exc), "retryable": True}
 
 
+def build_alert_delivery_snapshot(
+    channel: str,
+    cfg: dict,
+    system_name: str,
+    failed_services: list[str],
+) -> dict:
+    decrypted = decrypt_sensitive_fields(cfg)
+    services = "、".join(failed_services)
+    title = f"[AIOps] 系统「{system_name}」服务异常"
+    text = (
+        f"系统「{system_name}」告警：以下服务异常\n\n"
+        f"{services}\n\n"
+        "建议：请进入 AIOps 平台查看消息中心中的诊断建议，并在系统详情页重新探活确认。"
+    )
+    if channel == "feishu":
+        return {
+            "recipient": decrypted.get("chat_id", ""),
+            "subject": f"系统「{system_name}」服务告警",
+            "body": "\n".join(["以下服务出现异常：", *(f"✗ {service}" for service in failed_services)]),
+            "payload": {"msg_type": "interactive", "failed_services": failed_services},
+        }
+    if channel == "email":
+        return {
+            "recipient": decrypted.get("email_to", ""),
+            "subject": title,
+            "body": text,
+            "payload": {"failed_services": failed_services},
+        }
+    if channel == "webhook":
+        return {
+            "recipient": decrypted.get("webhook_url", ""),
+            "subject": f"系统「{system_name}」服务告警",
+            "body": text,
+            "payload": {"msg_type": "text", "failed_services": failed_services},
+        }
+    return {"recipient": "", "subject": title, "body": text, "payload": {"failed_services": failed_services}}
+
+
 def configured_notification_channels(cfg: dict) -> list[str]:
     """Return configured external channels while preserving legacy type configs."""
     configured = cfg.get("channels") or []
@@ -196,6 +235,154 @@ def send_alert_channel_with_retry(
     }
 
 
+def _message_notification_text(system_name: str, message: SystemMessage) -> str:
+    suggestions = "\n".join(f"- {item}" for item in (message.suggestion or [])[:5])
+    parts = [
+        f"系统「{system_name}」消息：{message.title}",
+        "",
+        message.summary or message.content,
+    ]
+    if message.diagnosis:
+        parts.extend(["", "原因分析：", message.diagnosis])
+    if suggestions:
+        parts.extend(["", "处理建议：", suggestions])
+    return "\n".join(part for part in parts if part is not None)
+
+
+def send_message_channel(channel: str, cfg: dict, system_name: str, message: SystemMessage) -> dict:
+    decrypted = decrypt_sensitive_fields(cfg)
+    text = _message_notification_text(system_name, message)
+    try:
+        if channel == "feishu":
+            app_id = decrypted.get("app_id", "")
+            app_secret = decrypted.get("app_secret", "")
+            chat_id = decrypted.get("chat_id", "")
+            if not all([app_id, app_secret, chat_id]):
+                return {"type": "feishu", "status": "failed", "detail": "飞书配置不完整", "retryable": False}
+            result = FeishuAlerter(app_id, app_secret).send_text(chat_id, text)
+            if result.get("code") not in (None, 0):
+                return {"type": "feishu", "status": "failed", "detail": str(result), "retryable": True}
+            return {"type": "feishu", "status": "success", "provider_message_id": result.get("data", {}).get("message_id", "")}
+        if channel == "email":
+            send_email(decrypted, f"[AIOps] {message.title}", text)
+            return {"type": "email", "status": "success"}
+        if channel == "webhook":
+            url = decrypted.get("webhook_url", "")
+            if not url:
+                return {"type": "webhook", "status": "failed", "detail": "Webhook 配置不完整", "retryable": False}
+            response = httpx.post(url, json={"msg_type": "text", "content": {"text": text}}, timeout=8)
+            if response.status_code >= 400:
+                return {
+                    "type": "webhook",
+                    "status": "failed",
+                    "detail": f"HTTP {response.status_code}",
+                    "retryable": response.status_code == 429 or response.status_code >= 500,
+                }
+            return {"type": "webhook", "status": "success"}
+        return {"type": channel, "status": "failed", "detail": "不支持的通知渠道", "retryable": False}
+    except ValueError as exc:
+        return {"type": channel, "status": "failed", "detail": str(exc), "retryable": False}
+    except Exception as exc:
+        return {"type": channel, "status": "failed", "detail": str(exc), "retryable": True}
+
+
+def send_message_channel_with_retry(
+    channel: str,
+    cfg: dict,
+    system_name: str,
+    message: SystemMessage,
+    *,
+    max_attempts: int = MAX_DELIVERY_ATTEMPTS,
+) -> dict:
+    result = {"type": channel, "status": "failed", "detail": "发送失败"}
+    attempts = 0
+    for attempts in range(1, max(1, max_attempts) + 1):
+        result = send_message_channel(channel, cfg, system_name, message)
+        if result.get("status") == "success":
+            break
+        if result.get("retryable") is False:
+            break
+    return {**result, "attempts": attempts, "last_attempt_at": utcnow().isoformat()}
+
+
+def deliver_message_notifications(
+    session: Session,
+    system: MonitoredSystem,
+    message: SystemMessage,
+    *,
+    actor_id: str = "openapi",
+    force: bool = False,
+) -> SystemMessage:
+    related = dict(message.related or {})
+    if related.get("notification_sent_at") and not force:
+        return message
+
+    notify = system.notify or {}
+    channels = configured_notification_channels(notify)
+    now = utcnow()
+    channel_results = [{
+        "type": "web",
+        "status": "success",
+        "attempts": 1,
+        "last_attempt_at": now.isoformat(),
+    }]
+    if channels:
+        with ThreadPoolExecutor(max_workers=len(channels)) as executor:
+            futures = [
+                executor.submit(send_message_channel_with_retry, channel, notify, system.name, message)
+                for channel in channels
+            ]
+            channel_results.extend(future.result() for future in futures)
+
+    text = _message_notification_text(system.name, message)
+    decrypted = decrypt_sensitive_fields(notify)
+    for result in channel_results:
+        channel = result.get("type", "")
+        recipient = ""
+        if channel == "feishu":
+            recipient = decrypted.get("chat_id", "")
+        elif channel == "email":
+            recipient = decrypted.get("email_to", "")
+        elif channel == "webhook":
+            recipient = decrypted.get("webhook_url", "")
+        record_notification_delivery(
+            session,
+            message,
+            channel=channel,
+            recipient=recipient,
+            subject=f"[AIOps] {message.title}",
+            body=text,
+            payload={"message_type": message.message_type, "request_id": related.get("request_id")},
+            result=result,
+        )
+
+    failed_channels = [
+        result["type"]
+        for result in channel_results
+        if result.get("type") != "web" and result.get("status") == "failed"
+    ]
+    related["notification_sent_at"] = now.isoformat()
+    message.related = related
+    message.channels = channel_results
+    session.add(message)
+    record_audit_event(
+        session,
+        org_id=system.org_id,
+        system_id=system.id,
+        event_type="notification.delivered",
+        actor_type="system_token",
+        actor_id=actor_id,
+        target_type="message",
+        target_id=message.id,
+        status="failed" if failed_channels else "success",
+        input={"message_type": message.message_type, "channels": channels},
+        output={"channel_results": channel_results, "failed_channels": failed_channels},
+    )
+    session.commit()
+    session.refresh(message)
+    return message
+
+
 def alert_if_needed(
     system: MonitoredSystem,
     new_results: list[dict],
@@ -245,6 +432,23 @@ def alert_if_needed(
         log.info(f"[alert] 系统「{system.name}」未配置通知渠道，仅记录日志")
 
     message.channels = channel_results
+    snapshots = {
+        channel: build_alert_delivery_snapshot(channel, notify, system.name, failed)
+        for channel in channels
+    }
+    for result in channel_results:
+        channel = result.get("type", "")
+        snapshot = snapshots.get(channel, {})
+        record_notification_delivery(
+            session,
+            message,
+            channel=channel,
+            recipient=snapshot.get("recipient", ""),
+            subject=snapshot.get("subject", message.title),
+            body=snapshot.get("body", message.content),
+            payload=snapshot.get("payload", {}),
+            result=result,
+        )
     failed_channels = [
         result["type"]
         for result in channel_results

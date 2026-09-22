@@ -240,6 +240,8 @@ def retry_failed_notifications(
         raise ValueError("这条消息缺少异常服务信息，无法重新生成通知")
 
     from app.services.notifications.alerts import send_alert_channel_with_retry
+    from app.services.notifications.alerts import build_alert_delivery_snapshot
+    from app.services.notifications.deliveries import record_notification_delivery
     from app.services.systems.service import require_system
 
     system = require_system(session, message.system_id, org_id)
@@ -253,6 +255,22 @@ def retry_failed_notifications(
         )
         result["attempts"] = int(previous.get("attempts") or 0) + int(result.get("attempts") or 0)
         retried_by_type[result["type"]] = result
+        snapshot = build_alert_delivery_snapshot(
+            result["type"],
+            system.notify or {},
+            system.name,
+            failed_services,
+        )
+        record_notification_delivery(
+            session,
+            message,
+            channel=result["type"],
+            recipient=snapshot.get("recipient", ""),
+            subject=snapshot.get("subject", message.title),
+            body=snapshot.get("body", message.content),
+            payload={**snapshot.get("payload", {}), "retry": True},
+            result=result,
+        )
 
     message.channels = [
         retried_by_type.get(result.get("type"), result)
@@ -282,6 +300,61 @@ def retry_failed_notifications(
     )
     session.commit()
     session.refresh(message)
+    return message
+
+
+def retry_message_processing(
+    session: Session,
+    message_id: int,
+    org_id: int,
+    *,
+    actor_id: str = "",
+) -> SystemMessage:
+    message = _require_message(session, message_id, org_id)
+    related = dict(message.related or {})
+    processing_status = related.get("processing_status")
+    if processing_status not in {"failed", "enqueue_failed"}:
+        raise ValueError("这条消息没有失败的后台分析任务")
+    if message.message_type == "log_analysis":
+        raise ValueError("日志原文不会保存在平台，请让对方系统使用同一个 request_id 重新上传日志")
+
+    from app.services.message_processing import enqueue_message_processing, mark_message_processing_queued
+
+    message.diagnosis = "后台分析已重新排队，请稍后查看结果。"
+    message.suggestion = ["稍后刷新消息中心查看分析结果。", "如仍失败，请查看审计日志中的失败原因。"]
+    session.add(message)
+    session.commit()
+    session.refresh(message)
+    message = mark_message_processing_queued(session, message)
+    try:
+        enqueue_message_processing(message.id)
+        event_status = "success"
+        output = {"message_id": message.id, "processing_status": (message.related or {}).get("processing_status")}
+    except Exception as exc:
+        related = dict(message.related or {})
+        related["processing_status"] = "enqueue_failed"
+        related["processing_error"] = str(exc)
+        message.related = related
+        session.add(message)
+        session.commit()
+        session.refresh(message)
+        event_status = "failed"
+        output = {"error": str(exc)}
+
+    record_audit_event(
+        session,
+        org_id=org_id,
+        system_id=message.system_id,
+        actor_type="user",
+        actor_id=actor_id,
+        event_type="message.processing_retried",
+        target_type="message",
+        target_id=message.id,
+        status=event_status,
+        input={"previous_status": processing_status, "message_type": message.message_type},
+        output=output,
+        commit=True,
+    )
     return message
 
 

@@ -1,7 +1,16 @@
 """Schemas for monitored systems."""
 from datetime import datetime
+import re
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+_EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+_SUPPORTED_NOTIFY_CHANNELS = {"feishu", "email", "webhook"}
+
+
+def _split_emails(value: str) -> list[str]:
+    return [item.strip() for item in re.split(r"[,，;\s]+", value or "") if item.strip()]
 
 
 class ServiceIn(BaseModel):
@@ -24,6 +33,60 @@ class NotifyConfig(BaseModel):
     smtp_password: str = ""
     smtp_from: str = ""
     smtp_tls: bool = True
+
+    @model_validator(mode="after")
+    def validate_selected_channels(self):
+        channels = [channel for channel in (self.channels or []) if channel]
+        if not channels and self.type in _SUPPORTED_NOTIFY_CHANNELS:
+            channels = [self.type]
+        unsupported = [channel for channel in channels if channel not in _SUPPORTED_NOTIFY_CHANNELS]
+        if unsupported:
+            raise ValueError(f"不支持的通知渠道：{', '.join(unsupported)}")
+
+        if "feishu" in channels:
+            missing = [
+                label
+                for label, value in (
+                    ("App ID", self.app_id),
+                    ("App Secret", self.app_secret),
+                    ("群聊 Chat ID", self.chat_id),
+                )
+                if not str(value or "").strip()
+            ]
+            if missing:
+                raise ValueError(f"飞书配置不完整：{', '.join(missing)}")
+
+        if "webhook" in channels:
+            webhook_url = self.webhook_url.strip()
+            if not webhook_url:
+                raise ValueError("Webhook 配置不完整：Webhook URL")
+            if not webhook_url.startswith(("http://", "https://")):
+                raise ValueError("Webhook URL 必须以 http:// 或 https:// 开头")
+
+        if "email" in channels:
+            recipients = _split_emails(self.email_to)
+            invalid = [email for email in recipients if not _EMAIL_RE.match(email)]
+            if not recipients:
+                raise ValueError("邮件配置不完整：告警收件邮箱")
+            if invalid:
+                raise ValueError(f"收件邮箱格式不正确：{', '.join(invalid)}")
+            missing = [
+                label
+                for label, value in (
+                    ("SMTP 主机", self.smtp_host),
+                    ("用户名", self.smtp_username),
+                    ("发件人", self.smtp_from),
+                    ("SMTP 密码", self.smtp_password),
+                )
+                if not str(value or "").strip()
+            ]
+            if missing:
+                raise ValueError(f"邮件配置不完整：{', '.join(missing)}")
+            if not (1 <= int(self.smtp_port or 0) <= 65535):
+                raise ValueError("SMTP 端口必须在 1 到 65535 之间")
+            if self.smtp_from and not _EMAIL_RE.match(self.smtp_from.strip()):
+                raise ValueError("发件人邮箱格式不正确")
+        return self
 
 
 class MonitoringConfig(BaseModel):

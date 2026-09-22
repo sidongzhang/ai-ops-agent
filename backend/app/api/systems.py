@@ -123,7 +123,7 @@ def update_service_draft(
 
 
 @router.post("/{system_id}/services/{service_id}/test", response_model=ServiceProbeOut)
-def test_service_draft(
+async def test_service_draft(
     system_id: int,
     service_id: int,
     session: Session = Depends(get_session),
@@ -131,7 +131,7 @@ def test_service_draft(
     user: User = Depends(require_operator),
 ):
     try:
-        return test_service_draft_record(
+        return await test_service_draft_record(
             session, system_id, service_id, org_id, actor_id=str(user.id)
         )
     except LookupError as exc:

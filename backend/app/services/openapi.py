@@ -6,11 +6,23 @@ from sqlmodel import Session
 from app.models.messages import SystemMessage
 from app.models.systems import MonitoredSystem
 from app.models.tokens import SystemToken
-from app.repositories.messages import find_message_by_request_id, list_messages_for_system_public
+from app.repositories.messages import (
+    count_messages_for_system_public,
+    find_message_by_request_id,
+    list_messages_for_system_public,
+)
 from app.schemas.messages import SystemMessageOut
-from app.schemas.openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn
+import json
+
+from app.schemas.openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn, OpenMessagePageOut, OpenProductionReportIn
 from app.services.audit import record_audit_event
-from app.services.message_processing import enrich_message
+from app.services.messages import ack_message, mark_message_read, resolve_message
+from app.services.message_processing import (
+    enqueue_message_processing,
+    enrich_message,
+    mark_message_processing_enqueue_failed,
+    mark_message_processing_queued,
+)
 
 
 def _processing_text(kind: str, need_llm_process: bool) -> tuple[str, list[str]]:
@@ -37,6 +49,8 @@ def submit_open_alert(
     system: MonitoredSystem,
     token: SystemToken,
     body: OpenAlertIn,
+    *,
+    enqueue_processing: bool = True,
 ) -> SystemMessage:
     existing = find_message_by_request_id(session, system.id, body.request_id)
     if existing:
@@ -103,8 +117,21 @@ def submit_open_alert(
     )
     session.refresh(message)
     if body.need_llm_process:
+        if enqueue_processing:
+            message.related = {**(message.related or {}), "notify_after_processing": True}
+            session.add(message)
+            session.commit()
+            session.refresh(message)
+            message = mark_message_processing_queued(session, message)
+            try:
+                enqueue_message_processing(message.id)
+            except Exception as exc:
+                message = mark_message_processing_enqueue_failed(session, message, str(exc))
+            return message
         return enrich_message(session, message)
-    return message
+    from app.services.notifications.alerts import deliver_message_notifications
+
+    return deliver_message_notifications(session, system, message, actor_id=str(token.id))
 
 
 def submit_open_message(
@@ -114,6 +141,8 @@ def submit_open_message(
     body: OpenMessageIn,
     *,
     message_type: str = "message",
+    enqueue_processing: bool = True,
+    related_extra: dict | None = None,
 ) -> SystemMessage:
     existing = find_message_by_request_id(session, system.id, body.request_id)
     if existing:
@@ -136,6 +165,7 @@ def submit_open_message(
     label = {
         "message": "业务消息",
         "daily_report": "日报",
+        "weekly_report": "周报",
         "monthly_report": "月报",
     }.get(message_type, message_type)
     diagnosis, suggestion = _processing_text(label, body.need_llm_process)
@@ -155,6 +185,7 @@ def submit_open_message(
             "token_id": token.id,
             "context": body.context,
             "need_llm_process": body.need_llm_process,
+            **(related_extra or {}),
         },
     )
     token.last_used_at = datetime.now(timezone.utc)
@@ -177,8 +208,84 @@ def submit_open_message(
     )
     session.refresh(message)
     if body.need_llm_process:
+        if enqueue_processing:
+            message = mark_message_processing_queued(session, message)
+            try:
+                enqueue_message_processing(message.id)
+            except Exception as exc:
+                message = mark_message_processing_enqueue_failed(session, message, str(exc))
+            return message
         return enrich_message(session, message)
     return message
+
+
+def submit_open_production_report(
+    session: Session,
+    system: MonitoredSystem,
+    token: SystemToken,
+    body: OpenProductionReportIn,
+    *,
+    message_type: str,
+) -> SystemMessage:
+    report_name = {
+        "daily_report": "生产日报",
+        "weekly_report": "生产周报",
+        "monthly_report": "生产月报",
+    }.get(message_type, "生产报告")
+    title = body.title.strip() or f"{system.name}{report_name}"
+    content = json.dumps(
+        {
+            "period": body.period,
+            "summary": body.summary,
+            "data": body.data,
+            "context": body.context,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    return submit_open_message(
+        session,
+        system,
+        token,
+        OpenMessageIn(
+            request_id=body.request_id,
+            title=title,
+            summary=body.summary or f"外部系统提交{report_name}，等待平台加工。",
+            content=content,
+            severity="info",
+            need_llm_process=True,
+            context={**body.context, "period": body.period},
+        ),
+        message_type=message_type,
+        related_extra={
+            "processing_kind": "production_report",
+            "notify_after_processing": True,
+            "period": body.period,
+        },
+    )
+
+
+def update_open_message_status(
+    session: Session,
+    system: MonitoredSystem,
+    token: SystemToken,
+    request_id: str,
+    status: str,
+) -> SystemMessage:
+    message = get_open_message_by_request_id(session, system, request_id)
+    if status == "read":
+        result = mark_message_read(session, message.id, system.org_id, actor_type="system_token", actor_id=str(token.id))
+    elif status == "acknowledged":
+        result = ack_message(session, message.id, system.org_id, actor_type="system_token", actor_id=str(token.id))
+    elif status == "resolved":
+        result = resolve_message(session, message.id, system.org_id, actor_type="system_token", actor_id=str(token.id))
+    else:
+        raise ValueError("status 仅支持 read / acknowledged / resolved")
+    token.last_used_at = datetime.now(timezone.utc)
+    session.add(token)
+    session.commit()
+    session.refresh(result)
+    return result
 
 
 def submit_open_health(
@@ -223,9 +330,11 @@ def list_open_messages(
     status: str | None = None,
     message_type: str | None = None,
     limit: int = 50,
-) -> list[SystemMessageOut]:
+    offset: int = 0,
+) -> OpenMessagePageOut:
     limit = max(1, min(limit, 100))
-    return [
+    offset = max(0, offset)
+    items = [
         SystemMessageOut(**message.model_dump())
         for message in list_messages_for_system_public(
             session,
@@ -233,8 +342,16 @@ def list_open_messages(
             status=status,
             message_type=message_type,
             limit=limit,
+            offset=offset,
         )
     ]
+    total = count_messages_for_system_public(
+        session,
+        system.id,
+        status=status,
+        message_type=message_type,
+    )
+    return OpenMessagePageOut(items=items, total=total, offset=offset, limit=limit)
 
 
 def get_open_message_by_request_id(

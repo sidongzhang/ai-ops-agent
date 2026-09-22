@@ -4,6 +4,7 @@ from .collectors import Collector
 from .diagnostics import DiagnosisReport
 from .incidents import Incident
 from .messages import SystemMessage
+from .notifications import NotificationDelivery
 from .systems import MonitoredSystem, Service
 from .tokens import SystemToken
 from .workflows import ActionWorkflow
@@ -17,6 +18,7 @@ __all__ = [
     "MonitoredSystem",
     "Collector",
     "SystemMessage",
+    "NotificationDelivery",
     "Service",
     "SystemToken",
     "ActionWorkflow",

@@ -1,0 +1,8 @@
+2024-05-06 15:01:02 ERROR [db] failed to obtain connection from pool: java.sql.SQLNonTransientConnectionException: Could not connect to 127.0.0.1:3306
+2024-05-06 15:01:02 ERROR [db] Caused by: java.sql.SQLException: ERROR 1040 (HY000): Too many connections
+2024-05-06 15:01:02 WARN  [db] pool stats: active=10, idle=0, maxPoolSize=10, waiting=37
+2024-05-06 15:01:03 ERROR [api] GET /api/order/list -> 500 (db connection unavailable)
+2024-05-06 15:01:05 ERROR [db] ERROR 1040 (HY000): Too many connections (retry 1/3)
+2024-05-06 15:02:10 INFO  [db] mysql status: Threads_connected=10, Threads_running=9, max_connections=10
+2024-05-06 15:02:11 WARN  [db] TCP probe to 127.0.0.1:3306 succeeded, the port is reachable but refuses new sessions
+2024-05-06 15:05:00 ERROR [api] GET /api/order/list -> 500 (db connection unavailable), error rate 38%

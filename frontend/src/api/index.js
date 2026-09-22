@@ -1,9 +1,9 @@
 import axios from 'axios'
 
-// 生产走同域相对路径；开发默认直连本地控制面。
+// 生产走同域相对路径；开发走 Vite 代理，避免跨域与多实例端口冲突。
 const baseURL =
   import.meta.env.VITE_API_BASE?.trim() ||
-  (import.meta.env.PROD ? '' : 'http://localhost:8000')
+  (import.meta.env.PROD ? '' : '')
 
 const api = axios.create({ baseURL })
 

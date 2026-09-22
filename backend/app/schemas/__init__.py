@@ -28,7 +28,7 @@ from .diagnostics import (
 )
 from .health import HealthItem, SystemHealth
 from .messages import SystemMessageOut
-from .openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn
+from .openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn, OpenMessagePageOut
 from .systems import (
     MonitoringConfig,
     NotifyConfig,
@@ -59,7 +59,7 @@ __all__ = [
     "CollectorCreate", "CollectorCreated", "CollectorOut",
     "CollectorConfig", "CollectorReport", "CollectorBundleRequest",
     "SystemMessageOut",
-    "OpenAlertIn", "OpenHealthIn", "OpenMessageIn",
+    "OpenAlertIn", "OpenHealthIn", "OpenMessageIn", "OpenMessagePageOut",
     "SystemTokenCreate", "SystemTokenCreated", "SystemTokenOut",
     "DiagnoseRequest", "DiagnoseResponse", "DiagnosisEvidenceItem", "DiagnosisHistoryClearOut", "DiagnosisReportOut",
     "DiagnosticTemplateOut", "DiagnosticTemplateSettingsUpdate",

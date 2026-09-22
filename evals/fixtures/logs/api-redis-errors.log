@@ -1,0 +1,8 @@
+2024-05-06 14:02:11 ERROR [cache] redis write failed: OOM command not allowed when used memory > 'maxmemory'
+2024-05-06 14:02:11 WARN  [cache] fallback to mysql for key product:detail:1001
+2024-05-06 14:02:12 ERROR [cache] redis write failed: OOM command not allowed when used memory > 'maxmemory'
+2024-05-06 14:05:40 WARN  [cache] cache miss rate 62%, evicted keys increasing
+2024-05-06 14:10:02 ERROR [session] session key write rejected by redis (maxmemory reached)
+2024-05-06 14:10:03 WARN  [session] user session lost, forcing re-login
+2024-05-06 14:15:00 INFO  [cache] redis INFO memory: used_memory_human 7.98M, maxmemory_human 8.00M
+2024-05-06 14:15:00 INFO  [cache] redis INFO stats: evicted_keys 184320, rejected_writes 512

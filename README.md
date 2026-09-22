@@ -107,10 +107,19 @@ curl -X POST http://localhost:8000/openapi/v1/log-analysis \
   -H "Authorization: Bearer <TOKEN>" \
   -H "X-System-Code: docker-real-local" \
   -F "file=@./log.json" \
+  -F "request_id=log-001" \
   -F "question=请分析这份日志，给出故障原因和处理措施"
 ```
 
-接口支持 UTF-8 的 JSON 或文本日志，单个文件最大 `2 MB`，返回分析报告、异常证据、可能原因和处理建议。Token 只用于确认调用方身份和权限；原始日志不写入平台数据库或模型追踪，分析记录会进入审计日志。
+接口支持 UTF-8 的 JSON 或文本日志，单个文件最大 `2 MB`。平台会先返回已接收的 `message_id` 和处理状态，后台分析完成后把报告回写到消息中心。对方系统可以用同一个 `request_id` 查询结果：
+
+```bash
+curl http://localhost:8000/openapi/v1/messages/log-001 \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "X-System-Code: docker-real-local"
+```
+
+Token 只用于确认调用方身份和权限；原始日志不写入平台数据库或模型追踪，分析记录会进入审计日志。
 
 ### 5. 切换 PostgreSQL（生产）
 
@@ -160,7 +169,7 @@ python collector/run.py          # --once 跑一轮即退出
 | 数据库迁移 | Alembic（`migrations/`，autogenerate from SQLModel metadata） |
 | 鉴权 / 多租户 | JWT（bcrypt）+ 每表 `org_id` 行级隔离 |
 | Agent 编排 | **Pydantic AI**（typed tools + RunContext 依赖注入 + 动态 system prompt） |
-| LLM | DeepSeek（`deepseek-chat`，OpenAI 兼容）；硬核诊断自动升档高级模型 |
+| LLM | OpenAI 兼容接口；支持远程 API（DeepSeek/OpenAI 等）或本地部署（Ollama/vLLM/LM Studio） |
 | 前端 | Vue 3 + Vite + Ant Design Vue + Pinia |
 | 连接器 | http / tcp / ssh / prometheus / k8s / local |
 | 采集器 | Python 轻量脚本，复用 `connectors/`，依赖 `requests` 与 `websockets` |

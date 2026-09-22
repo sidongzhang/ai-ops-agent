@@ -15,6 +15,7 @@ TOOL_LABELS = {
     "run_kafka_command": "Kafka 只读命令",
     "run_readonly_query": "只读 SQL",
     "search_knowledge_base": "运维知识库",
+    "query_business_data": "只读业务数据",
     "fetch_logs": "拉取日志",
     "health_check": "健康检查",
 }
@@ -42,6 +43,11 @@ def _format_input(payload: Any) -> str:
             parts.append(f"{key}={_summarize_text(value, 80)}")
         return "，".join(parts) if parts else "无参数"
     return _summarize_text(payload, 120)
+
+
+def summarize_text(value: Any, limit: int = 240) -> str:
+    """Public wrapper used by the incremental progress writer."""
+    return _summarize_text(value, limit)
 
 
 def build_evidence_from_tool_calls(tool_calls: list[dict]) -> list[dict]:

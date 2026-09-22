@@ -45,6 +45,7 @@ const hasUnsavedChannelChange = computed(() => (
 const activeChannelOptions = computed(() => channelOptions.filter((item) => isChannelActive(item.value)))
 const allActiveChannelsReady = computed(() => activeChannelOptions.value.every((item) => channelReady(item.value)))
 const emailRecipients = computed(() => splitEmails(props.notifyCfg.email_to))
+const invalidEmailRecipients = computed(() => emailRecipients.value.filter((item) => !isEmail(item)))
 const emailSummary = computed(() => {
   if (!emailRecipients.value.length) return '尚未填写收件邮箱'
   if (emailRecipients.value.length === 1) return emailRecipients.value[0]
@@ -56,6 +57,10 @@ function splitEmails(value) {
     .split(/[,，;\s]+/)
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function isEmail(value) {
+  return /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(String(value || '').trim())
 }
 
 function applySmtpPreset(preset) {
@@ -87,10 +92,12 @@ function channelMissingFields(value) {
   if (value === 'email') {
     return [
       !props.notifyCfg.email_to && '告警收件邮箱',
+      invalidEmailRecipients.value.length > 0 && `邮箱格式：${invalidEmailRecipients.value.join('、')}`,
       !props.notifyCfg.smtp_host && 'SMTP 主机',
       !props.notifyCfg.smtp_port && '端口',
       !props.notifyCfg.smtp_username && '用户名',
       !props.notifyCfg.smtp_from && '发件人',
+      props.notifyCfg.smtp_from && !isEmail(props.notifyCfg.smtp_from) && '发件人邮箱格式',
       !(props.notifySecretAlreadySet.smtp || props.notifyCfg.smtp_password) && 'SMTP 密码',
     ].filter(Boolean)
   }

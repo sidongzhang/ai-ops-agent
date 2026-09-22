@@ -36,12 +36,12 @@ class ConnectionManager:
         args: Optional[dict] = None,
         timeout: float = 30.0,
     ) -> dict:
-        self._loop = asyncio.get_running_loop()
+        loop = asyncio.get_running_loop()
+        self._loop = loop
         ws = self._conns.get(collector_id)
         if not ws:
             raise RuntimeError("采集器未连接（WebSocket 未建立，采集器可能离线）")
         request_id = str(uuid.uuid4())
-        loop = asyncio.get_event_loop()
         future: asyncio.Future = loop.create_future()
         self._pending[request_id] = future
         try:
@@ -52,6 +52,12 @@ class ConnectionManager:
         finally:
             self._pending.pop(request_id, None)
 
+    def _require_active_loop(self) -> asyncio.AbstractEventLoop:
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            raise RuntimeError("WebSocket 事件循环未就绪，请等待采集器重新连接后再试")
+        return loop
+
     def send_command_sync(
         self,
         collector_id: int,
@@ -59,13 +65,17 @@ class ConnectionManager:
         args: Optional[dict] = None,
         timeout: float = 30.0,
     ) -> dict:
-        if not self._loop:
-            raise RuntimeError("采集器命令循环尚未就绪，请确认平台 WebSocket 已建立连接")
+        loop = self._require_active_loop()
         future = asyncio.run_coroutine_threadsafe(
             self.send_command(collector_id, cmd, args, timeout=timeout),
-            self._loop,
+            loop,
         )
-        return future.result(timeout=timeout + 1)
+        try:
+            return future.result(timeout=timeout + 1)
+        except RuntimeError as exc:
+            if "Event loop is closed" in str(exc):
+                raise RuntimeError("平台事件循环已重启，请等待采集器 WebSocket 重新连接后再试") from exc
+            raise
 
     def resolve(self, data: dict) -> None:
         """由 WS 接收循环调用，解析采集器返回的结果并唤醒等待的协程。"""

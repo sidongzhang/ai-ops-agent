@@ -7,6 +7,8 @@ import {
   CONNECTOR_FIELDS,
   CONNECTORS,
   createSystemServiceDraft,
+  getTargetAddressMeta,
+  resolvePresetInput,
   SERVICE_COLORS,
   SERVICE_PRESETS,
   SYSTEM_TEMPLATES,
@@ -26,14 +28,15 @@ const accessModeOptions = [
   {
     value: 'local',
     title: '平台本机托管',
-    desc: '服务就在当前平台机器或同网段，注册后可直接探活、巡检与诊断。',
+    desc: '服务就跑在当前平台机器上，探活地址可填 127.0.0.1。',
   },
   {
     value: 'remote',
     title: '远程系统接入',
-    desc: '客户服务器或别人电脑上的服务，先登记服务，再部署采集器出站连接平台。',
+    desc: '监控别人服务器/电脑上的服务。采集器部署在目标网络，平台通过采集器探活。',
   },
 ]
+const addressMeta = computed(() => getTargetAddressMeta(form.local))
 const filledServicesCount = computed(() => form.services.filter((service) => service.name).length)
 const nextStepText = computed(() => (
   form.local
@@ -73,14 +76,20 @@ function applyTemplate(templateKey) {
   selectedTemplate.key = templateKey
   const template = SYSTEM_TEMPLATES.find((item) => item.key === templateKey)
   if (!template) return
-  form.services = template.presets.map((item) => ({
-    ...createSystemServiceDraft(item.preset),
-    name: item.name,
-    preset: item.preset,
-    connector: item.connector,
-    fields: { ...(item.fields || {}) },
-    customFields: { ...(item.customFields || {}) },
-  }))
+  form.services = template.presets.map((item) => {
+    const svc = {
+      ...createSystemServiceDraft(item.preset),
+      name: item.name,
+      preset: item.preset,
+      connector: item.connector,
+      fields: { ...(item.fields || {}) },
+      customFields: { ...(item.customFields || {}) },
+    }
+    if (form.local && !svc.fields.host) {
+      svc.fields.host = '127.0.0.1'
+    }
+    return svc
+  })
 }
 
 function setAccessMode(mode) {
@@ -158,8 +167,8 @@ async function submit() {
         v-if="!form.local"
         type="info"
         show-icon
-        message="远程系统：先注册服务，再安装采集器"
-        description="平台不要求直接访问对方内网。注册后在系统详情页创建采集器，对方机器出站连接平台，平台再通过采集器检查服务和读取日志。"
+        message="远程系统：采集器部署在目标网络，不是平台服务器"
+        :description="`${addressMeta.hint}。先在这里登记服务的真实 IP 和端口，再到详情页创建采集器并下载到目标机器运行。`"
         style="margin-bottom:16px"
       />
 
@@ -230,8 +239,12 @@ async function submit() {
           <div class="svc-fields" v-if="SERVICE_PRESETS[svc.preset].buildConfig">
             <a-row :gutter="10">
               <a-col v-for="inp in SERVICE_PRESETS[svc.preset].inputs" :key="inp.key" :span="inp.span">
-                <a-form-item :label="inp.label" style="margin-bottom:0">
-                  <a-input v-model:value="svc.fields[inp.key]" :placeholder="inp.placeholder" size="small" />
+                <a-form-item :label="resolvePresetInput(inp, form.local).label" style="margin-bottom:0">
+                  <a-input
+                    v-model:value="svc.fields[inp.key]"
+                    :placeholder="resolvePresetInput(inp, form.local).placeholder"
+                    size="small"
+                  />
                 </a-form-item>
               </a-col>
             </a-row>

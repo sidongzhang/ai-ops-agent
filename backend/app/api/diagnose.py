@@ -1,10 +1,11 @@
 """AI 诊断端点：对已注册系统跑 Pydantic AI agent。"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlmodel import Session
 
 from ..core.database import get_session
 from ..core.deps import get_current_org_id, get_current_user, require_operator
 from ..models.auth import User
+from ..agent.llm import model_options
 from ..schemas import (
     DiagnosticTemplateOut,
     DiagnosticTemplateSettingsUpdate,
@@ -16,8 +17,9 @@ from ..schemas import (
     KnowledgeDocOut,
 )
 from ..services.diagnostics.service import (
-    diagnose_system as diagnose_system_record,
+    complete_diagnosis_report,
     list_diagnostic_templates,
+    start_diagnosis,
     update_diagnostic_templates,
 )
 from ..services.diagnostics.reports import (
@@ -31,18 +33,50 @@ router = APIRouter(prefix="/systems", tags=["agent"])
 
 
 @router.post("/{system_id}/diagnose", response_model=DiagnoseResponse)
-def diagnose_system(system_id: int, body: DiagnoseRequest,
-                    session: Session = Depends(get_session),
-                    org_id: int = Depends(get_current_org_id),
-                    user: User = Depends(get_current_user)):
+def diagnose_system(
+    system_id: int,
+    body: DiagnoseRequest,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
+):
     try:
-        return diagnose_system_record(
+        started = start_diagnosis(
             session,
             system_id,
             org_id,
             body.question,
             actor_id=str(user.id),
         )
+        if started.id is None:
+            raise HTTPException(500, "诊断任务创建失败")
+        background_tasks.add_task(
+            complete_diagnosis_report,
+            started.id,
+            system_id,
+            org_id,
+            body.question,
+            actor_id=str(user.id),
+            model_mode=body.model_mode,
+            model_name=body.model_name,
+        )
+        return started
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+
+@router.get("/{system_id}/diagnose/model-options")
+def get_diagnose_model_options(
+    system_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+):
+    from ..services.systems.service import require_system
+
+    try:
+        require_system(session, system_id, org_id)
+        return {"options": model_options()}
     except LookupError as exc:
         raise HTTPException(404, str(exc))
 

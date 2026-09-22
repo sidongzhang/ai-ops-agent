@@ -329,7 +329,7 @@ def update_service_draft(
     return _service_out(service)
 
 
-def test_service_draft(
+async def test_service_draft(
     session: Session,
     system_id: int,
     service_id: int,
@@ -350,7 +350,7 @@ def test_service_draft(
         if not manager.is_connected(collector.id):
             raise ValueError("采集器当前离线，请先启动采集器")
         try:
-            response = manager.send_command_sync(
+            response = await manager.send_command(
                 collector.id,
                 "health_check",
                 {"service": service.name},

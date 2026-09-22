@@ -19,6 +19,12 @@ pids/
 *.log
 *.db
 
+# evals：报告/注入 journal/向量缓存不入库；但样例日志 fixture 必须入库（覆盖上面的 *.log）
+evals/results/
+evals/knowledge/docs/*/vectors.json
+!evals/fixtures/logs/
+!evals/fixtures/logs/*.log
+
 # node / frontend build
 node_modules/
 dist/
@@ -30,6 +36,9 @@ dist-prod/
 .vscode/
 .cursor/
 .DS_Store
+
+# personal / not part of the project
+docs/resume/
 
 # PyInstaller build artifacts
 build/

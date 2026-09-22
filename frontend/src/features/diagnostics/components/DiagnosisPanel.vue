@@ -16,10 +16,13 @@ const {
   chatBox,
   clearMessages,
   loadHistory,
+  loadModelOptions,
   diagnosing,
   fixing,
   historyLoading,
   messages,
+  modelChoice,
+  modelOptions,
   question,
   renderMd,
   lastQuestion,
@@ -88,6 +91,11 @@ function restartModeLabel(message) {
   if (mode === 'collector') return '远程采集器'
   return '未确定'
 }
+
+function modelOptionLabel(option) {
+  if (!option?.model) return option?.label || option?.value
+  return `${option.label} · ${option.model}`
+}
 </script>
 
 <template>
@@ -143,7 +151,7 @@ function restartModeLabel(message) {
           <span v-if="message.role === 'user'" class="bubble bubble--user">{{ message.text }}</span>
           <div v-else class="agent-response">
             <DiagnosisEvidenceChain
-              v-if="message.role === 'agent' && (message.evidence?.length || message.evidenceSources?.length || message.templateDescription || message.knowledgeRefs?.length)"
+              v-if="message.role === 'agent' && message.status !== 'running' && (message.evidence?.length || message.evidenceSources?.length || message.templateDescription || message.knowledgeRefs?.length)"
               :system-id="systemId"
               :template-description="message.templateDescription"
               :model="message.model"
@@ -156,7 +164,10 @@ function restartModeLabel(message) {
               :report-id="message.reportId"
               :report-type="message.reportType"
             />
-            <div class="bubble bubble--agent" v-html="renderMd(message.text)" />
+            <div :class="['bubble', 'bubble--agent', message.status === 'running' ? 'bubble--running' : '']">
+              <a-spin v-if="message.status === 'running'" size="small" class="bubble__spin" />
+              <span v-html="renderMd(message.text)" />
+            </div>
           </div>
         </div>
 
@@ -227,13 +238,28 @@ function restartModeLabel(message) {
         </div>
 
       </template>
-
-      <div v-if="diagnosing" class="thinking-row">
-        <a-spin size="small" /><span>AI 正在分析…</span>
-      </div>
     </div>
 
     <div class="chat-input-row">
+      <a-select
+        v-model:value="modelChoice"
+        class="model-select"
+        option-label-prop="label"
+        :disabled="diagnosing || fixing"
+        @dropdown-visible-change="(open) => open && loadModelOptions()"
+      >
+        <a-select-option
+          v-for="option in modelOptions"
+          :key="option.value"
+          :value="option.value"
+          :label="modelOptionLabel(option)"
+        >
+          <div class="model-option">
+            <span>{{ modelOptionLabel(option) }}</span>
+            <small>{{ option.description }}</small>
+          </div>
+        </a-select-option>
+      </a-select>
       <a-input-search
         v-model:value="question"
         placeholder="例如：Redis 内存多少？Kafka 有积压吗？今天任务数据到了没？"
@@ -297,6 +323,15 @@ function restartModeLabel(message) {
   border: 1px solid var(--border-color);
   box-shadow: 0 1px 4px rgba(0,0,0,.05);
   text-align: left;
+}
+.bubble--running {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.bubble__spin {
+  margin-top: 3px;
+  flex-shrink: 0;
 }
 .thinking-row {
   display: flex;
@@ -425,6 +460,20 @@ function restartModeLabel(message) {
   display: flex;
   gap: 8px;
 }
+.model-select {
+  width: 220px;
+  flex: 0 0 220px;
+}
+.model-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.25;
+}
+.model-option small {
+  color: var(--text-subtle);
+  font-size: 11px;
+}
 .chat-input {
   min-width: 0;
   flex: 1;
@@ -482,6 +531,10 @@ function restartModeLabel(message) {
 @media (max-width: 720px) {
   .chat-input-row {
     flex-direction: column;
+  }
+  .model-select {
+    width: 100%;
+    flex-basis: auto;
   }
 }
 </style>

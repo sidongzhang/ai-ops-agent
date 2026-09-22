@@ -37,11 +37,32 @@ async function ensureMarked() {
   return markedParser
 }
 
+function buildAgentMessageFromDiagnose(data) {
+  return {
+    role: 'agent',
+    reportId: data.id,
+    reportType: 'diagnose',
+    status: data.status || 'success',
+    text: data.answer,
+    templateName: data.template_name,
+    templateDescription: data.template_description,
+    model: data.model,
+    durationMs: data.duration_ms,
+    totalTokens: data.total_tokens,
+    evidenceSources: data.evidence_sources || [],
+    evidenceSteps: data.evidence_steps || [],
+    evidence: data.evidence || [],
+    toolCalls: data.tool_calls || [],
+    knowledgeRefs: data.knowledge_refs || [],
+  }
+}
+
 function buildAgentMessageFromReport(report) {
   return {
     role: 'agent',
     reportId: report.id,
     reportType: report.report_type,
+    status: report.status || 'success',
     text: report.answer,
     templateName: report.template_name,
     templateDescription: report.template_description,
@@ -57,23 +78,29 @@ function buildAgentMessageFromReport(report) {
   }
 }
 
-function buildAgentMessageFromDiagnose(data) {
-  return {
-    role: 'agent',
-    reportId: data.id,
-    reportType: 'diagnose',
-    text: data.answer,
-    templateName: data.template_name,
-    templateDescription: data.template_description,
-    model: data.model,
-    durationMs: data.duration_ms,
-    totalTokens: data.total_tokens,
-    evidenceSources: data.evidence_sources || [],
-    evidenceSteps: data.evidence_steps || [],
-    evidence: data.evidence || [],
-    toolCalls: data.tool_calls || [],
-    knowledgeRefs: data.knowledge_refs || [],
+const DIAGNOSIS_POLL_INTERVAL_MS = 2500
+const DIAGNOSIS_POLL_TIMEOUT_MS = 10 * 60 * 1000
+const DEFAULT_MODEL_OPTIONS = [
+  { value: 'auto', label: '自动', description: '按问题自动选择模型', mode: '', model: '' },
+  { value: 'local', label: '本地模型', description: '使用本地部署模型', mode: 'local', model: '' },
+  { value: 'api', label: 'API 模型', description: '使用远程 API 模型', mode: 'api', model: '' },
+  { value: 'advanced', label: '高级模型', description: '用于复杂故障分析', mode: '', model: '' },
+]
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitForDiagnosisReport(systemId, reportId) {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < DIAGNOSIS_POLL_TIMEOUT_MS) {
+    await sleep(DIAGNOSIS_POLL_INTERVAL_MS)
+    const { data } = await api.get(`/systems/${systemId}/diagnosis-reports/${reportId}`)
+    if (data.status === 'success' || data.status === 'failed') {
+      return data
+    }
   }
+  throw new Error('诊断超时，请稍后在诊断历史中查看结果')
 }
 
 function buildActionMessageFromWorkflow(workflow) {
@@ -107,6 +134,22 @@ export function useDiagnosisChat(systemId) {
   const chatBox = ref(null)
   const markdownReady = ref(false)
   const lastQuestion = ref('')
+  const modelChoice = ref(localStorage.getItem('diagnosis:model-choice') || 'auto')
+  const modelOptions = ref(DEFAULT_MODEL_OPTIONS)
+
+  async function loadModelOptions() {
+    try {
+      const { data } = await api.get(`/systems/${systemId}/diagnose/model-options`)
+      if (Array.isArray(data?.options) && data.options.length) {
+        modelOptions.value = data.options
+        if (!data.options.some((item) => item.value === modelChoice.value)) {
+          modelChoice.value = 'auto'
+        }
+      }
+    } catch {
+      modelOptions.value = DEFAULT_MODEL_OPTIONS
+    }
+  }
 
   async function loadHistory() {
     historyLoading.value = true
@@ -160,19 +203,38 @@ export function useDiagnosisChat(systemId) {
   async function ask() {
     const q = question.value.trim()
     if (!q) return
+    localStorage.setItem('diagnosis:model-choice', modelChoice.value)
     lastQuestion.value = q
     messages.value.push({ role: 'user', text: q })
     question.value = ''
     diagnosing.value = true
+    const pendingIndex = messages.value.length
+    messages.value.push({
+      role: 'agent',
+      status: 'running',
+      text: '诊断进行中，正在收集健康检查、日志和指标证据…',
+    })
     await scrollBottom()
     try {
-      const { data } = await api.post(`/systems/${systemId}/diagnose`, { question: q })
-      messages.value.push(buildAgentMessageFromDiagnose(data))
-    } catch (error) {
-      messages.value.push({
-        role: 'agent',
-        text: `⚠️ 诊断失败：${extractErrorMessage(error, '诊断失败')}`,
+      const { data } = await api.post(`/systems/${systemId}/diagnose`, {
+        question: q,
+        model_mode: modelChoice.value,
       })
+      if (data.status === 'running' && data.id) {
+        const report = await waitForDiagnosisReport(systemId, data.id)
+        messages.value[pendingIndex] = buildAgentMessageFromReport(report)
+        if (report.status === 'failed') {
+          message.error(report.error_message || '诊断失败')
+        }
+      } else {
+        messages.value[pendingIndex] = buildAgentMessageFromDiagnose(data)
+      }
+    } catch (error) {
+      messages.value[pendingIndex] = {
+        role: 'agent',
+        status: 'failed',
+        text: `⚠️ 诊断失败：${extractErrorMessage(error, '诊断失败')}`,
+      }
     } finally {
       diagnosing.value = false
       await scrollBottom()
@@ -236,6 +298,7 @@ export function useDiagnosisChat(systemId) {
   onMounted(async () => {
     await ensureMarked()
     markdownReady.value = true
+    await loadModelOptions()
     await loadHistory()
     await scrollBottom()
   })
@@ -247,11 +310,14 @@ export function useDiagnosisChat(systemId) {
     chatBox,
     clearMessages,
     loadHistory,
+    loadModelOptions,
     diagnosing,
     fixing,
     historyLoading,
     messages,
     question,
+    modelChoice,
+    modelOptions,
     renderMd,
     lastQuestion,
   }

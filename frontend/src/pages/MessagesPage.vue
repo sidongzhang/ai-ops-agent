@@ -37,6 +37,8 @@ const messagePage = ref(1)
 const messagePageSize = ref(20)
 const messageTotal = ref(0)
 const unreadTotal = ref(0)
+const messageDeliveries = ref({})
+const deliveryLoadingIds = ref(new Set())
 
 const statusOptions = [
   { key: 'all', label: '全部' },
@@ -44,6 +46,7 @@ const statusOptions = [
   { key: 'acknowledged', label: '已确认' },
   { key: 'resolved', label: '已解决' },
   { key: 'delivery_failed', label: '通知失败' },
+  { key: 'processing_failed', label: '分析失败' },
 ]
 
 const incidentStatusOptions = [
@@ -92,6 +95,12 @@ const channelText = {
   webhook: 'Webhook',
 }
 
+const deliveryStatusText = {
+  success: '成功',
+  failed: '失败',
+  pending: '待发送',
+}
+
 const systemNameById = computed(() => {
   const map = new Map()
   for (const system of systems.value) map.set(system.id, system.name)
@@ -100,6 +109,7 @@ const systemNameById = computed(() => {
 
 const unreadCount = computed(() => unreadTotal.value)
 const failedDeliveryCount = computed(() => messages.value.filter(hasFailedChannels).length)
+const failedProcessingCount = computed(() => messages.value.filter(hasFailedProcessing).length)
 const resolvedCount = computed(() => messages.value.filter((item) => item.status === 'resolved').length)
 const openIncidentCount = computed(() => incidents.value.filter((item) => item.status === 'open').length)
 const pendingWorkflowCount = computed(() => pendingWorkflows.value.length)
@@ -154,6 +164,14 @@ const summaryCards = computed(() => [
     icon: WarningOutlined,
   },
   {
+    key: 'processing-failed',
+    label: '分析失败',
+    value: failedProcessingCount.value,
+    detail: '后台分析需处理',
+    tone: failedProcessingCount.value ? 'warn' : 'neutral',
+    icon: WarningOutlined,
+  },
+  {
     key: 'resolved',
     label: '已解决',
     value: resolvedCount.value,
@@ -174,11 +192,55 @@ const summaryCards = computed(() => [
 const activeMessages = computed(() => {
   if (activeStatus.value === 'all') return messages.value
   if (activeStatus.value === 'delivery_failed') return messages.value.filter(hasFailedChannels)
+  if (activeStatus.value === 'processing_failed') return messages.value.filter(hasFailedProcessing)
   return messages.value.filter((item) => item.status === activeStatus.value)
 })
 
 function hasFailedChannels(item) {
   return item.channels?.some((channel) => channel.type !== 'web' && channel.status === 'failed')
+}
+
+function messageDeliveryItems(id) {
+  return messageDeliveries.value[id] || []
+}
+
+function isDeliveryLoading(id) {
+  return deliveryLoadingIds.value.has(id)
+}
+
+function deliveryPreview(delivery) {
+  const text = delivery.body || delivery.subject || delivery.failed_reason || ''
+  return text.length > 140 ? `${text.slice(0, 140)}...` : text
+}
+
+function hasFailedProcessing(item) {
+  return ['failed', 'enqueue_failed'].includes(item.related?.processing_status)
+}
+
+function hasProcessingStatus(item) {
+  return Boolean(item.related?.processing_status || item.related?.processing_mode)
+}
+
+function processingStatusText(item) {
+  const status = item.related?.processing_status
+  if (status === 'queued') return '等待分析'
+  if (status === 'done') return item.related?.processing_mode === 'rules' ? '规则分析完成' : '智能分析完成'
+  if (status === 'failed') return '分析失败'
+  if (status === 'enqueue_failed') return '排队失败'
+  if (item.related?.processing_mode === 'rules') return '规则分析'
+  return item.related?.processing_mode || '已加工'
+}
+
+function processingStatusColor(item) {
+  const status = item.related?.processing_status
+  if (status === 'done') return 'success'
+  if (status === 'queued') return 'processing'
+  if (status === 'failed' || status === 'enqueue_failed') return 'error'
+  return 'processing'
+}
+
+function canRetryProcessing(item) {
+  return hasFailedProcessing(item) && item.message_type !== 'log_analysis'
 }
 
 function workflowStatusText(status) {
@@ -276,10 +338,28 @@ function toggleExpand(id) {
         window.dispatchEvent(new Event('aiops:messages-changed'))
       }).catch(() => {})
     }
+    loadMessageDeliveries(id)
     return
   }
   next.delete(id)
   expandedIds.value = next
+}
+
+async function loadMessageDeliveries(id) {
+  if (messageDeliveries.value[id] || deliveryLoadingIds.value.has(id)) return
+  const nextLoading = new Set(deliveryLoadingIds.value)
+  nextLoading.add(id)
+  deliveryLoadingIds.value = nextLoading
+  try {
+    const { data } = await api.get(`/messages/${id}/deliveries`)
+    messageDeliveries.value = { ...messageDeliveries.value, [id]: data }
+  } catch {
+    messageDeliveries.value = { ...messageDeliveries.value, [id]: [] }
+  } finally {
+    const doneLoading = new Set(deliveryLoadingIds.value)
+    doneLoading.delete(id)
+    deliveryLoadingIds.value = doneLoading
+  }
 }
 
 async function toggleIncidentExpand(id) {
@@ -448,6 +528,19 @@ async function retryNotifications(item) {
   }
 }
 
+async function retryProcessing(item) {
+  actionId.value = `retry-processing-${item.id}`
+  try {
+    const { data } = await api.post(`/messages/${item.id}/retry-processing`)
+    messages.value = messages.value.map((current) => (current.id === item.id ? data : current))
+    message.success('后台分析已重新排队')
+  } catch (error) {
+    message.error(error?.response?.data?.detail || '重新分析失败')
+  } finally {
+    actionId.value = null
+  }
+}
+
 onMounted(loadMessages)
 </script>
 
@@ -462,6 +555,9 @@ onMounted(loadMessages)
         <a-tag v-if="unreadCount" color="error" class="header-tag">{{ unreadCount }} 条未读</a-tag>
         <a-tag v-if="failedDeliveryCount" color="warning" class="header-tag">
           {{ failedDeliveryCount }} 条通知失败
+        </a-tag>
+        <a-tag v-if="failedProcessingCount" color="error" class="header-tag">
+          {{ failedProcessingCount }} 条分析失败
         </a-tag>
         <a-button :loading="loading" @click="loadMessages">
           <template #icon><ReloadOutlined /></template>
@@ -751,6 +847,7 @@ onMounted(loadMessages)
               <span class="meta-chip">{{ systemNameById.get(item.system_id) || `系统 #${item.system_id}` }}</span>
               <span class="meta-time">{{ formatTime(item.created_at) }}</span>
               <span v-if="hasFailedChannels(item)" class="meta-fail">通知失败</span>
+              <span v-if="hasFailedProcessing(item)" class="meta-fail">分析失败</span>
             </div>
 
             <p v-if="!isExpanded(item.id)" class="message-preview">{{ previewText(item) }}</p>
@@ -805,12 +902,50 @@ onMounted(loadMessages)
             </a-button>
           </div>
 
-          <div v-if="item.related?.processing_mode" class="detail-block detail-block--inline">
+          <div v-if="item.channels?.length || messageDeliveryItems(item.id).length || isDeliveryLoading(item.id)" class="detail-block">
+            <div class="detail-block-title">通知投递记录</div>
+            <a-spin v-if="isDeliveryLoading(item.id)" size="small" />
+            <div v-else-if="messageDeliveryItems(item.id).length" class="delivery-list">
+              <div
+                v-for="delivery in messageDeliveryItems(item.id)"
+                :key="delivery.id"
+                :class="['delivery-item', delivery.status === 'success' ? 'ok' : 'fail']"
+              >
+                <div class="delivery-head">
+                  <span class="delivery-channel">{{ channelText[delivery.channel] || delivery.channel }}</span>
+                  <a-tag :color="delivery.status === 'success' ? 'success' : delivery.status === 'failed' ? 'error' : 'default'" class="flat-tag">
+                    {{ deliveryStatusText[delivery.status] || delivery.status }}
+                  </a-tag>
+                  <span v-if="delivery.attempts" class="delivery-meta">{{ delivery.attempts }} 次</span>
+                  <span class="delivery-meta">{{ formatTime(delivery.sent_at || delivery.created_at) }}</span>
+                </div>
+                <div class="delivery-recipient">{{ delivery.recipient || '站内消息' }}</div>
+                <p v-if="deliveryPreview(delivery)" class="delivery-body">{{ deliveryPreview(delivery) }}</p>
+                <p v-if="delivery.failed_reason" class="delivery-error">{{ delivery.failed_reason }}</p>
+              </div>
+            </div>
+            <div v-else class="delivery-empty">暂无外部投递备份，仅保留站内消息状态。</div>
+          </div>
+
+          <div v-if="hasProcessingStatus(item)" class="detail-block detail-block--inline">
             <span class="detail-block-title">加工状态</span>
-            <a-tag color="processing" class="flat-tag">
-              {{ item.related.processing_mode === 'rules' ? '规则分析' : item.related.processing_mode }}
+            <a-tag :color="processingStatusColor(item)" class="flat-tag">
+              {{ processingStatusText(item) }}
             </a-tag>
             <span v-if="item.related?.processed_at" class="processed-time">{{ formatTime(item.related.processed_at) }}</span>
+            <span v-if="hasFailedProcessing(item) && item.related?.processing_error" class="processing-error">{{ item.related.processing_error }}</span>
+            <a-button
+              v-if="canRetryProcessing(item)"
+              size="small"
+              class="retry-btn retry-btn--inline"
+              :loading="actionId === `retry-processing-${item.id}`"
+              @click.stop="retryProcessing(item)"
+            >
+              重新分析
+            </a-button>
+            <span v-else-if="hasFailedProcessing(item) && item.message_type === 'log_analysis'" class="processing-hint">
+              日志原文未保存，请对方系统使用同一个 request_id 重新上传。
+            </span>
           </div>
 
           <div v-if="messageWorkflows(item).length" class="detail-block">
@@ -1448,12 +1583,88 @@ onMounted(loadMessages)
   overflow-wrap: anywhere;
 }
 
+.delivery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.delivery-item {
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: var(--card-bg);
+}
+
+.delivery-item.ok {
+  border-color: color-mix(in srgb, #16a34a 24%, var(--border-color));
+}
+
+.delivery-item.fail {
+  border-color: color-mix(in srgb, #dc2626 24%, var(--border-color));
+}
+
+.delivery-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.delivery-channel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.delivery-meta,
+.delivery-recipient,
+.delivery-empty {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.delivery-recipient {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.delivery-body,
+.delivery-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.delivery-error {
+  color: #dc2626;
+}
+
 .retry-btn {
   margin-top: 10px;
 }
 
+.retry-btn--inline {
+  margin-top: 0;
+  margin-left: 4px;
+}
+
 .processed-time {
   font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.processing-error,
+.processing-hint {
+  font-size: 12px;
+  color: #dc2626;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.processing-hint {
   color: var(--text-subtle);
 }
 

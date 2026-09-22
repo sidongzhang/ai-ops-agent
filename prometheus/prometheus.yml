@@ -1,19 +1,31 @@
 global:
   scrape_interval: 15s
 
+# 说明：ALGP 的监控对象（sys_monitor_target）通过 Prometheus 的
+# `up{target_id="<id>"}` 判定 UP/DOWN（见 HeartbeatCheckScheduler）。
+# 因此每个抓取任务必须带上 target_id 标签，且取值与 sys_monitor_target.target_id 完全一致。
+# 缺失标签会让对应监控对象永远显示 DOWN。
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+        labels:
+          target_id: '89d6714f58031610d8263c8ac5c71e9e'
 
   - job_name: 'node-exporter'
     static_configs:
       - targets: ['node-exporter:9100']
+        labels:
+          target_id: '25633222ccc93ee83e0d56afe765de5c'
 
   - job_name: 'kafka-exporter'
     static_configs:
       - targets: ['kafka-exporter:9308']
+        labels:
+          target_id: 'e61c807d8b781c0208973f59b1feddb7'
 
   - job_name: 'mysqld-exporter'
     static_configs:
       - targets: ['mysqld-exporter:9104']
+        labels:
+          target_id: '19f98e926bb1f2d754d0bbbb8bdaa8c5'

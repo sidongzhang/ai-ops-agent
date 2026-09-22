@@ -3,7 +3,24 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    proxy: {
+      '/auth': 'http://127.0.0.1:8000',
+      '/systems': 'http://127.0.0.1:8000',
+      '/collectors': 'http://127.0.0.1:8000',
+      '/collector': 'http://127.0.0.1:8000',
+      '/workflows': 'http://127.0.0.1:8000',
+      '/messages': 'http://127.0.0.1:8000',
+      '/audit': 'http://127.0.0.1:8000',
+      '/analytics': 'http://127.0.0.1:8000',
+      '/openapi': 'http://127.0.0.1:8000',
+      '/incidents': 'http://127.0.0.1:8000',
+      '/healthz': 'http://127.0.0.1:8000',
+      '/ws': { target: 'ws://127.0.0.1:8000', ws: true },
+      '/feishu': 'http://127.0.0.1:8000',
+    },
+  },
   build: {
     rollupOptions: {
       output: {

@@ -1,0 +1,40 @@
+{
+  "id": "eval-docker-local",
+  "name": "eval-docker-local 本地演示栈（日志错误风暴场景）",
+  "local": true,
+  "infra": {
+    "prometheus_url": "http://127.0.0.1:9090",
+    "prometheus": { "url": "http://127.0.0.1:9090" }
+  },
+  "services": [
+    {
+      "name": "API",
+      "connector": "local",
+      "kind": "process",
+      "config": {
+        "log_file": "evals/fixtures/logs/api-error-storm.log",
+        "pid_file": "pids/api.pid"
+      },
+      "log_file": "evals/fixtures/logs/api-error-storm.log",
+      "health_url": "http://127.0.0.1:8000/health",
+      "runtime": { "container": "", "systemd_unit": "", "selector": "" }
+    },
+    {
+      "name": "Redis",
+      "connector": "tcp",
+      "config": { "host": "127.0.0.1", "port": 6379, "timeout": 3 },
+      "host": "127.0.0.1",
+      "port": 6379,
+      "container": "ai-ops-agent-redis-1",
+      "runtime": { "container": "ai-ops-agent-redis-1", "systemd_unit": "", "selector": "" }
+    },
+    {
+      "name": "Prometheus",
+      "connector": "prometheus",
+      "config": { "url": "http://127.0.0.1:9090" },
+      "url": "http://127.0.0.1:9090",
+      "up_query": "up",
+      "runtime": { "container": "ai-ops-agent-prometheus-1", "systemd_unit": "", "selector": "" }
+    }
+  ]
+}

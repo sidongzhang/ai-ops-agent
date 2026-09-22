@@ -15,6 +15,7 @@ class DiagnosisReport(SQLModel, table=True):
     org_id: int = Field(foreign_key="orgs.id", index=True)
     system_id: int = Field(foreign_key="systems.id", index=True)
     user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    external_request_id: str = Field(default="", index=True, max_length=255)
     report_type: str = Field(default="diagnose", index=True)
     status: str = Field(default="success", index=True)
     question: str
@@ -29,5 +30,6 @@ class DiagnosisReport(SQLModel, table=True):
     tool_calls: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     evidence: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     knowledge_refs: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+    business_context: dict = Field(default_factory=dict, sa_column=Column(JSON))
     error_message: str = ""
     created_at: datetime = Field(default_factory=utcnow, index=True)

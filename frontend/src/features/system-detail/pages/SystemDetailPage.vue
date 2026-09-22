@@ -683,7 +683,12 @@ onMounted(() => {
 
     </a-tabs>
 
-    <AddServiceModal v-model:open="addSvcOpen" :system-id="props.id" @created="loadSystem" />
+    <AddServiceModal
+      v-model:open="addSvcOpen"
+      :system-id="props.id"
+      :system-local="!!system?.local"
+      @created="loadSystem"
+    />
   </div>
 
   <div v-else class="loading-center">

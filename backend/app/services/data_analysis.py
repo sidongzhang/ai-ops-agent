@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import re
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Callable
 
 from sqlalchemy import create_engine, text
@@ -30,10 +31,16 @@ _TODAY_KEYWORDS = ("今天", "今日", "当天", "today", "新增", "到达")
 _DEFAULT_LIMIT = 20
 _MAX_LIMIT = 100
 _STUCK_TASK_KEYWORDS = ("一直处理中", "卡住", "卡死", "超时任务", "任务积压", "处理不完", "长期处理中")
+_LOG_INTENT_KEYWORDS = (
+    "日志", "log", "报错", "堆栈", "traceback", "错误日志", "异常日志",
+    "error log", "慢查询", "mysql 日志", "redis 日志",
+)
 
 
 def is_data_analysis_question(question: str) -> bool:
     normalized = (question or "").lower()
+    if any(keyword in normalized for keyword in _LOG_INTENT_KEYWORDS):
+        return False
     return any(keyword in normalized for keyword in (*_DATA_KEYWORDS, *_STUCK_TASK_KEYWORDS))
 
 
@@ -46,6 +53,12 @@ def get_readonly_database_config(session: Session, system_id: int, org_id: int) 
     system = require_system(session, system_id, org_id)
     config = _data_source_config(system.infra)
     return ReadonlyDatabaseConfig(**mask_sensitive_fields(config)) if config else ReadonlyDatabaseConfig()
+
+
+def get_dataset_source_config(session: Session, system_id: int, org_id: int) -> dict:
+    """Return the decrypted readonly source config (used to build the agent's dataset tool)."""
+    system = require_system(session, system_id, org_id)
+    return _data_source_config(system.infra)
 
 
 def analyze_system_data(
@@ -336,6 +349,112 @@ def run_readonly_query(
     return rows
 
 
+def list_readonly_datasets(config: dict) -> list[dict]:
+    """Normalize the configured dataset list; skip anything with an unsafe name."""
+    datasets = config.get("datasets") or []
+    result: list[dict] = []
+    for item in datasets:
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("code") or "").strip()
+        view = str(item.get("view") or "").strip()
+        if not _IDENTIFIER.match(code) or not _IDENTIFIER.match(view):
+            continue
+        result.append(
+            {
+                "code": code,
+                "label": str(item.get("label") or code),
+                "view": view,
+                "description": str(item.get("description") or ""),
+                "date_column": str(item.get("date_column") or "stat_date"),
+                "filterable": [f for f in (item.get("filterable") or []) if isinstance(f, str)],
+                "default_days": _limit(item.get("default_days") or 7),
+            }
+        )
+    return result
+
+
+def describe_readonly_datasets(config: dict) -> str:
+    """Build the prompt-facing catalog of queryable datasets."""
+    datasets = list_readonly_datasets(config)
+    if not datasets:
+        return ""
+    today = datetime.now().date()
+    lines = [f"（当前日期：{today.isoformat()}，周{'一二三四五六日'[today.weekday()]}）"]
+    for item in datasets:
+        line = f"- {item['code']}：{item['label']}"
+        if item["description"]:
+            line += f"。{item['description']}"
+        if item["filterable"]:
+            line += f"（可按 {'、'.join(item['filterable'])} 过滤）"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _parse_date(value: Any) -> str:
+    text_value = str(value or "").strip()
+    lowered = text_value.lower()
+    today = datetime.now().date()
+    if not text_value or lowered in {"today", "今天", "今日"}:
+        return today.isoformat()
+    if lowered in {"yesterday", "昨天"}:
+        return (today - timedelta(days=1)).isoformat()
+    try:
+        return datetime.fromisoformat(text_value).date().isoformat()
+    except ValueError as exc:
+        raise ValueError(f"无法识别的日期「{text_value}」，请使用 YYYY-MM-DD 格式") from exc
+
+
+def query_readonly_dataset(
+    config: dict,
+    dataset_key: str,
+    *,
+    date_from: Any = "",
+    date_to: Any = "",
+    filters: dict | None = None,
+    max_rows: int = 60,
+    executor: Callable | None = None,
+) -> dict[str, Any]:
+    """Run one parameterized aggregate query against a whitelisted dataset view.
+
+    The view name and every column name come from the operator-provided config,
+    never from the model. Values are always bound parameters.
+    """
+    datasets = {item["code"]: item for item in list_readonly_datasets(config)}
+    dataset = datasets.get(str(dataset_key or "").strip())
+    if not dataset:
+        raise ValueError(
+            f"未知数据集「{dataset_key}」，可用：{'、'.join(datasets) or '无'}"
+        )
+
+    view = _safe_identifier(dataset["view"], "view")
+    date_column = _safe_identifier(dataset["date_column"], "date_column")
+
+    where: list[str] = []
+    params: dict[str, Any] = {}
+    if date_from:
+        where.append(f"{date_column} >= :date_from")
+        params["date_from"] = _parse_date(date_from)
+    if date_to:
+        where.append(f"{date_column} <= :date_to")
+        params["date_to"] = _parse_date(date_to)
+    for key, value in (filters or {}).items():
+        column = _safe_identifier(key, "filter")
+        if column not in dataset["filterable"]:
+            raise ValueError(f"数据集「{dataset['code']}」不支持按 {column} 过滤")
+        where.append(f"{column} = :f_{column}")
+        params[f"f_{column}"] = str(value)
+
+    sql = f"SELECT * FROM {view}"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += f" ORDER BY {date_column} DESC LIMIT :limit"
+    params["limit"] = _limit(max_rows)
+
+    rows = run_readonly_query(config, sql, params, max_rows=max_rows, executor=executor)
+    return {"dataset": dataset, "sql": _normalize_sql(sql), "rows": _serialize_rows(rows)}
+
+
 def _remote_query_executor(session: Session, system) -> Callable | None:
     """返回一个通过在线采集器执行只读 SQL 的闭包；不可用时保留直连回退。"""
     if system.local:
@@ -396,6 +515,10 @@ def _serialize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _serialize_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
     if isinstance(value, list):
         return [_serialize_value(item) for item in value]
     if isinstance(value, dict):

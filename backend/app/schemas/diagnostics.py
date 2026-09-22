@@ -1,5 +1,6 @@
 """AI diagnosis schemas."""
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -25,11 +26,14 @@ class KnowledgeRefOut(BaseModel):
 
 class DiagnoseRequest(BaseModel):
     question: str
+    model_mode: Literal["auto", "default", "local", "api", "advanced"] = "auto"
+    model_name: str = Field(default="", max_length=128)
 
 
 class DiagnoseResponse(BaseModel):
     id: int | None = None
     system_id: int
+    status: str = "success"
     answer: str
     template_name: str = ""
     template_description: str = ""
@@ -41,12 +45,15 @@ class DiagnoseResponse(BaseModel):
     tool_calls: list[dict] = Field(default_factory=list)
     evidence: list[DiagnosisEvidenceItem] = Field(default_factory=list)
     knowledge_refs: list[KnowledgeRefOut] = Field(default_factory=list)
+    business_context: dict = Field(default_factory=dict)
+    error_message: str = ""
 
 
 class DiagnosisReportOut(BaseModel):
     id: int
     system_id: int
     user_id: int | None = None
+    external_request_id: str = ""
     report_type: str
     status: str
     question: str
@@ -61,6 +68,7 @@ class DiagnosisReportOut(BaseModel):
     tool_calls: list[dict] = Field(default_factory=list)
     evidence: list[DiagnosisEvidenceItem] = Field(default_factory=list)
     knowledge_refs: list[KnowledgeRefOut] = Field(default_factory=list)
+    business_context: dict = Field(default_factory=dict)
     error_message: str = ""
     created_at: datetime
 
@@ -91,6 +99,23 @@ class DataAnalysisResponse(BaseModel):
     evidence_items: list[DiagnosisEvidenceItem] = Field(default_factory=list)
 
 
+class ReadonlyDataset(BaseModel):
+    """A named, pre-aggregated view the agent is allowed to query.
+
+    The identifier field is `code` rather than `key` on purpose: field names
+    containing "key" are treated as secrets by core.security and would be
+    encrypted at rest / masked on read.
+    """
+
+    code: str = Field(min_length=1, max_length=64)
+    label: str = ""
+    view: str = ""
+    description: str = ""
+    date_column: str = "stat_date"
+    filterable: list[str] = Field(default_factory=list)
+    default_days: int = 7
+
+
 class ReadonlyDatabaseConfig(BaseModel):
     enabled: bool = False
     name: str = ""
@@ -108,6 +133,7 @@ class ReadonlyDatabaseConfig(BaseModel):
     processing_values: list[str] = Field(default_factory=lambda: ["processing", "处理中"])
     stuck_threshold_minutes: int = 30
     worker_service_names: list[str] = Field(default_factory=list)
+    datasets: list[ReadonlyDataset] = Field(default_factory=list)
 
 
 class KnowledgeDocCreate(BaseModel):

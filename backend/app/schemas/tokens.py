@@ -10,9 +10,14 @@ class SystemTokenCreate(BaseModel):
         "alert:create",
         "health:push",
         "message:read",
+        "message:write",
         "message:send",
+        "report:read",
         "report:submit",
         "log:analyze",
+        "log:alert",
+        "diagnosis:run",
+        "diagnosis:read",
     ])
     allowed_ips: list[str] = Field(default_factory=list)
     expires_at: datetime | None = None

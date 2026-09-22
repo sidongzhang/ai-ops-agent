@@ -1,5 +1,6 @@
 """Application services for AI diagnosis and diagnostic playbooks."""
-import asyncio
+import json
+import logging
 import time
 
 from sqlmodel import Session
@@ -16,17 +17,29 @@ from app.schemas import (
     DiagnoseResponse,
 )
 from app.services.audit import record_audit_event
-from app.services.data_analysis import analyze_system_data, get_readonly_database_config, is_data_analysis_question
+from app.services.data_analysis import (
+    analyze_system_data,
+    describe_readonly_datasets,
+    get_dataset_source_config,
+    get_readonly_database_config,
+    list_readonly_datasets,
+    query_readonly_dataset,
+)
+from app.services.data_analysis import _remote_query_executor
 from app.services.descriptors.builder import system_to_descriptor
 from app.services.diagnostics.evidence import (
-    build_evidence_from_data_analysis,
+    TOOL_LABELS,
     build_evidence_from_tool_calls,
     build_evidence_steps,
     build_knowledge_refs,
+    summarize_text,
 )
+from app.models.diagnostics import DiagnosisReport
 from app.services.diagnostics.reports import save_diagnosis_report
 from app.services.systems.service import require_system
 from app.services.realtime.websocket import manager
+
+log = logging.getLogger(__name__)
 
 
 def _disabled_template_names(system) -> set[str]:
@@ -105,7 +118,7 @@ def _remote_command(session: Session, system):
 
     def execute(command: str, args: dict) -> dict:
         try:
-            return asyncio.run(manager.send_command(collector.id, command, args))
+            return manager.send_command_sync(collector.id, command, args)
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "result": str(exc)}
 
@@ -116,31 +129,106 @@ def _business_data_query(session: Session, system, org_id: int, actor_id: str):
     config = get_readonly_database_config(session, system.id, org_id)
     if not config.enabled:
         return None
+    system_id = system.id
 
     def query(question: str) -> str:
-        try:
-            result = analyze_system_data(
-                session,
-                system.id,
-                org_id,
-                question,
-                actor_type="agent",
-                actor_id=actor_id or "agent",
-            )
-            parts = [result.answer]
-            evidence = result.evidence or {}
-            if evidence.get("analysis_type") == "stuck_tasks":
-                parts.append(
-                    f"卡住任务数：{evidence.get('stuck_count', 0)}，"
-                    f"阈值：{evidence.get('stuck_threshold_minutes', 0)} 分钟"
+        # 工具可能被并行调用，绝不能复用诊断主线程的 Session。
+        from app.core.database import engine
+
+        with Session(engine) as scoped:
+            try:
+                result = analyze_system_data(
+                    scoped,
+                    system_id,
+                    org_id,
+                    question,
+                    actor_type="agent",
+                    actor_id=actor_id or "agent",
                 )
-            elif evidence.get("total") is not None:
-                parts.append(f"统计总量：{evidence.get('total')}")
-            return "\n".join(parts)
-        except ValueError as exc:
-            return f"无法查询业务数据：{exc}"
+            except Exception as exc:  # noqa: BLE001
+                return f"无法查询业务数据：{exc}"
+        parts = [result.answer]
+        evidence = result.evidence or {}
+        if evidence.get("analysis_type") == "stuck_tasks":
+            parts.append(
+                f"卡住任务数：{evidence.get('stuck_count', 0)}，"
+                f"阈值：{evidence.get('stuck_threshold_minutes', 0)} 分钟"
+            )
+        elif evidence.get("total") is not None:
+            parts.append(f"统计总量：{evidence.get('total')}")
+        return "\n".join(parts)
 
     return query
+
+
+def _business_dataset_query(session: Session, system, org_id: int, actor_id: str):
+    """Build the agent's dataset tool + prompt catalog from the readonly source config."""
+    config = get_dataset_source_config(session, system.id, org_id)
+    if not config or config.get("enabled") is False:
+        return None, ""
+    datasets = list_readonly_datasets(config)
+    if not datasets:
+        return None, ""
+    catalog = describe_readonly_datasets(config)
+    remote_executor = _remote_query_executor(session, system)
+    max_rows = int(config.get("max_rows") or 60)
+
+    def query(dataset: str, date_from: str = "", date_to: str = "") -> str:
+        try:
+            result = query_readonly_dataset(
+                config,
+                dataset,
+                date_from=date_from,
+                date_to=date_to,
+                max_rows=max_rows,
+                executor=remote_executor,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return f"业务数据集查询失败：{exc}"
+        meta = result["dataset"]
+        rows = result["rows"]
+        header = f"数据集 {meta['code']}（{meta['label']}）"
+        if not rows:
+            return f"{header} 在 {date_from or '不限'} ~ {date_to or '不限'} 区间内没有任何记录。"
+        payload = json.dumps(rows[:40], ensure_ascii=False, default=str)
+        totals: dict[str, float] = {}
+        for row in rows[:40]:
+            for key, value in row.items():
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    continue
+                totals[key] = totals.get(key, 0) + value
+        total_line = ""
+        if totals:
+            rendered = "，".join(
+                f"{key} 合计 {int(value) if float(value).is_integer() else round(value, 2)}"
+                for key, value in totals.items()
+            )
+            total_line = (
+                f"\n汇总（对以上 {min(len(rows), 40)} 行求和，可直接引用，不要自己再加减）：{rendered}"
+            )
+        # 审计用独立 Session：工具会被并行调用，复用诊断主 Session 会污染事务。
+        try:
+            from app.core.database import engine
+
+            with Session(engine) as audit_session:
+                record_audit_event(
+                    audit_session,
+                    org_id=org_id,
+                    system_id=system.id,
+                    actor_type="agent",
+                    actor_id=actor_id or "agent",
+                    event_type="data_analysis.dataset_queried",
+                    target_type="dataset",
+                    target_id=meta["code"],
+                    input={"date_from": date_from, "date_to": date_to},
+                    output={"rows": len(rows), "sql": result["sql"]},
+                    commit=True,
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        return f"{header} 共 {len(rows)} 行（最多展示 40 行）：\n{payload}{total_line}"
+
+    return query, catalog
 
 
 def _user_id_from_actor(actor_id: str) -> int | None:
@@ -156,6 +244,7 @@ def _build_diagnose_response(
     *,
     report_id: int | None,
     system_id: int,
+    status: str = "success",
     answer: str,
     template_name: str = "",
     template_description: str = "",
@@ -167,6 +256,7 @@ def _build_diagnose_response(
     evidence: list[dict] | None = None,
     evidence_steps: list[str] | None = None,
     knowledge_refs: list[dict] | None = None,
+    error_message: str = "",
 ) -> DiagnoseResponse:
     tool_calls = tool_calls or []
     evidence = evidence or build_evidence_from_tool_calls(tool_calls)
@@ -174,6 +264,7 @@ def _build_diagnose_response(
     return DiagnoseResponse(
         id=report_id,
         system_id=system_id,
+        status=status,
         answer=answer,
         template_name=template_name,
         template_description=template_description,
@@ -185,7 +276,302 @@ def _build_diagnose_response(
         tool_calls=tool_calls,
         evidence=evidence,
         knowledge_refs=knowledge_refs or [],
+        error_message=error_message,
     )
+
+
+def _is_kafka_lag_question(question: str) -> bool:
+    lowered = question.lower()
+    return "kafka" in lowered and any(
+        marker in lowered
+        for marker in ("积压", "lag", "堆积", "消息", "consumer", "消费")
+    )
+
+
+def _kafka_lag_fallback(
+    session: Session,
+    system,
+    org_id: int,
+    question: str,
+    *,
+    started_at: float,
+    user_id: int | None,
+    existing_report_id: int | None,
+) -> DiagnoseResponse:
+    from app.services.monitoring.metrics import get_metrics
+
+    metrics = get_metrics(session, system.id, org_id)
+    kafka = metrics.kafka
+    if not kafka.available:
+        answer = (
+            "我没有拿到 Kafka 的可用指标，暂时无法判断是否存在消息积压。\n\n"
+            "建议先确认 Kafka 服务已启用监控，并且 Prometheus/kafka-exporter 或采集器已经接入。"
+        )
+    elif kafka.consumer_groups:
+        top_groups = sorted(kafka.consumer_groups, key=lambda item: item.lag, reverse=True)[:10]
+        rows = "\n".join(
+            f"- 消费组 `{item.group}` / Topic `{item.topic}`：Lag `{item.lag}`"
+            for item in top_groups
+        )
+        if kafka.total_lag > 0:
+            answer = (
+                f"有消息积压。当前 Kafka 总 Lag 为 `{kafka.total_lag}`。\n\n"
+                f"积压明细：\n{rows}\n\n"
+                "建议优先检查 Lag 最高的消费组：确认消费者实例是否在线、消费线程是否阻塞、"
+                "下游数据库/接口是否变慢，以及是否需要临时扩容消费者。"
+            )
+        else:
+            answer = (
+                "当前没有发现 Kafka 消息积压。已查询到消费者组指标，但总 Lag 为 `0`。\n\n"
+                f"消费者组明细：\n{rows}"
+            )
+    else:
+        answer = (
+            "Kafka 当前可达，但没有查询到消费者组 Lag 数据。\n\n"
+            "这通常表示暂无活跃消费者组、kafka-exporter 未采集 consumer group 指标，"
+            "或当前系统没有注册对应的 Prometheus 指标。"
+        )
+
+    duration_ms = round((time.monotonic() - started_at) * 1000)
+    tool_calls = [
+        {
+            "tool": "kafka_metrics_fallback",
+            "input": {"question": question},
+            "status": "success",
+            "duration_ms": duration_ms,
+            "output": {
+                "available": kafka.available,
+                "brokers": kafka.brokers,
+                "topics": kafka.topics,
+                "total_lag": kafka.total_lag,
+                "consumer_groups": [item.model_dump() for item in kafka.consumer_groups[:20]],
+            },
+        }
+    ]
+    evidence_sources = ["Kafka 运行数据"]
+    evidence_items = build_evidence_from_tool_calls(tool_calls)
+    evidence_steps = build_evidence_steps(tool_calls)
+
+    if existing_report_id:
+        report = session.get(DiagnosisReport, existing_report_id)
+        if not report:
+            raise LookupError("诊断报告不存在")
+    else:
+        report = save_diagnosis_report(
+            session,
+            org_id=org_id,
+            system_id=system.id,
+            user_id=user_id,
+            report_type="diagnose",
+            question=question,
+            answer=answer,
+            template_name="Kafka 积压兜底诊断",
+            template_description="模型工具调用失败时，使用平台已采集 Kafka 指标直接分析积压状态",
+            model="deterministic-kafka-metrics",
+            duration_ms=duration_ms,
+            evidence_sources=evidence_sources,
+            evidence_steps=evidence_steps,
+            tool_calls=tool_calls,
+            evidence=evidence_items,
+            commit=True,
+        )
+
+    return _build_diagnose_response(
+        report_id=report.id,
+        system_id=system.id,
+        answer=answer,
+        template_name="Kafka 积压兜底诊断",
+        template_description="模型工具调用失败时，使用平台已采集 Kafka 指标直接分析积压状态",
+        model="deterministic-kafka-metrics",
+        duration_ms=duration_ms,
+        evidence_sources=evidence_sources,
+        tool_calls=tool_calls,
+        evidence=evidence_items,
+        evidence_steps=evidence_steps,
+    )
+
+
+def _progress_recorder(report_id: int, org_id: int, system_id: int):
+    """Persist each tool call into the report's evidence list while it runs.
+
+    The frontend already polls this report, so writing here gives a live tool
+    chain without adding a new streaming channel. Failures are swallowed on
+    purpose: progress reporting must never break a diagnosis.
+    """
+    from app.core.database import engine
+
+    def record(event: dict) -> None:
+        try:
+            with Session(engine) as session:
+                report = session.get(DiagnosisReport, report_id)
+                if not report or report.status != "running":
+                    return
+                if report.org_id != org_id or report.system_id != system_id:
+                    return
+                items = [dict(item) for item in (report.evidence or [])]
+                call_id = str(event.get("call_id") or "")
+                tool = str(event.get("tool") or "unknown")
+                index = next(
+                    (i for i, item in enumerate(items) if call_id and item.get("call_id") == call_id),
+                    -1,
+                )
+                if event.get("kind") == "tool_start":
+                    patch = {
+                        "step": (index + 1) if index >= 0 else len(items) + 1,
+                        "type": tool,
+                        "label": TOOL_LABELS.get(tool, tool),
+                        "detail": "执行中…",
+                        "status": "started",
+                        "duration_ms": 0,
+                        "input": event.get("input") or {},
+                        "output": "",
+                        "call_id": call_id,
+                    }
+                else:
+                    output = str(event.get("output") or "")
+                    patch = {
+                        "status": str(event.get("status") or "success"),
+                        "duration_ms": int(event.get("duration_ms") or 0),
+                        "detail": summarize_text(output) or "已完成",
+                        "output": output[:2000],
+                    }
+                if index >= 0:
+                    items[index].update(patch)
+                else:
+                    items.append(
+                        {
+                            "step": len(items) + 1,
+                            "type": tool,
+                            "label": TOOL_LABELS.get(tool, tool),
+                            "input": {},
+                            "call_id": call_id,
+                            **patch,
+                        }
+                    )
+                report.evidence = items
+                session.add(report)
+                session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("[diagnose] 进度写入失败（不影响诊断）: %s", exc)
+
+    return record
+
+
+def start_diagnosis(
+    session: Session,
+    system_id: int,
+    org_id: int,
+    question: str,
+    *,
+    actor_id: str = "",
+    external_request_id: str = "",
+    business_context: dict | None = None,
+) -> DiagnoseResponse:
+    system = require_system(session, system_id, org_id)
+    report = save_diagnosis_report(
+        session,
+        org_id=org_id,
+        system_id=system.id,
+        user_id=_user_id_from_actor(actor_id),
+        external_request_id=external_request_id,
+        report_type="diagnose",
+        question=question,
+        business_context=business_context,
+        answer="",
+        status="running",
+        commit=True,
+    )
+    return _build_diagnose_response(
+        report_id=report.id,
+        system_id=system.id,
+        status="running",
+        answer="诊断进行中，正在收集健康检查、日志和指标证据…",
+    )
+
+
+def _finalize_report(
+    report_id: int,
+    org_id: int,
+    system_id: int,
+    *,
+    status: str,
+    result: DiagnoseResponse | None = None,
+    error: str = "",
+) -> None:
+    """Write the terminal state with a brand new Session.
+
+    The diagnosis Session can end up in a poisoned state (parallel tool calls,
+    lock contention). Reusing it here is how a report gets stuck at `running`
+    forever, so the terminal write always gets a clean Session of its own.
+    """
+    from app.core.database import engine
+
+    with Session(engine) as session:
+        pending = session.get(DiagnosisReport, report_id)
+        if not pending or pending.org_id != org_id or pending.system_id != system_id:
+            return
+        if pending.status != "running":
+            return
+        if status == "success" and result is not None:
+            pending.status = "success"
+            pending.answer = result.answer
+            pending.template_name = result.template_name
+            pending.template_description = result.template_description
+            pending.model = result.model
+            pending.duration_ms = result.duration_ms
+            pending.total_tokens = result.total_tokens
+            pending.evidence_sources = result.evidence_sources
+            pending.evidence_steps = result.evidence_steps
+            pending.tool_calls = result.tool_calls
+            pending.evidence = [item.model_dump() for item in result.evidence]
+            pending.knowledge_refs = [item.model_dump() for item in result.knowledge_refs]
+        else:
+            pending.status = "failed"
+            pending.error_message = error
+            pending.answer = pending.answer or f"诊断失败：{error}"
+        session.add(pending)
+        session.commit()
+
+
+def complete_diagnosis_report(
+    report_id: int,
+    system_id: int,
+    org_id: int,
+    question: str,
+    *,
+    actor_id: str = "",
+    model_mode: str = "auto",
+    model_name: str = "",
+) -> None:
+    from app.core.database import engine
+
+    with Session(engine) as session:
+        report = session.get(DiagnosisReport, report_id)
+        if not report or report.org_id != org_id or report.system_id != system_id:
+            return
+        try:
+            result = diagnose_system(
+                session,
+                system_id,
+                org_id,
+                question,
+                actor_id=actor_id,
+                existing_report_id=report_id,
+                model_mode=model_mode,
+                model_name=model_name,
+                on_progress=_progress_recorder(report_id, org_id, system_id),
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("[diagnose] 诊断执行失败 report_id=%s", report_id)
+            try:
+                _finalize_report(report_id, org_id, system_id, status="failed", error=str(exc))
+            except Exception:  # noqa: BLE001
+                log.exception("[diagnose] 写入失败状态也失败 report_id=%s", report_id)
+            return
+    try:
+        _finalize_report(report_id, org_id, system_id, status="success", result=result)
+    except Exception:  # noqa: BLE001
+        log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
 
 
 def diagnose_system(
@@ -195,86 +581,18 @@ def diagnose_system(
     question: str,
     *,
     actor_id: str = "",
+    existing_report_id: int | None = None,
+    model_mode: str = "auto",
+    model_name: str = "",
+    on_progress=None,
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
     started_at = time.monotonic()
     user_id = _user_id_from_actor(actor_id)
-    if is_data_analysis_question(question):
-        try:
-            analysis = analyze_system_data(
-                session,
-                system.id,
-                org_id,
-                question,
-                actor_type="diagnose",
-                actor_id=actor_id or "agent",
-            )
-            is_task_analysis = analysis.evidence.get("analysis_type") == "stuck_tasks"
-            evidence_sources = ["只读数据库查询"]
-            if is_task_analysis and analysis.evidence.get("worker_health"):
-                evidence_sources.append("Worker 健康检查")
-            if is_task_analysis and analysis.evidence.get("worker_logs"):
-                evidence_sources.append("Worker 日志")
-            evidence_items, evidence_steps = build_evidence_from_data_analysis(analysis.evidence)
-            duration_ms = round((time.monotonic() - started_at) * 1000)
-            template_name = "stuck_task_analysis" if is_task_analysis else "readonly_data_analysis"
-            template_description = "任务卡住专项分析" if is_task_analysis else "只读业务数据分析"
-            report = save_diagnosis_report(
-                session,
-                org_id=org_id,
-                system_id=system.id,
-                user_id=user_id,
-                report_type="data_analysis",
-                question=question,
-                answer=analysis.answer,
-                template_name=template_name,
-                template_description=template_description,
-                duration_ms=duration_ms,
-                evidence_sources=evidence_sources,
-                evidence_steps=evidence_steps,
-                evidence=evidence_items,
-            )
-            return _build_diagnose_response(
-                report_id=report.id,
-                system_id=system.id,
-                answer=analysis.answer,
-                template_name=template_name,
-                template_description=template_description,
-                duration_ms=duration_ms,
-                evidence_sources=evidence_sources,
-                evidence=evidence_items,
-                evidence_steps=evidence_steps,
-            )
-        except ValueError as exc:
-            answer = (
-                f"这个问题需要查询业务数据库，但当前无法执行只读分析：{exc}。\n"
-                "请联系管理员在后台配置只读业务数据源后，我才能统计业务数据是否到达、数量是否异常。"
-            )
-            report = save_diagnosis_report(
-                session,
-                org_id=org_id,
-                system_id=system.id,
-                user_id=user_id,
-                report_type="data_analysis",
-                question=question,
-                answer=answer,
-                status="failed",
-                template_name="readonly_data_analysis",
-                template_description="只读业务数据分析",
-                duration_ms=round((time.monotonic() - started_at) * 1000),
-                error_message=str(exc),
-            )
-            return _build_diagnose_response(
-                report_id=report.id,
-                system_id=system.id,
-                answer=answer,
-                template_name="readonly_data_analysis",
-                template_description="只读业务数据分析",
-                duration_ms=report.duration_ms,
-            )
     template = match_skill(question, _disabled_template_names(system))
     descriptor = system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
     knowledge_context = get_relevant_context(question, str(system.id))
+    dataset_query, data_catalog = _business_dataset_query(session, system, org_id, actor_id)
     try:
         run = diagnose_with_details(
             descriptor,
@@ -285,8 +603,50 @@ def diagnose_system(
             knowledge_context=knowledge_context,
             remote_command=_remote_command(session, system),
             business_data_query=_business_data_query(session, system, org_id, actor_id),
+            business_dataset_query=dataset_query,
+            data_catalog=data_catalog,
+            model_mode=model_mode,
+            model_name=model_name,
+            on_progress=on_progress,
         )
     except Exception as exc:
+        if _is_kafka_lag_question(question):
+            try:
+                result = _kafka_lag_fallback(
+                    session,
+                    system,
+                    org_id,
+                    question,
+                    started_at=started_at,
+                    user_id=user_id,
+                    existing_report_id=existing_report_id,
+                )
+                record_audit_event(
+                    session,
+                    org_id=org_id,
+                    system_id=system.id,
+                    event_type="diagnosis.completed",
+                    actor_type="user",
+                    actor_id=actor_id,
+                    target_type="diagnosis",
+                    target_id=str(result.id or ""),
+                    status="success",
+                    input={
+                        "question": question,
+                        "fallback": "kafka_metrics",
+                        "model_error": str(exc),
+                    },
+                    output={
+                        "answer": result.answer,
+                        "model": result.model,
+                        "duration_ms": result.duration_ms,
+                        "evidence_sources": result.evidence_sources,
+                    },
+                    commit=True,
+                )
+                return result
+            except Exception:
+                pass
         record_audit_event(
             session,
             org_id=org_id,
@@ -296,27 +656,33 @@ def diagnose_system(
             actor_id=actor_id,
             target_type="diagnosis",
             status="failed",
-            input={"question": question, "template_name": template["name"] if template else ""},
+            input={
+                "question": question,
+                "template_name": template["name"] if template else "",
+                "model_mode": model_mode,
+                "model_name": model_name,
+            },
             output={
                 "error": str(exc),
                 "duration_ms": round((time.monotonic() - started_at) * 1000),
             },
             commit=True,
         )
-        save_diagnosis_report(
-            session,
-            org_id=org_id,
-            system_id=system.id,
-            user_id=user_id,
-            report_type="diagnose",
-            question=question,
-            answer="",
-            status="failed",
-            template_name=template["name"] if template else "",
-            template_description=template["description"] if template else "自由诊断",
-            duration_ms=round((time.monotonic() - started_at) * 1000),
-            error_message=str(exc),
-        )
+        if not existing_report_id:
+            save_diagnosis_report(
+                session,
+                org_id=org_id,
+                system_id=system.id,
+                user_id=user_id,
+                report_type="diagnose",
+                question=question,
+                answer="",
+                status="failed",
+                template_name=template["name"] if template else "",
+                template_description=template["description"] if template else "自由诊断",
+                duration_ms=round((time.monotonic() - started_at) * 1000),
+                error_message=str(exc),
+            )
         raise
 
     evidence_sources = _evidence_sources(template["steps"] if template else "", run.tool_calls)
@@ -337,6 +703,8 @@ def diagnose_system(
             "question": question,
             "template_name": template["name"] if template else "",
             "template_description": template["description"] if template else "自由诊断",
+            "model_mode": model_mode,
+            "model_name": model_name,
         },
         output={
             "answer": run.answer,
@@ -348,32 +716,37 @@ def diagnose_system(
         },
         commit=False,
     )
-    report = save_diagnosis_report(
-        session,
-        org_id=org_id,
-        system_id=system.id,
-        user_id=user_id,
-        report_type="diagnose",
-        question=question,
-        answer=run.answer,
-        template_name=template["name"] if template else "",
-        template_description=template["description"] if template else "自由诊断",
-        model=run.model,
-        duration_ms=run.duration_ms,
-        total_tokens=run.total_tokens,
-        evidence_sources=evidence_sources,
-        evidence_steps=evidence_steps,
-        tool_calls=run.tool_calls,
-        evidence=evidence_items,
-        knowledge_refs=knowledge_refs,
-        commit=True,
-    )
+    if existing_report_id:
+        report = session.get(DiagnosisReport, existing_report_id)
+        if not report:
+            raise LookupError("诊断报告不存在")
+    else:
+        report = save_diagnosis_report(
+            session,
+            org_id=org_id,
+            system_id=system.id,
+            user_id=user_id,
+            report_type="diagnose",
+            question=question,
+            answer=run.answer,
+            template_name=template["name"] if template else "",
+            template_description=template["description"] if template else "自由诊断",
+            model=run.model,
+            duration_ms=run.duration_ms,
+            total_tokens=run.total_tokens,
+            evidence_sources=evidence_sources,
+            evidence_steps=evidence_steps,
+            tool_calls=run.tool_calls,
+            evidence=evidence_items,
+            knowledge_refs=knowledge_refs,
+            commit=True,
+        )
     return _build_diagnose_response(
         report_id=report.id,
         system_id=system.id,
         answer=run.answer,
-        template_name=report.template_name,
-        template_description=report.template_description,
+        template_name=template["name"] if template else "",
+        template_description=template["description"] if template else "自由诊断",
         model=run.model,
         duration_ms=run.duration_ms,
         total_tokens=run.total_tokens,

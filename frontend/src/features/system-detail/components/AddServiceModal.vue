@@ -1,11 +1,13 @@
 <script setup>
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '../../../api'
 import {
   buildServicePayload,
   CONNECTOR_FIELDS,
   createDetailServiceDraft,
+  getTargetAddressMeta,
+  resolvePresetInput,
   SERVICE_COLORS,
   SERVICE_PRESETS,
   syncPresetDraft,
@@ -14,6 +16,7 @@ import {
 const props = defineProps({
   open: { type: Boolean, required: true },
   systemId: { type: String, required: true },
+  systemLocal: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:open', 'created'])
@@ -27,6 +30,7 @@ const state = reactive({
   draftId: null,
 })
 const newSvc = reactive(createDetailServiceDraft())
+const addressMeta = computed(() => getTargetAddressMeta(props.systemLocal))
 
 function payloadSignature() {
   return JSON.stringify(buildServicePayload(newSvc))
@@ -130,6 +134,15 @@ watch(
     @cancel="cancel"
   >
     <div class="add-svc-body">
+      <a-alert
+        v-if="!systemLocal"
+        type="info"
+        show-icon
+        class="remote-address-alert"
+        message="远程监控：地址从采集器视角填写"
+        :description="`${addressMeta.hint}。采集器应部署在能访问这些服务的网络里；若服务和采集器在同一台机器，才使用 127.0.0.1。`"
+      />
+
       <div class="add-field">
         <label class="add-label">服务名称 <span class="req-star">*</span></label>
         <a-input v-model:value="newSvc.name" placeholder="如 Nginx、主库 MySQL" size="large" />
@@ -165,8 +178,11 @@ watch(
             class="param-field"
             :style="{ flex: inp.span }"
           >
-            <span class="param-label">{{ inp.label }}</span>
-            <a-input v-model:value="newSvc.fields[inp.key]" :placeholder="inp.placeholder" />
+            <span class="param-label">{{ resolvePresetInput(inp, systemLocal).label }}</span>
+            <a-input
+              v-model:value="newSvc.fields[inp.key]"
+              :placeholder="resolvePresetInput(inp, systemLocal).placeholder"
+            />
           </div>
         </div>
       </div>
@@ -215,6 +231,9 @@ watch(
 </template>
 
 <style scoped>
+.remote-address-alert {
+  margin-bottom: 4px;
+}
 .add-svc-body {
   display: flex;
   flex-direction: column;

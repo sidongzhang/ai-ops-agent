@@ -1,8 +1,11 @@
 """Tooling and runtime helpers for the diagnosis agent."""
+import functools
+import inspect
+import json
 import shlex
 import socket
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 from urllib.parse import urlparse
 
@@ -15,6 +18,43 @@ from .knowledge.store import get_relevant_context, search_knowledge_hits
 from .skill_router import get_skill_steps
 
 
+def _memoized(func):
+    """同一诊断内、参数完全相同的工具调用直接返回缓存结果。
+
+    重复调用同一个只读工具很常见（实测一次诊断里 run_kafka_command 被调 6 次、
+    query_business_dataset 被调 4 次）。每多一次重复，agent 就多跑一轮 loop，
+    而每一轮都要把整段上下文重发给模型，成本是重复的。
+    """
+    signature = None
+
+    @functools.wraps(func)
+    def wrapper(ctx: RunContext["AgentDeps"], *args, **kwargs):
+        nonlocal signature
+        cache = getattr(ctx.deps, "tool_cache", None)
+        if cache is None:
+            return func(ctx, *args, **kwargs)
+        if signature is None:
+            try:
+                signature = inspect.signature(func)
+            except (TypeError, ValueError):
+                return func(ctx, *args, **kwargs)
+        try:
+            # 按签名归一化，避免 (a, y=1) 和 (a,) 被当成两次不同的调用。
+            bound = signature.bind(ctx, *args, **kwargs)
+            bound.apply_defaults()  # 把默认值补齐，否则 (a,) 和 (a, y=1) 仍会被视为不同参数
+            payload = {k: v for k, v in bound.arguments.items() if k != "ctx"}
+            key = (func.__name__, json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str))
+        except Exception:  # noqa: BLE001
+            return func(ctx, *args, **kwargs)
+        if key in cache:
+            return f"{cache[key]}\n\n（本次诊断已查过相同参数，以上为缓存结果，请直接使用，不要再重复调用本工具）"
+        value = func(ctx, *args, **kwargs)
+        cache[key] = value
+        return value
+
+    return wrapper
+
+
 @dataclass
 class AgentDeps:
     descriptor: dict
@@ -23,6 +63,10 @@ class AgentDeps:
     knowledge_context: str = ""
     remote_command: Callable[[str, dict], dict] | None = None
     business_data_query: Callable[[str], str] | None = None
+    business_dataset_query: Callable[[str, str, str], str] | None = None
+    data_catalog: str = ""
+    # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
+    tool_cache: dict = field(default_factory=dict)
 
 
 def register_tools(agent: Agent) -> Agent:
@@ -37,6 +81,15 @@ def register_tools(agent: Agent) -> Agent:
         parts = [base]
         if skill_steps:
             parts.append(skill_steps)
+        if ctx.deps.data_catalog:
+            parts.append(
+                "## 可用业务数据集（只读，按天聚合）\n"
+                f"{ctx.deps.data_catalog}\n\n"
+                "⚠️ 用户问具体数量/次数/成功率/卡住多少这类量化问题时，"
+                "必须调用 query_business_dataset 取真实数据后再回答，"
+                "不要凭快照里的空字段或 0 值猜测，也不要回答「证据不足」。"
+                "取到 0 条时要明确说明「该时间段内确实没有记录」，而不是「无法确认」。"
+            )
         if ctx.deps.knowledge_context:
             parts.append(
                 "## 知识库预检索（本系统权威，回答时必须优先遵循）\n"
@@ -47,6 +100,7 @@ def register_tools(agent: Agent) -> Agent:
         return "\n\n".join(parts)
 
     @agent.tool
+    @_memoized
     def list_services(ctx: RunContext[AgentDeps]) -> str:
         if ctx.deps.remote_command:
             result = ctx.deps.remote_command("health_check", {})
@@ -63,6 +117,7 @@ def register_tools(agent: Agent) -> Agent:
         )
 
     @agent.tool
+    @_memoized
     def check_service(ctx: RunContext[AgentDeps], service: str) -> str:
         if ctx.deps.remote_command:
             result = ctx.deps.remote_command("health_check", {"service": service})
@@ -76,6 +131,7 @@ def register_tools(agent: Agent) -> Agent:
         return f"系统中无服务「{service}」"
 
     @agent.tool
+    @_memoized
     def read_logs(ctx: RunContext[AgentDeps], service: str, lines: int = 50) -> str:
         if ctx.deps.remote_command:
             result = ctx.deps.remote_command("fetch_logs", {"service": service, "lines": lines})
@@ -84,6 +140,7 @@ def register_tools(agent: Agent) -> Agent:
         return read_service_logs(ctx.deps.descriptor, service, lines)
 
     @agent.tool
+    @_memoized
     def search_logs(ctx: RunContext[AgentDeps], service: str, keyword: str, lines: int = 200) -> str:
         if ctx.deps.remote_command:
             result = ctx.deps.remote_command(
@@ -94,6 +151,7 @@ def register_tools(agent: Agent) -> Agent:
         return search_service_logs(ctx.deps.descriptor, service, keyword, lines)
 
     @agent.tool
+    @_memoized
     def query_prometheus(ctx: RunContext[AgentDeps], promql: str) -> str:
         if ctx.deps.remote_command:
             prom_service = next(
@@ -142,6 +200,7 @@ def register_tools(agent: Agent) -> Agent:
             return f"Prometheus 查询失败: {exc}"
 
     @agent.tool
+    @_memoized
     def run_kafka_command(ctx: RunContext[AgentDeps], subcommand: str) -> str:
         parts = shlex.split(subcommand)
         if not parts or parts[0] not in ("topics", "consumer-groups"):
@@ -183,6 +242,7 @@ def register_tools(agent: Agent) -> Agent:
             return f"执行失败: {exc}"
 
     @agent.tool
+    @_memoized
     def run_redis_command(ctx: RunContext[AgentDeps], command: str) -> str:
         first = command.strip().upper().split()[0]
         if first not in {"INFO", "DBSIZE", "CLIENT", "CONFIG", "SLOWLOG", "KEYS", "TTL", "TYPE", "LLEN", "SCARD", "ZCARD", "HLEN", "STRLEN", "OBJECT"}:
@@ -227,15 +287,40 @@ def register_tools(agent: Agent) -> Agent:
             return f"Redis 命令执行失败: {exc}"
 
     @agent.tool
+    @_memoized
     def query_business_data(ctx: RunContext[AgentDeps], question: str) -> str:
         """查询业务数据库中的只读统计数据（新增量、最近记录、卡住任务等）。
-        当用户问题涉及订单/任务/流水/业务记录是否到达、数量统计、长时间未更新任务时调用。
+        仅当用户明确问业务表/任务流水/订单是否到达、数量统计、长时间未更新任务时调用。
+        不要用于日志、报错、异常、堆栈、服务故障排查——那些应使用 search_logs / read_logs / check_service。
         仅执行受控只读分析，不会修改业务数据。"""
         if not ctx.deps.business_data_query:
             return "当前系统未启用只读业务数据源，无法查询业务表。"
         return ctx.deps.business_data_query(question)
 
     @agent.tool
+    @_memoized
+    def query_business_dataset(
+        ctx: RunContext[AgentDeps],
+        dataset: str,
+        date_from: str = "",
+        date_to: str = "",
+    ) -> str:
+        """查询业务系统的只读统计数据集（按天聚合的运行量、切割次数、文件量、产物量、卡住任务等）。
+
+        用户问「今天/某天执行了多少次」「有多少条记录」「成功多少、失败多少」「卡住多少」
+        这类量化问题时必须调用本工具取真实数据，不要凭快照猜测或回答证据不足。
+        参数：
+          dataset：数据集名称，只能从 system prompt 的「可用业务数据集」里选。
+          date_from / date_to：日期区间，格式 YYYY-MM-DD；留空表示不限制。
+          查询今天的数据时，date_from 和 date_to 都填今天。
+        返回值末尾会给出「汇总」行。需要总数时直接引用汇总行，不要自己对明细行做加减。
+        只执行受控的 SELECT 聚合查询，不会修改任何业务数据。"""
+        if not ctx.deps.business_dataset_query:
+            return "当前系统未配置可查询的业务数据集。"
+        return ctx.deps.business_dataset_query(dataset, date_from, date_to)
+
+    @agent.tool
+    @_memoized
     def search_knowledge_base(ctx: RunContext[AgentDeps], query: str) -> str:
         """从该系统的运维知识库检索历史故障经验、操作手册、系统文档。
         遇到不熟悉的故障类型、需要参考历史处理经验或查找操作步骤时调用。

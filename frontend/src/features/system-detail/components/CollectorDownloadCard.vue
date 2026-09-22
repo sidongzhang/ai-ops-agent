@@ -144,11 +144,18 @@ function deployCommand(key) {
     `  --name ${collectorContainerName()} \\`,
     `  aiops-collector:local`,
     '',
-    '# 方式二：直接运行 Python 采集器',
+    '# 方式二：直接运行 Python 采集器（Linux / macOS）',
     '# pip install requests websockets',
     `PLATFORM_URL="${platformUrl}" COLLECTOR_KEY="${key}" COLLECTOR_INTERVAL=30 python collector/run.py`,
     '',
-    '# 方式三：单次运行测试',
+    '# 方式三：Windows — 推荐下载采集包后双击 install_and_run_windows.bat',
+    '# 或在 PowerShell 中：',
+    `$env:PLATFORM_URL = '${platformUrl}'`,
+    `$env:COLLECTOR_KEY = '${key}'`,
+    `$env:COLLECTOR_INTERVAL = '30'`,
+    'python collector/run.py',
+    '',
+    '# 方式四：单次运行测试',
     `PLATFORM_URL="${platformUrl}" COLLECTOR_KEY="${key}" python collector/run.py --once`,
   ].join('\n')
 }
@@ -173,6 +180,27 @@ function deployCommandDocker(key) {
 
 function deployCommandPython(key) {
   return `PLATFORM_URL="${platformUrl}" COLLECTOR_KEY="${key}" COLLECTOR_INTERVAL=30 python collector/run.py`
+}
+
+function deployCommandWindowsBat(key) {
+  return [
+    ':: Windows CMD — 在解压后的采集包目录执行',
+    `set "PLATFORM_URL=${platformUrl}"`,
+    `set "COLLECTOR_KEY=${key}"`,
+    'set "COLLECTOR_INTERVAL=30"',
+    'python collector\\run.py',
+  ].join('\n')
+}
+
+function deployCommandWindowsPs1(key) {
+  return [
+    '# Windows PowerShell — 在解压后的采集包目录执行',
+    `# 不要用 Linux 写法：PLATFORM_URL=xxx python ...（PowerShell 不支持）`,
+    `$env:PLATFORM_URL = '${platformUrl}'`,
+    `$env:COLLECTOR_KEY = '${key}'`,
+    `$env:COLLECTOR_INTERVAL = '30'`,
+    'python collector/run.py',
+  ].join('\n')
 }
 
 async function loadCollectors() {
@@ -315,9 +343,10 @@ onMounted(loadCollectors)
       <div class="collector-checklist">
         <div class="collector-check-title">上线前检查</div>
         <ul>
-          <li>平台对外地址要填写成客户网络可访问的域名或 IP，不要留空。</li>
-          <li>服务配置里的 `127.0.0.1` 指的是采集器所在主机，不是平台主机。</li>
-          <li>对方环境如果不能用 Docker，可直接运行 Python 版本采集器。</li>
+          <li>采集器要装在<strong>能访问被监控服务</strong>的网络里（通常是客户服务器或业务内网机器）。</li>
+          <li>服务地址填<strong>目标服务的真实 IP:端口</strong>，从采集器机器能 curl / telnet 通为准。</li>
+          <li>只有「服务和采集器在同一台机器」时，才填 <code>127.0.0.1</code>；填平台地址或 localhost 都会失败。</li>
+          <li>对方是 Windows 时，下载采集包后双击 <code>install_and_run_windows.bat</code>。</li>
         </ul>
       </div>
 
@@ -420,8 +449,16 @@ onMounted(loadCollectors)
         type="info"
         show-icon
         class="network-alert"
-        message="服务地址必须从采集器所在网络访问"
-        description="如果服务和采集器在同一台 Linux 主机上，推荐使用生成命令中的 host 网络；不要把 127.0.0.1 填成另一台机器的地址。"
+        message="采集器部署位置"
+        description="采集器装在能访问被监控服务的机器上（客户服务器/业务内网）。平台网站只是控制台，不会替你去连对方内网。"
+      />
+
+      <a-alert
+        type="info"
+        show-icon
+        class="network-alert"
+        message="服务地址填写规则"
+        description="填目标服务真实 IP 和端口。只有服务和采集器在同一台机器时才用 127.0.0.1；不要用平台域名或 localhost 代替对方 IP。"
       />
 
       <a-alert
@@ -429,7 +466,7 @@ onMounted(loadCollectors)
         show-icon
         class="network-alert"
         message="推荐的远程接入方式"
-        description="优先让对方在业务网络内部署采集器，并把 Prometheus、应用健康检查、日志读取都交给采集器完成。这样平台不需要直接打入对方内网，双方都更省事也更安全。"
+        description="先登记服务 IP/端口，再把采集器部署到目标网络。采集器出站连平台后，平台通过它探活、拉日志和执行受控操作。"
       />
 
       <div class="deploy-info">
@@ -444,13 +481,27 @@ onMounted(loadCollectors)
           <pre class="cmd-code">{{ deployCommandDocker(createdKey) }}</pre>
         </div>
 
-        <!-- Python -->
+        <!-- Python (Linux/macOS) -->
         <div class="cmd-block">
           <div class="cmd-header">
-            <span class="cmd-label">方式二：Python 直接运行</span>
+            <span class="cmd-label">方式二：Python 直接运行（Linux / macOS）</span>
             <a-button size="small" type="link" @click="copyText(deployCommandPython(createdKey))">复制</a-button>
           </div>
           <pre class="cmd-code">{{ deployCommandPython(createdKey) }}</pre>
+        </div>
+
+        <!-- Windows -->
+        <div class="cmd-block">
+          <div class="cmd-header">
+            <span class="cmd-label">方式三：Windows（推荐下载采集包一键运行）</span>
+            <a-button size="small" type="link" @click="copyText(deployCommandWindowsPs1(createdKey))">复制 PowerShell</a-button>
+          </div>
+          <pre class="cmd-code">{{ deployCommandWindowsPs1(createdKey) }}</pre>
+          <div class="cmd-header" style="margin-top:8px">
+            <span class="cmd-label">或 CMD</span>
+            <a-button size="small" type="link" @click="copyText(deployCommandWindowsBat(createdKey))">复制 CMD</a-button>
+          </div>
+          <pre class="cmd-code">{{ deployCommandWindowsBat(createdKey) }}</pre>
         </div>
 
         <a-collapse ghost>

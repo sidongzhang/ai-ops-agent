@@ -111,7 +111,14 @@ def main() -> None:
         print(f"aiops-collector v{__version__}")
         sys.exit(0)
     if not COLLECTOR_KEY:
-        print(f"采集器版本: {__version__}\n正确用法: PLATFORM_URL=... COLLECTOR_KEY=... /path/to/aiops-collector [--once]")
+        print(
+            f"采集器版本: {__version__}\n"
+            "正确用法:\n"
+            "  Linux/macOS: PLATFORM_URL=... COLLECTOR_KEY=... python collector/run.py\n"
+            "  Windows CMD: set PLATFORM_URL=... && set COLLECTOR_KEY=... && python collector\\run.py\n"
+            "  Windows PS:  $env:PLATFORM_URL='...'; $env:COLLECTOR_KEY='...'; python collector/run.py\n"
+            "  推荐 Windows 用户下载控制台里的采集包，双击 install_and_run_windows.bat"
+        )
         sys.exit(1)
     once = "--once" in sys.argv
     log.info(f"采集器启动 → 平台 {PLATFORM_URL}，间隔 {INTERVAL}s，模式={'单次' if once else '持续'}")

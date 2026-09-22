@@ -25,7 +25,28 @@ const apiExamples = computed(() => ({
   -H "Authorization: Bearer <TOKEN>" \\
   -H "X-System-Code: ${props.systemKey || '<系统编码>'}" \\
   -F "file=@./log.json" \\
-  -F "question=请分析这份日志，给出故障原因和处理措施"`,
+  -F "request_id=log-001" \\
+  -F "question=请分析这份日志，给出故障原因和处理措施"
+
+curl ${apiBase}/openapi/v1/messages/log-001 \\
+  -H "Authorization: Bearer <TOKEN>" \\
+  -H "X-System-Code: ${props.systemKey || '<系统编码>'}"`,
+  errorLog: `curl -X POST ${apiBase}/openapi/v1/error-logs \\
+  -H "Authorization: Bearer <TOKEN>" \\
+  -H "X-System-Code: ${props.systemKey || '<系统编码>'}" \\
+  -F "file=@./error.log" \\
+  -F "request_id=error-log-001" \\
+  -F "question=请分析错误原因和处理建议"`,
+  messageStatus: `curl -X POST ${apiBase}/openapi/v1/messages/error-log-001/status \\
+  -H "Authorization: Bearer <TOKEN>" \\
+  -H "X-System-Code: ${props.systemKey || '<系统编码>'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"status":"acknowledged"}'`,
+  productionDaily: `curl -X POST ${apiBase}/openapi/v1/production/daily \\
+  -H "Authorization: Bearer <TOKEN>" \\
+  -H "X-System-Code: ${props.systemKey || '<系统编码>'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"request_id":"daily-20260715","title":"生产日报","period":"2026-07-15","summary":"订单处理1000笔，失败3笔","data":{"total":1000,"failed":3}}'`,
   alert: `curl -X POST ${apiBase}/openapi/v1/alerts \\
   -H "Authorization: Bearer <TOKEN>" \\
   -H "X-System-Code: ${props.systemKey || '<系统编码>'}" \\
@@ -130,10 +151,13 @@ onMounted(loadTokens)
         <a-input v-model:value="form.name" placeholder="凭证名称，例如：生产环境上报" />
         <a-select v-model:value="form.scopes" mode="multiple" style="min-width:240px">
           <a-select-option value="log:analyze">上传日志并分析</a-select-option>
+          <a-select-option value="log:alert">上传错误日志告警</a-select-option>
           <a-select-option value="alert:create">上报告警</a-select-option>
           <a-select-option value="health:push">上报健康状态</a-select-option>
           <a-select-option value="message:read">查询消息结果</a-select-option>
+          <a-select-option value="message:write">更新消息状态</a-select-option>
           <a-select-option value="message:send">发送普通消息</a-select-option>
+          <a-select-option value="report:read">查询运行报告</a-select-option>
           <a-select-option value="report:submit">提交运行报告</a-select-option>
         </a-select>
         <a-button type="primary" :loading="creating" @click="createToken">创建 Token</a-button>
@@ -184,6 +208,18 @@ onMounted(loadTokens)
           <div class="example-block">
             <div class="example-title"><span>上传日志并分析</span><a-button size="small" type="link" @click="copyText(apiExamples.log)">复制</a-button></div>
             <pre>{{ apiExamples.log }}</pre>
+          </div>
+          <div class="example-block">
+            <div class="example-title"><span>上传错误日志生成告警</span><a-button size="small" type="link" @click="copyText(apiExamples.errorLog)">复制</a-button></div>
+            <pre>{{ apiExamples.errorLog }}</pre>
+          </div>
+          <div class="example-block">
+            <div class="example-title"><span>外部页面更新消息状态</span><a-button size="small" type="link" @click="copyText(apiExamples.messageStatus)">复制</a-button></div>
+            <pre>{{ apiExamples.messageStatus }}</pre>
+          </div>
+          <div class="example-block">
+            <div class="example-title"><span>提交生产日报数据</span><a-button size="small" type="link" @click="copyText(apiExamples.productionDaily)">复制</a-button></div>
+            <pre>{{ apiExamples.productionDaily }}</pre>
           </div>
           <div class="example-block">
             <div class="example-title"><span>上报告警</span><a-button size="small" type="link" @click="copyText(apiExamples.alert)">复制</a-button></div>

@@ -20,6 +20,7 @@ from app.services.messages import create_alert_message
 from app.services.monitoring.metrics import prom_query_range
 from app.services.workflows.actions import normalize_action
 from app.services.workflows.service import list_org_workflows, list_pending_workflows
+from app.agent import llm as llm_config
 
 
 class RoadmapFeatureTests(unittest.TestCase):
@@ -230,6 +231,63 @@ class RoadmapFeatureTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(len(results[0]["values"]), 2)
         self.assertEqual(len(calls), 1)
+
+    def test_llm_endpoint_supports_api_and_local_modes(self) -> None:
+        original = {
+            "llm_mode": llm_config.settings.llm_mode,
+            "llm_api_base_url": llm_config.settings.llm_api_base_url,
+            "llm_api_key": llm_config.settings.llm_api_key,
+            "llm_api_model": llm_config.settings.llm_api_model,
+            "llm_local_base_url": llm_config.settings.llm_local_base_url,
+            "llm_local_api_key": llm_config.settings.llm_local_api_key,
+            "llm_local_model": llm_config.settings.llm_local_model,
+            "embedding_api_key": llm_config.settings.embedding_api_key,
+            "embedding_base_url": llm_config.settings.embedding_base_url,
+            "embedding_model": llm_config.settings.embedding_model,
+        }
+        try:
+            llm_config.settings.llm_mode = "api"
+            llm_config.settings.llm_api_base_url = "https://api.example.com"
+            llm_config.settings.llm_api_key = "api-key"
+            llm_config.settings.llm_api_model = "remote-chat"
+            api_endpoint = llm_config.default_endpoint()
+            self.assertEqual(api_endpoint.mode, "api")
+            self.assertEqual(api_endpoint.model, "remote-chat")
+            self.assertEqual(api_endpoint.base_url, "https://api.example.com")
+            self.assertEqual(api_endpoint.api_key, "api-key")
+
+            llm_config.settings.llm_mode = "local"
+            llm_config.settings.llm_local_base_url = "http://localhost:11434/v1"
+            llm_config.settings.llm_local_api_key = "ollama"
+            llm_config.settings.llm_local_model = "qwen2.5:7b"
+            local_endpoint = llm_config.default_endpoint()
+            self.assertEqual(local_endpoint.mode, "local")
+            self.assertEqual(local_endpoint.model, "qwen2.5:7b")
+            self.assertEqual(local_endpoint.api_key, "ollama")
+
+            selected_endpoint = llm_config.endpoint_for_choice("local", "qwen2.5:0.5b")
+            self.assertIsNotNone(selected_endpoint)
+            self.assertEqual(selected_endpoint.mode, "local")
+            self.assertEqual(selected_endpoint.model, "qwen2.5:0.5b")
+
+            auto_endpoint = llm_config.endpoint_for_choice("auto")
+            self.assertIsNone(auto_endpoint)
+
+            options = llm_config.model_options()
+            self.assertIn("auto", {item["value"] for item in options})
+            self.assertIn("local", {item["value"] for item in options})
+            self.assertTrue(all("api_key" not in item for item in options))
+
+            llm_config.settings.embedding_api_key = ""
+            llm_config.settings.embedding_base_url = ""
+            llm_config.settings.embedding_model = "nomic-embed-text"
+            embedding_endpoint = llm_config.embedding_endpoint()
+            self.assertEqual(embedding_endpoint.base_url, "http://localhost:11434/v1")
+            self.assertEqual(embedding_endpoint.api_key, "ollama")
+            self.assertEqual(embedding_endpoint.model, "nomic-embed-text")
+        finally:
+            for key, value in original.items():
+                setattr(llm_config.settings, key, value)
 
 
 if __name__ == "__main__":

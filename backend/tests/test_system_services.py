@@ -10,6 +10,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from app.core.deps import require_operator
 from app.models.auth import User
 from app.models.messages import SystemMessage
+from app.models.notifications import NotificationDelivery
 from app.models.systems import MonitoredSystem, Service
 from app.models.tokens import SystemToken
 from app.models.workflows import ActionWorkflow
@@ -33,11 +34,13 @@ from app.schemas.collectors import CollectorCreate, CollectorReport
 from app.schemas.health import HealthItem
 from app.schemas.tokens import SystemTokenCreate
 from app.schemas.openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn
+from app.schemas.openapi import OpenProductionReportIn
 from app.schemas import CollectorExecRequest
 from app.services.collectors.exec import execute_collector_command, select_online_collector
 from app.services.collectors.service import build_collector_bundle, create_collector, delete_collector, record_collector_report
 from app.services.data_analysis import (
     analyze_system_data,
+    is_data_analysis_question,
     run_readonly_query,
 )
 import app.services.data_analysis as data_analysis_service
@@ -61,11 +64,13 @@ from app.services.monitoring.metrics import collect_http_services, find_promethe
 from app.services.notifications.config import merge_notify_config, send_test_notification
 from app.services.notifications import alerts as alerts_service
 from app.services.notifications.alerts import alert_if_needed, send_alert_channel_with_retry
+from app.services.notifications.deliveries import list_message_deliveries
 from app.services.messages import (
     ack_message,
     build_alert_suggestion,
     create_alert_message,
     resolve_message,
+    retry_message_processing,
     retry_failed_notifications,
 )
 from app.services.systems import service as systems_service
@@ -74,6 +79,8 @@ from app.services.systems.service import create_system, update_notify, update_re
 from app.repositories.systems import list_enabled_services_for_system
 from app.services.tokens import create_system_token, delete_system_token, list_system_tokens, revoke_system_token
 from app.services.audit import list_audit_logs, record_audit_event
+import app.services.openapi as openapi_service
+import app.services.message_processing as message_processing_service
 
 from app.services.openapi import (
     get_open_message_by_request_id,
@@ -81,7 +88,10 @@ from app.services.openapi import (
     submit_open_alert,
     submit_open_health,
     submit_open_message,
+    submit_open_production_report,
+    update_open_message_status,
 )
+from app.services.message_processing import process_message_by_id
 from app.services.analytics import get_efficiency_analytics
 from collector import ws_client as collector_ws_client
 from shared.connectors import prometheus as prometheus_connector_module
@@ -234,7 +244,8 @@ class SystemServiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "测试通过"):
                     systems_service.enable_service_draft(session, system.id, draft.id, 1)
 
-                result = systems_service.test_service_draft(session, system.id, draft.id, 1)
+                import asyncio
+                result = asyncio.run(systems_service.test_service_draft(session, system.id, draft.id, 1))
                 enabled = systems_service.enable_service_draft(session, system.id, draft.id, 1)
                 stored_services = list_enabled_services_for_system(session, system.id)
                 audit_events = list(session.exec(
@@ -271,7 +282,8 @@ class SystemServiceTests(unittest.TestCase):
                     1,
                     ServiceIn(name="API", connector="http", config={"health_url": "http://old/health"}),
                 )
-                systems_service.test_service_draft(session, system.id, draft.id, 1)
+                import asyncio
+                asyncio.run(systems_service.test_service_draft(session, system.id, draft.id, 1))
                 updated = systems_service.update_service_draft(
                     session,
                     system.id,
@@ -287,7 +299,9 @@ class SystemServiceTests(unittest.TestCase):
         self.assertEqual(updated.probe_status, "draft")
         self.assertIsNone(updated.tested_at)
 
-    def test_remote_service_draft_uses_threadsafe_collector_command(self) -> None:
+    def test_remote_service_draft_uses_collector_command(self) -> None:
+        import asyncio
+
         collector = CollectorExport(
             id=9,
             org_id=1,
@@ -298,19 +312,19 @@ class SystemServiceTests(unittest.TestCase):
         calls: list[tuple[int, str, dict]] = []
         original_primary = systems_service._get_primary_collector
         original_is_connected = systems_service.manager.is_connected
-        original_send_sync = systems_service.manager.send_command_sync
+        original_send = systems_service.manager.send_command
         try:
             systems_service._get_primary_collector = lambda *args, **kwargs: collector
             systems_service.manager.is_connected = lambda collector_id: collector_id == collector.id
 
-            def _fake_send_sync(collector_id, cmd, args=None, timeout=30.0):
+            async def _fake_send(collector_id, cmd, args=None, timeout=30.0):
                 calls.append((collector_id, cmd, args or {}))
                 return {
                     "ok": True,
                     "result": [{"name": "Remote API", "ok": True, "detail": "remote-ok"}],
                 }
 
-            systems_service.manager.send_command_sync = _fake_send_sync
+            systems_service.manager.send_command = _fake_send
 
             with Session(self.engine) as session:
                 system = MonitoredSystem(org_id=1, key="remote-api", name="远程 API", local=False)
@@ -323,11 +337,11 @@ class SystemServiceTests(unittest.TestCase):
                     1,
                     ServiceIn(name="Remote API", connector="http", config={"health_url": "http://127.0.0.1:8000/healthz"}),
                 )
-                result = systems_service.test_service_draft(session, system.id, draft.id, 1)
+                result = asyncio.run(systems_service.test_service_draft(session, system.id, draft.id, 1))
         finally:
             systems_service._get_primary_collector = original_primary
             systems_service.manager.is_connected = original_is_connected
-            systems_service.manager.send_command_sync = original_send_sync
+            systems_service.manager.send_command = original_send
 
         self.assertTrue(result.ok)
         self.assertEqual(result.detail, "remote-ok")
@@ -405,7 +419,18 @@ class SystemServiceTests(unittest.TestCase):
 class NotifyServiceTests(unittest.TestCase):
     def test_merge_notify_config_supports_multiple_channels(self) -> None:
         merged = merge_notify_config(
-            NotifyConfig(type="none", channels=["email", "feishu"], email_to="ops@example.com"),
+            NotifyConfig(
+                type="none",
+                channels=["email", "feishu"],
+                app_id="cli_123",
+                app_secret="sec",
+                chat_id="oc_1",
+                email_to="ops@example.com",
+                smtp_host="smtp.example.com",
+                smtp_username="ops@example.com",
+                smtp_password="mail-secret",
+                smtp_from="ops@example.com",
+            ),
             {},
         )
         self.assertEqual(merged["channels"], ["feishu", "email"])
@@ -425,17 +450,41 @@ class NotifyServiceTests(unittest.TestCase):
                 type="email",
                 email_to="ops@example.com",
                 smtp_host="smtp.example.com",
+                smtp_username="ops@example.com",
                 smtp_password="***",
+                smtp_from="ops@example.com",
             ),
             {
                 "type": "email",
                 "email_to": "old@example.com",
                 "smtp_host": "smtp.example.com",
+                "smtp_username": "ops@example.com",
                 "smtp_password": "enc:stored-password",
+                "smtp_from": "ops@example.com",
             },
         )
         self.assertEqual(merged["smtp_password"], "enc:stored-password")
         self.assertEqual(merged["email_to"], "ops@example.com")
+
+    def test_notify_config_rejects_invalid_email(self) -> None:
+        with self.assertRaisesRegex(ValueError, "收件邮箱格式"):
+            NotifyConfig(
+                type="email",
+                channels=["email"],
+                email_to="not-an-email",
+                smtp_host="smtp.example.com",
+                smtp_username="ops@example.com",
+                smtp_password="mail-secret",
+                smtp_from="ops@example.com",
+            )
+
+    def test_notify_config_rejects_invalid_webhook_url(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Webhook URL"):
+            NotifyConfig(
+                type="webhook",
+                channels=["webhook"],
+                webhook_url="ftp://example.com/hook",
+            )
 
     def test_send_test_notification_dispatches_feishu(self) -> None:
         _FakeFeishuClient.sent.clear()
@@ -670,14 +719,60 @@ class MessageServiceTests(unittest.TestCase):
                 delivery_audit = session.exec(
                     select(AuditLog).where(AuditLog.event_type == "notification.delivered")
                 ).one()
+                deliveries = session.exec(
+                    select(NotificationDelivery).where(NotificationDelivery.message_id == stored.id)
+                ).all()
         finally:
             alerts_service.httpx.post = original_post
 
         self.assertEqual([channel["type"] for channel in stored.channels], ["web", "webhook"])
         self.assertTrue(all(channel["status"] == "success" for channel in stored.channels))
         self.assertEqual(stored.channels[1]["attempts"], 1)
+        self.assertEqual([item.channel for item in deliveries], ["web", "webhook"])
+        self.assertEqual(deliveries[1].recipient, "https://example.test/hook")
+        self.assertIn("API", deliveries[1].body)
+        self.assertEqual(deliveries[1].status, "success")
         self.assertEqual(delivery_audit.status, "success")
         self.assertEqual(delivery_audit.output["failed_channels"], [])
+
+    def test_notification_delivery_history_is_org_scoped(self) -> None:
+        with Session(self.engine) as session:
+            own_message = SystemMessage(org_id=1, system_id=1, title="自己的告警")
+            other_message = SystemMessage(org_id=2, system_id=2, title="其他组织告警")
+            session.add(own_message)
+            session.add(other_message)
+            session.commit()
+            session.refresh(own_message)
+            session.refresh(other_message)
+            session.add(NotificationDelivery(
+                org_id=1,
+                system_id=1,
+                message_id=own_message.id,
+                channel="email",
+                recipient="ops@example.com",
+                subject="告警",
+                body="自己的通知内容",
+                status="success",
+                attempts=1,
+            ))
+            session.add(NotificationDelivery(
+                org_id=2,
+                system_id=2,
+                message_id=other_message.id,
+                channel="email",
+                recipient="other@example.com",
+                subject="告警",
+                body="其他组织通知内容",
+                status="success",
+                attempts=1,
+            ))
+            session.commit()
+
+            own_deliveries = list_message_deliveries(session, message_id=own_message.id, org_id=1)
+            cross_org_deliveries = list_message_deliveries(session, message_id=other_message.id, org_id=1)
+
+        self.assertEqual([item.recipient for item in own_deliveries], ["ops@example.com"])
+        self.assertEqual(cross_org_deliveries, [])
 
     def test_failed_notification_can_be_retried_and_audited(self) -> None:
         original_retry = alerts_service.send_alert_channel_with_retry
@@ -716,14 +811,81 @@ class MessageServiceTests(unittest.TestCase):
                 audit = session.exec(
                     select(AuditLog).where(AuditLog.event_type == "notification.retried")
                 ).one()
+                retry_delivery = session.exec(
+                    select(NotificationDelivery).where(
+                        NotificationDelivery.message_id == alert_message.id,
+                        NotificationDelivery.channel == "email",
+                    )
+                ).one()
         finally:
             alerts_service.send_alert_channel_with_retry = original_retry
 
         email_result = next(channel for channel in retried.channels if channel["type"] == "email")
         self.assertEqual(email_result["status"], "success")
         self.assertEqual(email_result["attempts"], 4)
+        self.assertEqual(retry_delivery.status, "success")
+        self.assertTrue(retry_delivery.payload["retry"])
         self.assertEqual(audit.actor_id, "7")
         self.assertEqual(audit.status, "success")
+
+    def test_retry_failed_message_processing_requeues_openapi_message(self) -> None:
+        queued: list[int] = []
+        original_enqueue = message_processing_service.enqueue_message_processing
+        try:
+            message_processing_service.enqueue_message_processing = lambda message_id: queued.append(message_id)
+            with Session(self.engine) as session:
+                message = SystemMessage(
+                    org_id=1,
+                    system_id=1,
+                    message_type="daily_report",
+                    title="运行日报",
+                    source="openapi",
+                    related={
+                        "request_id": "daily-failed",
+                        "need_llm_process": True,
+                        "processing_status": "failed",
+                        "processing_error": "model timeout",
+                    },
+                )
+                session.add(message)
+                session.commit()
+                session.refresh(message)
+
+                retried = retry_message_processing(session, message.id, 1, actor_id="7")
+                retried_id = retried.id
+                retried_status = retried.related["processing_status"]
+                audit = session.exec(
+                    select(AuditLog).where(AuditLog.event_type == "message.processing_retried")
+                ).one()
+        finally:
+            message_processing_service.enqueue_message_processing = original_enqueue
+
+        self.assertEqual(retried_status, "queued")
+        self.assertEqual(queued, [retried_id])
+        self.assertEqual(audit.status, "success")
+        self.assertEqual(audit.actor_id, "7")
+
+    def test_retry_log_analysis_processing_requires_reupload(self) -> None:
+        with Session(self.engine) as session:
+            message = SystemMessage(
+                org_id=1,
+                system_id=1,
+                message_type="log_analysis",
+                title="日志分析",
+                source="openapi",
+                related={
+                    "request_id": "log-failed",
+                    "need_llm_process": True,
+                    "processing_status": "failed",
+                    "processing_error": "model timeout",
+                },
+            )
+            session.add(message)
+            session.commit()
+            session.refresh(message)
+
+            with self.assertRaisesRegex(ValueError, "重新上传日志"):
+                retry_message_processing(session, message.id, 1, actor_id="7")
 
 
 class SystemTokenServiceTests(unittest.TestCase):
@@ -801,8 +963,14 @@ class SystemTokenServiceTests(unittest.TestCase):
                 need_llm_process=True,
                 context={"service": "file-receiver"},
             )
-            first = submit_open_alert(session, system, token_record, body)
-            second = submit_open_alert(session, system, token_record, body)
+            queued: list[int] = []
+            original_enqueue = openapi_service.enqueue_message_processing
+            try:
+                openapi_service.enqueue_message_processing = lambda message_id: queued.append(message_id)
+                first = submit_open_alert(session, system, token_record, body)
+                second = submit_open_alert(session, system, token_record, body)
+            finally:
+                openapi_service.enqueue_message_processing = original_enqueue
             messages = list(session.exec(
                 select(SystemMessage).where(SystemMessage.system_id == system.id)
             ))
@@ -812,15 +980,15 @@ class SystemTokenServiceTests(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].source, "openapi")
         self.assertEqual(messages[0].related["request_id"], "req-1")
-        self.assertEqual(messages[0].related["processing_mode"], "rules")
-        self.assertIn("file-receiver", messages[0].diagnosis)
+        self.assertEqual(messages[0].related["processing_status"], "queued")
+        self.assertEqual(queued, [first.id])
         self.assertIsNotNone(token_record.last_used_at)
         with Session(self.engine) as session:
             audit_events = list(session.exec(
                 select(AuditLog).where(AuditLog.system_id == system.id)
             ))
         self.assertIn("openapi.alert.created", [event.event_type for event in audit_events])
-        self.assertIn("message.processed", [event.event_type for event in audit_events])
+        self.assertNotIn("message.processed", [event.event_type for event in audit_events])
 
     def test_submit_open_health_updates_system_snapshot(self) -> None:
         with Session(self.engine) as session:
@@ -893,7 +1061,8 @@ class SystemTokenServiceTests(unittest.TestCase):
             listed = list_open_messages(session, system, limit=20)
             fetched = get_open_message_by_request_id(session, system, "req-own")
 
-        self.assertEqual([item.id for item in listed], [own.id])
+        self.assertEqual([item.id for item in listed.items], [own.id])
+        self.assertEqual(listed.total, 1)
         self.assertEqual(fetched.id, own.id)
 
     def test_submit_open_message_and_report_use_message_center(self) -> None:
@@ -910,24 +1079,41 @@ class SystemTokenServiceTests(unittest.TestCase):
             )
             token_record = session.exec(select(SystemToken).where(SystemToken.id == created.id)).one()
 
-            message = submit_open_message(
-                session,
-                system,
-                token_record,
-                OpenMessageIn(request_id="msg-1", title="文件接收恢复", content="文件接收已恢复。"),
-                message_type="message",
-            )
-            daily = submit_open_message(
+            queued: list[int] = []
+            original_enqueue = openapi_service.enqueue_message_processing
+            try:
+                openapi_service.enqueue_message_processing = lambda message_id: queued.append(message_id)
+                message = submit_open_message(
+                    session,
+                    system,
+                    token_record,
+                    OpenMessageIn(request_id="msg-1", title="文件接收恢复", content="文件接收已恢复。"),
+                    message_type="message",
+                )
+                daily = submit_open_message(
+                    session,
+                    system,
+                    token_record,
+                    OpenMessageIn(
+                        request_id="daily-1",
+                        title="运行日报",
+                        summary="今日任务正常",
+                        need_llm_process=True,
+                    ),
+                    message_type="daily_report",
+                )
+            finally:
+                openapi_service.enqueue_message_processing = original_enqueue
+            weekly = submit_open_message(
                 session,
                 system,
                 token_record,
                 OpenMessageIn(
-                    request_id="daily-1",
-                    title="运行日报",
-                    summary="今日任务正常",
-                    need_llm_process=True,
+                    request_id="weekly-1",
+                    title="运行周报",
+                    summary="本周稳定",
                 ),
-                message_type="daily_report",
+                message_type="weekly_report",
             )
             duplicate = submit_open_message(
                 session,
@@ -941,15 +1127,103 @@ class SystemTokenServiceTests(unittest.TestCase):
             duplicate_id = duplicate.id
             daily_id = daily.id
             daily_request_id = daily.related["request_id"]
-            daily_processing_mode = daily.related["processing_mode"]
+            daily_processing_status = daily.related["processing_status"]
             daily_diagnosis = daily.diagnosis
+            weekly_page = list_open_messages(session, system, message_type="weekly_report")
+            processed = process_message_by_id(daily.id, self.engine)
+            session.refresh(daily)
+            processed_status = daily.related["processing_status"]
+            processed_mode = daily.related["processing_mode"]
+            processed_diagnosis = daily.diagnosis
 
         self.assertEqual(message_type, "message")
         self.assertEqual(daily_type, "daily_report")
+        self.assertEqual(weekly.message_type, "weekly_report")
+        self.assertEqual([item.id for item in weekly_page.items], [weekly.id])
+        self.assertEqual(weekly_page.total, 1)
         self.assertEqual(duplicate_id, daily_id)
         self.assertEqual(daily_request_id, "daily-1")
-        self.assertEqual(daily_processing_mode, "rules")
-        self.assertIn("日报", daily_diagnosis)
+        self.assertEqual(daily_processing_status, "queued")
+        self.assertEqual(queued, [daily_id])
+        self.assertIn("需要智能分析", daily_diagnosis)
+        self.assertTrue(processed["ok"])
+        self.assertEqual(processed_status, "done")
+        self.assertEqual(processed_mode, "rules")
+        self.assertIn("日报", processed_diagnosis)
+
+    def test_external_system_can_update_message_status_by_request_id(self) -> None:
+        with Session(self.engine) as session:
+            system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API")
+            session.add(system)
+            session.commit()
+            session.refresh(system)
+            created = create_system_token(
+                session,
+                system.id,
+                1,
+                SystemTokenCreate(name="prod-token", scopes=["message:send", "message:write"]),
+            )
+            token_record = session.exec(select(SystemToken).where(SystemToken.id == created.id)).one()
+            created_message = submit_open_message(
+                session,
+                system,
+                token_record,
+                OpenMessageIn(request_id="msg-status-1", title="待确认消息"),
+                message_type="message",
+            )
+
+            read_message = update_open_message_status(session, system, token_record, "msg-status-1", "read")
+            read_status = read_message.status
+            acked_message = update_open_message_status(session, system, token_record, "msg-status-1", "acknowledged")
+            acked_status = acked_message.status
+            resolved_message = update_open_message_status(session, system, token_record, "msg-status-1", "resolved")
+            resolved_status = resolved_message.status
+
+        self.assertEqual(created_message.id, resolved_message.id)
+        self.assertEqual(read_status, "read")
+        self.assertEqual(acked_status, "acknowledged")
+        self.assertEqual(resolved_status, "resolved")
+
+    def test_production_report_is_queued_for_ai_processing_and_notification(self) -> None:
+        queued: list[int] = []
+        original_enqueue = openapi_service.enqueue_message_processing
+        try:
+            openapi_service.enqueue_message_processing = lambda message_id: queued.append(message_id)
+            with Session(self.engine) as session:
+                system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API")
+                session.add(system)
+                session.commit()
+                session.refresh(system)
+                created = create_system_token(
+                    session,
+                    system.id,
+                    1,
+                    SystemTokenCreate(name="prod-token", scopes=["report:submit"]),
+                )
+                token_record = session.exec(select(SystemToken).where(SystemToken.id == created.id)).one()
+
+                report = submit_open_production_report(
+                    session,
+                    system,
+                    token_record,
+                    OpenProductionReportIn(
+                        request_id="prod-daily-1",
+                        title="订单生产日报",
+                        period="2026-07-15",
+                        summary="订单处理 1000 笔，失败 3 笔",
+                        data={"total": 1000, "failed": 3},
+                        context={"biz": "order"},
+                    ),
+                    message_type="daily_report",
+                )
+        finally:
+            openapi_service.enqueue_message_processing = original_enqueue
+
+        self.assertEqual(report.message_type, "daily_report")
+        self.assertEqual(report.related["processing_kind"], "production_report")
+        self.assertTrue(report.related["notify_after_processing"])
+        self.assertEqual(report.related["processing_status"], "queued")
+        self.assertEqual(queued, [report.id])
 
 
 class EfficiencyAnalyticsTests(unittest.TestCase):
@@ -1782,28 +2056,41 @@ class DataAnalysisServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "写入或结构变更"):
             run_readonly_query({"url": f"sqlite:///{self.business_db}"}, "SELECT * FROM tasks WHERE status = 'drop'")
 
-    def test_diagnose_data_question_uses_readonly_analysis(self) -> None:
-        with Session(self.engine) as session:
-            system = MonitoredSystem(
-                org_id=1,
-                key="task-app",
-                name="任务系统",
-                infra={
-                    "readonly_database": {
-                        "url": f"sqlite:///{self.business_db}",
-                        "table": "tasks",
-                        "timestamp_column": "created_at",
-                    }
-                },
+    def test_is_data_analysis_question_ignores_log_intent(self) -> None:
+        self.assertFalse(
+            is_data_analysis_question("请结合 MySQL 的最近日志分析问题，重点看错误和异常")
+        )
+        self.assertTrue(is_data_analysis_question("今天任务数量统计一下"))
+
+    def test_diagnose_log_question_routes_to_agent(self) -> None:
+        original_diagnose = diagnose_service.diagnose_with_details
+        try:
+            diagnose_service.diagnose_with_details = lambda descriptor, question, **kwargs: DiagnosisRun(
+                answer="已在 MySQL 日志中发现 ERROR 与 Exception",
+                model="test-model",
+                duration_ms=8,
+                total_tokens=10,
+                tool_calls=[
+                    {"tool": "search_logs", "status": "success", "input": {"service": "MySQL", "keyword": "error"}},
+                ],
             )
-            session.add(system)
-            session.commit()
-            session.refresh(system)
+            with Session(self.engine) as session:
+                system = MonitoredSystem(org_id=1, key="ops", name="运维平台", local=True)
+                session.add(system)
+                session.commit()
+                session.refresh(system)
+                response = diagnose_system(
+                    session,
+                    system.id,
+                    1,
+                    "请结合 MySQL 的最近日志分析问题，重点看错误和异常",
+                )
+        finally:
+            diagnose_service.diagnose_with_details = original_diagnose
 
-            response = diagnose_system(session, system.id, 1, "任务数量统计一下")
-
-        self.assertIn("匹配记录数", response.answer)
-        self.assertEqual(response.template_name, "readonly_data_analysis")
+        self.assertIn("MySQL 日志", response.answer)
+        self.assertNotEqual(response.template_name, "readonly_data_analysis")
+        self.assertEqual(response.evidence[0].type, "search_logs")
 
     def test_stuck_task_analysis_combines_database_worker_health_and_logs(self) -> None:
         business_engine = create_engine(f"sqlite:///{self.business_db}")
@@ -1878,34 +2165,6 @@ class DataAnalysisServiceTests(unittest.TestCase):
         self.assertIn("downstream timeout", result.evidence["worker_logs"][0]["excerpt"])
         self.assertIn("先恢复异常 Worker", result.answer)
         self.assertEqual(audit.output["stuck_count"], 1)
-
-    def test_diagnose_routes_stuck_task_question_to_specialized_analysis(self) -> None:
-        with Session(self.engine) as session:
-            system = MonitoredSystem(
-                org_id=1,
-                key="task-app",
-                name="任务系统",
-                infra={
-                    "readonly_database": {
-                        "enabled": True,
-                        "url": f"sqlite:///{self.business_db}",
-                        "table": "tasks",
-                        "task_analysis_enabled": True,
-                        "status_column": "status",
-                        "updated_at_column": "updated_at",
-                        "processing_values": ["processing"],
-                    }
-                },
-            )
-            session.add(system)
-            session.commit()
-            session.refresh(system)
-
-            response = diagnose_system(session, system.id, 1, "为什么卡住了")
-
-        self.assertEqual(response.template_name, "stuck_task_analysis")
-        self.assertEqual(response.template_description, "任务卡住专项分析")
-        self.assertIn("卡住任务", response.answer)
 
 
 class DiagnoseAndWebhookServiceTests(unittest.TestCase):

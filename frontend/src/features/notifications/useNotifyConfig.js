@@ -63,6 +63,48 @@ export function useNotifyConfig(systemId, reloadSystem) {
     if (secretType === 'smtp') notifyCfg.smtp_password = ''
   }
 
+  function splitEmails(value) {
+    return String(value || '')
+      .split(/[,，;\s]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  function isEmail(value) {
+    return /^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(String(value || '').trim())
+  }
+
+  function validateNotifyBeforeSave(body) {
+    if (body.channels.includes('feishu')) {
+      const missing = [
+        !body.app_id && 'App ID',
+        !body.app_secret && 'App Secret',
+        !body.chat_id && '群聊 Chat ID',
+      ].filter(Boolean)
+      if (missing.length) return `飞书配置还缺：${missing.join('、')}`
+    }
+    if (body.channels.includes('webhook')) {
+      if (!body.webhook_url) return 'Webhook 配置还缺：Webhook URL'
+      if (!/^https?:\/\//.test(body.webhook_url)) return 'Webhook URL 必须以 http:// 或 https:// 开头'
+    }
+    if (body.channels.includes('email')) {
+      const recipients = splitEmails(body.email_to)
+      const invalid = recipients.filter((item) => !isEmail(item))
+      if (!recipients.length) return '邮件配置还缺：告警收件邮箱'
+      if (invalid.length) return `收件邮箱格式不正确：${invalid.join('、')}`
+      const missing = [
+        !body.smtp_host && 'SMTP 主机',
+        !body.smtp_port && '端口',
+        !body.smtp_username && '用户名',
+        !body.smtp_from && '发件人',
+        !body.smtp_password && 'SMTP 密码',
+      ].filter(Boolean)
+      if (missing.length) return `邮件配置还缺：${missing.join('、')}`
+      if (!isEmail(body.smtp_from)) return '发件人邮箱格式不正确'
+    }
+    return ''
+  }
+
   async function saveNotify() {
     notifyLoading.value = true
     try {
@@ -74,6 +116,11 @@ export function useNotifyConfig(systemId, reloadSystem) {
       }
       if (!body.smtp_password && notifySecretAlreadySet.smtp && !notifyEditingSecret.smtp) {
         body.smtp_password = '***'
+      }
+      const validationError = validateNotifyBeforeSave(body)
+      if (validationError) {
+        message.warning(validationError)
+        return
       }
       await api.put(`/systems/${systemId}/notify`, body)
       message.success('通知配置已保存')

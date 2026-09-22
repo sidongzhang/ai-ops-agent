@@ -155,16 +155,57 @@ def build_collector_bundle(
         f"COLLECTOR_KEY={shlex.quote(collector_key)} \\\n"
         "COLLECTOR_INTERVAL=30 python collector/run.py\n"
     )
+    bat_script = (
+        "@echo off\r\n"
+        "cd /d \"%~dp0\"\r\n"
+        f"set \"PLATFORM_URL={platform_url.rstrip('/')}\" \r\n"
+        f"set \"COLLECTOR_KEY={collector_key}\" \r\n"
+        "set \"COLLECTOR_INTERVAL=30\" \r\n"
+        "python collector\\run.py\r\n"
+        "if errorlevel 1 pause\r\n"
+    )
+    ps1_script = (
+        "$ErrorActionPreference = 'Stop'\r\n"
+        "Set-Location $PSScriptRoot\r\n"
+        f"$env:PLATFORM_URL = '{platform_url.rstrip('/')}'\r\n"
+        f"$env:COLLECTOR_KEY = '{collector_key}'\r\n"
+        "$env:COLLECTOR_INTERVAL = '30'\r\n"
+        "python collector/run.py\r\n"
+        "if ($LASTEXITCODE -ne 0) { Read-Host '按 Enter 退出' }\r\n"
+    )
+    install_bat = (
+        "@echo off\r\n"
+        "cd /d \"%~dp0\"\r\n"
+        "echo === AIOps 采集器 Windows 一键安装 ===\r\n"
+        "python --version >nul 2>&1 || (\r\n"
+        "  echo 未找到 Python，请先安装 Python 3.12+ 并勾选 Add to PATH\r\n"
+        "  pause & exit /b 1\r\n"
+        ")\r\n"
+        "python -m pip install -r collector\\requirements.txt\r\n"
+        "if errorlevel 1 pause & exit /b 1\r\n"
+        "call run_collector.bat\r\n"
+    )
     output = BytesIO()
     with ZipFile(output, "w", ZIP_DEFLATED) as bundle:
         for relative in files:
             bundle.write(root / relative, relative)
         bundle.writestr("run_collector.sh", run_script)
+        bundle.writestr("run_collector.bat", bat_script)
+        bundle.writestr("run_collector.ps1", ps1_script)
+        bundle.writestr("install_and_run_windows.bat", install_bat)
         bundle.writestr(
             "BUNDLE_README.txt",
-            "解压后执行：先执行 python -m pip install -r collector/requirements.txt，"
-            "再执行 sh run_collector.sh（需要 Python 3.12+）。\n"
-            "或使用 Docker 构建镜像后运行；Linux 同机部署建议使用 --network host。\n"
-            "服务地址必须能从采集器所在网络访问，127.0.0.1 只代表采集器所在主机。\n",
+            "=== AIOps 采集器安装包 ===\n\n"
+            "【Windows 推荐】\n"
+            "1. 解压到任意目录\n"
+            "2. 双击 install_and_run_windows.bat（会自动安装依赖并启动）\n"
+            "   或在 PowerShell 中执行：.\\run_collector.ps1\n"
+            "   注意：不要用 Linux 的 PLATFORM_URL=xxx python ... 写法，PowerShell 不支持。\n\n"
+            "【Linux / macOS】\n"
+            "1. python -m pip install -r collector/requirements.txt\n"
+            "2. sh run_collector.sh\n\n"
+            "【Docker】\n"
+            "见 collector/README.md\n\n"
+            "服务地址必须能从采集器所在网络访问；127.0.0.1 指采集器所在主机，不是平台主机。\n",
         )
     return output.getvalue()

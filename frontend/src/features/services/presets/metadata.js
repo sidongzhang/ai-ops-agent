@@ -112,14 +112,14 @@ export const CONNECTOR_FIELDS = {
   tcp: [['host', '主机', 'example.com'], ['port', '端口', '443']],
   prometheus: [['url', 'Prometheus 地址', 'http://prom:9090'], ['up_query', '探活 PromQL', 'up']],
   ssh: [
-    ['host', '主机', '1.2.3.4'],
+    ['host', '主机', '10.0.0.1'],
     ['port', 'SSH 端口', '22'],
     ['user', '用户', 'ops'],
     ['identity_file', '密钥文件', '~/.ssh/id_ed25519'],
     ['log_path', '日志路径', '/var/log/app.log'],
     ['systemd_unit', 'systemd 服务名', 'my-app.service'],
     ['process', '进程关键字', 'java -jar app.jar'],
-    ['health_cmd', '健康检查命令', 'curl -fsS http://127.0.0.1:8080/actuator/health'],
+    ['health_cmd', '健康检查命令', 'curl -fsS http://10.0.0.1:8080/actuator/health'],
   ],
   local: [
     ['kind', '进程 / Docker', 'process'],

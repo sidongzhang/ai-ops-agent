@@ -19,7 +19,7 @@ from pathlib import Path
 
 import httpx
 
-from ....core.config import settings
+from app.agent.llm import embedding_endpoint
 
 log = logging.getLogger(__name__)
 
@@ -38,14 +38,20 @@ _lock = threading.Lock()
 
 def _embed(texts: list[str]) -> list[list[float]] | None:
     """调 OpenAI 兼容 embedding 接口，失败返回 None。"""
-    api_key = settings.embedding_api_key or settings.deepseek_api_key
-    base_url = (settings.embedding_base_url or settings.deepseek_base_url).rstrip("/")
-    model = settings.embedding_model
+    endpoint = embedding_endpoint()
+    api_key = endpoint.api_key
+    base_url = endpoint.base_url.rstrip("/")
+    embeddings_url = (
+        f"{base_url}/embeddings"
+        if base_url.endswith("/v1")
+        else f"{base_url}/v1/embeddings"
+    )
+    model = endpoint.model
     if not api_key:
         return None
     try:
         resp = httpx.post(
-            f"{base_url}/v1/embeddings",
+            embeddings_url,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={"model": model, "input": texts},
             timeout=30,

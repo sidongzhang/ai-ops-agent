@@ -8,6 +8,7 @@ LOG_DIR="$RUN_DIR/logs"
 mkdir -p "$LOG_DIR"
 
 BACKEND_PORT="${BACKEND_PORT:-8000}"
+BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 FRONTEND_HOST="${FRONTEND_HOST:-127.0.0.1}"
 
@@ -118,9 +119,20 @@ start_app() {
     echo "  ⚠ 未检测到 Redis (6379/6380)，Celery 可能无法启动" >&2
   fi
 
+  # 本机服务探活不能走 HTTP 代理，否则代理挂掉时所有本地健康检查都会变成 502。
+  export NO_PROXY="${NO_PROXY:-}${NO_PROXY:+,}127.0.0.1,localhost,::1,0.0.0.0"
+  export no_proxy="$NO_PROXY"
+
+  # API 进程也要连同一个 Redis：否则 .delay() 会连不上 broker/result backend，
+  # 表现为消息中心出现大量"分析失败 / enqueue_failed"。
+  local celery_env=""
+  if [[ -n "$redis_base" ]]; then
+    celery_env="export CELERY_BROKER_URL='${CELERY_BROKER_URL:-${redis_base}/0}' CELERY_RESULT_BACKEND='${CELERY_RESULT_BACKEND:-${redis_base}/1}' && "
+  fi
+
   echo "→ 启动后端 (:$BACKEND_PORT) [screen: aiops-backend]..."
   start_screen aiops-backend \
-    "cd '$ROOT/backend' && exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port $BACKEND_PORT --reload >> '$LOG_DIR/backend.log' 2>&1"
+    "cd '$ROOT/backend' && ${celery_env}exec .venv/bin/uvicorn app.main:app --host $BACKEND_HOST --port $BACKEND_PORT --reload >> '$LOG_DIR/backend.log' 2>&1"
   wait_http "http://127.0.0.1:$BACKEND_PORT/healthz" "后端"
 
   echo "→ 启动前端 ($FRONTEND_HOST:$FRONTEND_PORT) [screen: aiops-frontend]..."

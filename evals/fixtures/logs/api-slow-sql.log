@@ -1,0 +1,8 @@
+2024-05-06 08:20:31 WARN  [sql] slow query detected: SELECT * FROM eval_orders_big WHERE user_id = 4821 AND created_at > '2024-05-01' - 11.842s
+2024-05-06 08:20:31 INFO  [sql] EXPLAIN result: id=1 select_type=SIMPLE table=eval_orders_big type=ALL possible_keys=NULL key=NULL rows=998
+2024-05-06 08:20:31 WARN  [sql] 全表扫描 detected on eval_orders_big, no usable index for user_id
+2024-05-06 08:20:33 WARN  [sql] slow query detected: SELECT dept_id, SUM(amount) FROM eval_report_big GROUP BY dept_id - 7.402s
+2024-05-06 08:20:33 INFO  [sql] EXPLAIN result: type=ALL, using temporary; using filesort (no index on dept_id)
+2024-05-06 08:21:00 INFO  [db] slow_query_log=ON long_query_time=1s, slow_queries counter increasing
+2024-05-06 08:21:00 WARN  [api] GET /api/order/list p99 = 12.4s (downstream sql slow)
+2024-05-06 08:21:05 INFO  [db] cpu: mysql process cpu 8% (not saturated), wait io: sql execution
