@@ -568,13 +568,15 @@ def test_real_agent_loop_runs_offline_with_test_model():
 
 def test_reporting_round_trip(tmp_path):
     cases = dataset.load_cases()[:2]
+    def _key_text(k):
+        return " ".join(k["any_of"]) if isinstance(k, dict) else str(k)
     records = [
         {
             "case_id": case["id"],
             "fault_type": case["fault_type"],
             "difficulty": case["difficulty"],
             "ablation": "full",
-            "answer": " ".join(case["ground_truth"]["evidence_keys"]),
+            "answer": " ".join(_key_text(k) for k in case["ground_truth"]["evidence_keys"]),
             "tool_calls": [{"tool": tool, "input": {}, "status": "success"} for tool in case["ground_truth"]["required_tools"]],
             "duration_ms": 10,
             "total_tokens": 20,
