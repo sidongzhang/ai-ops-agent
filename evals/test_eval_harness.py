@@ -56,7 +56,9 @@ def test_dataset_coverage_requirements():
     decoys = [case for case in cases if case["ground_truth"]["forbidden_conclusion"]]
     assert len(decoys) >= dataset.MIN_DECOY_CASES
     actions = {case["inject"]["action"] for case in cases}
-    assert {"docker_exec", "docker_stop", "docker_start", "http", "manual"} <= actions
+    # docker_start/http 注入方式已证实不可靠（容器运行中 docker_start 无效；
+    # Prometheus /-/quit 需 --web.enable-lifecycle 否则 403），统一改用 docker_stop
+    assert {"docker_exec", "docker_stop", "manual"} <= actions
 
 
 def test_dataset_rejects_invalid_cases():

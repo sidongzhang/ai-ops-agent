@@ -134,14 +134,26 @@ def degraded_call_rate(tool_calls: Sequence[dict]) -> float:
     return round(degraded / total, 3)
 
 
+_NEGATION_PREFIXES = ("不是", "并非", "没有", "排除", "非", "排除是", "别怪", "与…无关", "与...无关", "无关")
+
+
 def hallucination_hits(answer: str, forbidden_conclusion: Sequence[str]) -> list[str]:
-    """答案里出现的错误归因（归一后子串匹配）。"""
+    """答案里出现的错误归因（归一后子串匹配）。
+
+    否定语境不算命中：答案里「不是前端渲染问题」是在排除该归因，
+    不应记为幻觉。规则：短语前 12 字内出现否定词则跳过该命中。
+    """
     answer_norm = normalize_text(answer)
     hits = []
     for phrase in forbidden_conclusion or []:
         phrase_norm = normalize_text(phrase)
-        if phrase_norm and phrase_norm in answer_norm:
-            hits.append(phrase)
+        if not phrase_norm or phrase_norm not in answer_norm:
+            continue
+        pos = answer_norm.find(phrase_norm)
+        window = answer_norm[max(0, pos - 12): pos]
+        if any(neg in window for neg in _NEGATION_PREFIXES):
+            continue
+        hits.append(phrase)
     return hits
 
 
