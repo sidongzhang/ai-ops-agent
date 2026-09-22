@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .agent.workflows.runner import init_persistent_checkpointer, shutdown_checkpointer
 from .api import ROUTERS
 from .core.config import settings
 from .core.database import init_db
@@ -33,7 +34,12 @@ _setup_app_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    # 审批工作流 checkpointer：PG 环境下持久化（重启不丢挂起的审批），失败降级内存版
+    await init_persistent_checkpointer()
+    try:
+        yield
+    finally:
+        await shutdown_checkpointer()
 
 
 app = FastAPI(
