@@ -155,8 +155,8 @@ start_docker() {
   if colima status >/dev/null 2>&1; then
     ok "colima 虚拟机已在运行"
   else
-    say "  → 启动 colima 虚拟机 (2 CPU / 2GB)，约需 30-60 秒…"
-    if colima start >/dev/null 2>&1; then ok "colima 已启动"; else bad "colima 启动失败"; return 1; fi
+    say "  → 启动 colima 虚拟机 (4 CPU / 6GB)，约需 30-60 秒…"
+    if colima start --cpu 4 --memory 6 >/dev/null 2>&1; then ok "colima 已启动"; else bad "colima 启动失败"; return 1; fi
   fi
   if ! docker info >/dev/null 2>&1; then bad "Docker 不可用，跳过容器启动"; return 1; fi
 

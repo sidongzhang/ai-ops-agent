@@ -8,6 +8,9 @@ services:
       MYSQL_DATABASE: opsdb
       MYSQL_USER: opsuser
       MYSQL_PASSWORD: opspass
+      # 2026-09-22: 宿主(colima)内存小，显式限制 buffer_pool 防止 OOMKilled（ExitCode=137）
+      command: --innodb_buffer_pool_size=128M --performance_schema=OFF
+    mem_limit: 512m
     ports:
       - "3306:3306"
     volumes:
