@@ -26,6 +26,7 @@ const {
   question,
   renderMd,
   lastQuestion,
+  liveStepIcon,
 } = useDiagnosisChat(props.systemId)
 
 watch(
@@ -167,6 +168,17 @@ function modelOptionLabel(option) {
             <div :class="['bubble', 'bubble--agent', message.status === 'running' ? 'bubble--running' : '']">
               <a-spin v-if="message.status === 'running'" size="small" class="bubble__spin" />
               <span v-html="renderMd(message.text)" />
+              <ul v-if="message.status === 'running' && message.liveSteps?.length" class="bubble__live-steps">
+                <li
+                  v-for="step in message.liveSteps"
+                  :key="step.call_id || step.step"
+                  :class="['live-step', `live-step--${step.status || 'started'}`]"
+                >
+                  <span class="live-step__icon">{{ liveStepIcon(step.status) }}</span>
+                  <span class="live-step__label">{{ step.label }}</span>
+                  <span class="live-step__detail">{{ step.detail }}</span>
+                </li>
+              </ul>
             </div>
           </div>
         </div>
@@ -332,6 +344,34 @@ function modelOptionLabel(option) {
 .bubble__spin {
   margin-top: 3px;
   flex-shrink: 0;
+}
+.bubble__live-steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.live-step {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border-bottom: 1px dashed var(--border-color);
+}
+.live-step:last-child { border-bottom: none; }
+.live-step__icon { flex-shrink: 0; }
+.live-step--started .live-step__label { color: var(--primary, #1677ff); font-weight: 600; }
+.live-step__label { flex-shrink: 0; }
+.live-step__detail {
+  color: var(--text-color-secondary, #888);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 420px;
 }
 .thinking-row {
   display: flex;

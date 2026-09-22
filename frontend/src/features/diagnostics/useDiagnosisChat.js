@@ -91,7 +91,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitForDiagnosisReport(systemId, reportId) {
+async function waitForDiagnosisReport(systemId, reportId, onRunningUpdate) {
   const startedAt = Date.now()
   while (Date.now() - startedAt < DIAGNOSIS_POLL_TIMEOUT_MS) {
     await sleep(DIAGNOSIS_POLL_INTERVAL_MS)
@@ -99,6 +99,8 @@ async function waitForDiagnosisReport(systemId, reportId) {
     if (data.status === 'success' || data.status === 'failed') {
       return data
     }
+    // 运行中：把后端逐事件落库的证据链透给 UI，实时渲染工具链
+    if (onRunningUpdate) onRunningUpdate(data)
   }
   throw new Error('诊断超时，请稍后在诊断历史中查看结果')
 }
@@ -221,7 +223,18 @@ export function useDiagnosisChat(systemId) {
         model_mode: modelChoice.value,
       })
       if (data.status === 'running' && data.id) {
-        const report = await waitForDiagnosisReport(systemId, data.id)
+        const report = await waitForDiagnosisReport(systemId, data.id, (partial) => {
+          const steps = partial.evidence || []
+          if (steps.length) {
+            const done = steps.filter((s) => s.status !== 'started').length
+            messages.value[pendingIndex] = {
+              role: 'agent',
+              status: 'running',
+              text: `诊断进行中，已完成 ${done}/${steps.length} 步取证…`,
+              liveSteps: steps,
+            }
+          }
+        })
         messages.value[pendingIndex] = buildAgentMessageFromReport(report)
         if (report.status === 'failed') {
           message.error(report.error_message || '诊断失败')
@@ -320,5 +333,12 @@ export function useDiagnosisChat(systemId) {
     modelOptions,
     renderMd,
     lastQuestion,
+    liveStepIcon,
   }
+}
+
+const LIVE_STEP_ICONS = { started: '⏳', success: '✅', error: '❌' }
+
+function liveStepIcon(status) {
+  return LIVE_STEP_ICONS[status] || '⏳'
 }
