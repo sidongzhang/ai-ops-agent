@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-v2"
     embedding_api_key: str = ""
     embedding_base_url: str = ""
+    # 向量维度：必须与 embedding_model 输出维度一致（nomic-embed-text=768，
+    # text-embedding-v2/OpenAI text-embedding-3-small=1536）。修改后需重建知识库索引。
+    embedding_dim: int = 1536
 
     # Langfuse 可观测性（留空则跳过追踪）
     langfuse_public_key: str = ""

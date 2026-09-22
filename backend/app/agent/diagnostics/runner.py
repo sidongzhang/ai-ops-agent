@@ -188,8 +188,10 @@ def diagnose_with_details(
 
         # 自动把本次诊断摘要写入知识库 runbook（默认关闭，见 settings.diagnosis_auto_runbook）。
         # 开启后模型算错的数字会被当作"权威依据"污染后续诊断。
+        # 修复：runbook 必须写到与检索一致的数字 system_id（旧版用 descriptor id
+        # "org{n}-{key}" 建目录，检索却查 docs/<数字id>，经验回写从未被命中过）。
         if settings.diagnosis_auto_runbook:
-            _append_to_runbook(descriptor, question, answer)
+            _append_to_runbook(system_id, descriptor, question, answer)
 
         return DiagnosisRun(
             answer=answer,
@@ -380,10 +382,11 @@ def _extract_tool_calls(messages: list) -> list[dict]:
     return result
 
 
-def _append_to_runbook(descriptor: dict, question: str, answer: str) -> None:
+def _append_to_runbook(system_id: int | str, descriptor: dict, question: str, answer: str) -> None:
     """把本次诊断的问题+摘要追加到该系统的 runbook，供后续 RAG 检索。"""
     try:
-        system_id = descriptor.get("id", "default")
+        # 数字 system_id 优先（与检索主键一致）；无数字 id 时才用 descriptor id
+        doc_id = str(system_id) if system_id else descriptor.get("id", "default")
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
         # 取回答前 300 字作为摘要（避免写入过长）
         summary = answer[:300].replace("\n", " ").strip()
@@ -391,6 +394,6 @@ def _append_to_runbook(descriptor: dict, question: str, answer: str) -> None:
             f"## [{ts}] {question}\n\n"
             f"**摘要**: {summary}{'...' if len(answer) > 300 else ''}\n"
         )
-        append_runbook_entry(system_id, entry)
+        append_runbook_entry(doc_id, entry)
     except Exception as exc:
         log.debug(f"[rag] runbook 写入失败（不影响诊断结果）: {exc}")
