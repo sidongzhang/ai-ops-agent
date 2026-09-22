@@ -100,3 +100,22 @@
 线上对齐：`evidence_coverage_rate` ↔ `analytics.diagnosis_evidence_rate_pct`；`task_success_rate` 是 analytics `diagnosis_success_rate_pct` 的离线严格版（线上只统计诊断是否完成，离线额外要求工具命中 + 证据词命中 + 无幻觉）。
 
 产物：`summary.json`（机器可读）、`summary.md`（本文件）、`trajectories.jsonl`（每条用例完整 tool_calls 轨迹）。
+
+
+---
+
+## 第一循环优化结果（2026-09-22，块 2 完成）
+
+**改动**：①「关键证据」必须引用工具返回原文凭证（错误类名/数值/对象），禁止纯转述；
+② evidence_keys 支持 any_of 等价表述组并修正 5 条用例 GT；③ 新工具 check_container_state。
+
+| 组 | 指标 | 基线 → 改造后 |
+|---|---|---|
+| full | RCA | 0.780 → **0.92**（+0.14，达标） |
+| full | 成功率 | 100% → 100% |
+| playbook | RCA | 0.793 → **0.90** |
+| playbook | 成功率 / 步数 / tokens | 100% / 8.3→7.7 / 14.3k→14.1k（全改善） |
+
+**full 组遗留问题（块 3 目标）**：tokens +3149（+26%）、步数 +1.0、Tool-F1 -0.084。
+预研定位：query_prometheus 占调用 28%（52/186 次 vs baseline 19 次），每次返回原始 metrics JSON——
+改为关键行格式化 + 截断，并让剧本 PromQL 步骤按需引导，预期 tokens 拉平、步数 -30%。
