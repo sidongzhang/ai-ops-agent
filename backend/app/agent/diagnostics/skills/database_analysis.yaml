@@ -15,7 +15,7 @@ triggers:
   - 慢查询
 
 steps: |
-  ## 排查剧本：数据库分析
+  ## 排查剧本：数据库分析（⚠️ 按需执行：先做前 2~3 步取证，证据足够支撑结论即收口作答；其余步骤仅在结论存疑时补充执行，避免为「完整性」过度取证）
   1. check_service('MySQL') — 确认 MySQL 端口 3306 可达
   2. query_prometheus('mysql_global_status_threads_connected') — 当前连接数
   3. query_prometheus('mysql_global_status_threads_running') — 活跃查询线程数

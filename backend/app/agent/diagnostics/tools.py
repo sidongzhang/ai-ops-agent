@@ -223,8 +223,8 @@ def register_tools(agent: Agent) -> Agent:
                 if not rows:
                     return f"PromQL: `{promql}` 无数据"
                 return "远程 PromQL: `" + promql + "`\n" + "\n".join(
-                    f"  {item.get('metric', {})} = {item.get('value', ['', ''])[1]}" for item in rows[:20]
-                )
+                    f"  {item.get('metric', {})} = {item.get('value', ['', ''])[1]}" for item in rows[:8]
+                ) + (f"\n（其余 {len(rows) - 8} 条省略）" if len(rows) > 8 else "")
         base_url = find_prometheus_url(ctx.deps.descriptor)
         if not base_url:
             return "未找到 Prometheus 地址。请在服务列表中注册一个 health_url 含 9090 的 HTTP 服务，或在 infra.prometheus_url 中配置。"
@@ -242,14 +242,17 @@ def register_tools(agent: Agent) -> Agent:
             if not results:
                 return f"查询 `{promql}` 无数据（指标可能不存在或目标未被抓取）"
             lines = []
-            for result in results[:20]:
+            for result in results[:8]:
                 metric = result.get("metric", {})
-                labels = ", ".join(f'{k}="{v}"' for k, v in metric.items() if k != "__name__")
+                labels = ", ".join(f'{k}="{v}"' for k, v in metric.items() if k not in ("__name__", "job"))
+                if len(labels) > 80:   # 标签过长只留 instance 等核心标识
+                    labels = labels[:77] + "..."
                 name = metric.get("__name__", promql.split("{")[0])
                 value = result["value"][1]
                 lines.append(f"  {name}{'{' + labels + '}' if labels else ''} = {value}")
+            note = f"（其余 {len(results) - 8} 条省略——已足够判断，如需明细可缩小查询范围）" if len(results) > 8 else ""
             header = f"PromQL: `{promql}`  ({len(results)} 条结果)"
-            return header + "\n" + "\n".join(lines)
+            return header + note + "\n" + "\n".join(lines)
         except Exception as exc:
             return f"Prometheus 查询失败: {exc}"
 

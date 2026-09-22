@@ -14,7 +14,7 @@ triggers:
   - 分区
 
 steps: |
-  ## 排查剧本：Kafka 深度分析
+  ## 排查剧本：Kafka 深度分析（⚠️ 按需执行：先做前 2~3 步取证，证据足够支撑结论即收口作答；其余步骤仅在结论存疑时补充执行，避免为「完整性」过度取证）
   1. check_service('Kafka') — 确认 Kafka 端口 9092 可达
   2. query_prometheus('kafka_brokers') — 确认 broker 数量
   3. query_prometheus('kafka_consumergroup_lag') — 查看各消费者组积压量

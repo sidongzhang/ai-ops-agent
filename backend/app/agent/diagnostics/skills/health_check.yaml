@@ -15,7 +15,7 @@ triggers:
   - health
 
 steps: |
-  ## 排查剧本：全面健康检查
+  ## 排查剧本：全面健康检查（⚠️ 按需执行：先做前 2~3 步取证，证据足够支撑结论即收口作答；其余步骤仅在结论存疑时补充执行，避免为「完整性」过度取证）
   按顺序执行，不要跳步骤：
   1. list_services — 获取所有服务健康状态，建立全局视图
   2. query_prometheus('node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100') — 内存可用率

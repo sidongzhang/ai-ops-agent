@@ -18,7 +18,7 @@ triggers:
   - 瓶颈
 
 steps: |
-  ## 排查剧本：性能分析
+  ## 排查剧本：性能分析（⚠️ 按需执行：先做前 2~3 步取证，证据足够支撑结论即收口作答；其余步骤仅在结论存疑时补充执行，避免为「完整性」过度取证）
   1. query_prometheus('node_load1') — 系统 1 分钟平均负载
   2. query_prometheus('node_load5') — 系统 5 分钟平均负载（趋势判断）
   3. query_prometheus('100 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100') — CPU 使用率百分比
