@@ -1,8 +1,9 @@
 """数据库引擎与会话。
 
-dev 默认 SQLite（零配置启动），生产设置 DATABASE_URL=postgresql+psycopg2://...
-然后运行 alembic upgrade head 做 schema 迁移。
+统一使用 Postgres（deploy/docker-compose.yml 的 platform-db，含 pgvector），
+启动时自动执行 alembic 迁移；未配置 DATABASE_URL 时回退 SQLite（无 Docker 兜底）。
 """
+from pathlib import Path
 from sqlalchemy import inspect
 from sqlmodel import SQLModel, Session, create_engine
 
@@ -50,14 +51,24 @@ def _ensure_sqlite_schema() -> None:
 def init_db():
     from app import models  # noqa: F401  # 注册所有模型到 metadata
     if settings.database_url.startswith("sqlite"):
-        # dev 模式：直接 create_all，无需 alembic
+        # SQLite 兜底（无 Docker 时的开发模式）：直接 create_all，无需 alembic
         SQLModel.metadata.create_all(engine)
         _ensure_sqlite_schema()
-    # Postgres 生产模式：schema 由 `alembic upgrade head` 管理，此处不 create_all
+    else:
+        # Postgres：启动时自动执行 alembic 迁移（幂等，已是 head 则无操作）
+        _run_alembic_upgrade()
     from app.services.incidents.service import backfill_incidents
 
     with Session(engine) as session:
         backfill_incidents(session)
+
+
+def _run_alembic_upgrade() -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    ini_path = Path(__file__).resolve().parents[2] / "alembic.ini"
+    command.upgrade(Config(str(ini_path)), "head")
 
 
 def get_session():
