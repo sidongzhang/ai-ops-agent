@@ -416,5 +416,5 @@ CELERY_BROKER_URL=redis://127.0.0.1:6379/0
 - [x] 生产切换 Postgres（docker-compose + DATABASE_URL，依赖已安装）
 - [x] Celery Worker 告警任务补全（Beat 定时触发，按系统周期巡检并触发站内/飞书/邮件告警）
 - [x] 生产化改造（2026-09-22）：数据库全量切 Postgres（启动自动 Alembic）· LangGraph 审批状态 AsyncPostgresSaver 持久化 · RAG 迁移 pgvector 并修复 runbook 主键错位
-- [x] Agent 离线评测真跑基线（25 条 × 4 组消融真跑完成，报告见 docs/evals/baseline-20260922.md；
-      核心发现：Playbook 注入为负收益 96%→76%，下一步优化 Playbook 路由与注入策略）
+- [x] Agent 离线评测真跑基线（三轮方法学迭代后取得干净基线，报告见 docs/evals/baseline-20260922-clean.md；
+      结论：成功率 100%，full 组工具选择 F1 最高；下一靶点为 RCA 精度与 tokens 成本）
