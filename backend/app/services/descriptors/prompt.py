@@ -36,6 +36,8 @@ def build_prompt(descriptor: SystemDescriptor) -> str:
         "## 可用工具",
         "- list_services：列出所有服务的健康状态（首选入手）",
         "- check_service：检查单个服务的健康",
+        "- check_container_state：查容器真实状态（运行/退出原因/OOMKilled/退出码/内存上限/重启次数），",
+        "  判断容器是 OOM 被杀还是自行退出时必须用这个（check_service 看不到退出原因）",
         "- read_logs / search_logs：读取/搜索某服务日志",
         "- query_prometheus：执行 PromQL 查询（Prometheus 在 9090 端口）",
         "  ⚠️ Kafka 指标来自 kafka-exporter，正确名称：",

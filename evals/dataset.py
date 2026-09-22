@@ -95,6 +95,21 @@ def _is_str_list(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value)
 
 
+def _evidence_key_groups_valid(value: Any) -> bool:
+    """evidence_keys 的宽松格式：元素可以是 {"any_of": [非空字符串,...]}。"""
+    if not isinstance(value, list) or not value:
+        return False
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            continue
+        if isinstance(item, dict):
+            alternatives = item.get("any_of")
+            if _is_str_list(alternatives):
+                continue
+        return False
+    return True
+
+
 def validate_cases(cases: Sequence[dict]) -> list[str]:
     """校验数据集 schema + 覆盖度要求，返回错误信息列表（空列表 = 通过）。"""
     errors: list[str] = []
@@ -144,8 +159,12 @@ def validate_cases(cases: Sequence[dict]) -> list[str]:
                     errors.append(f"{where}: ground_truth 缺少字段 {field}")
             if not isinstance(ground_truth.get("root_cause"), str) or not ground_truth.get("root_cause", "").strip():
                 errors.append(f"{where}: ground_truth.root_cause 必须是非空字符串")
-            if not _is_str_list(ground_truth.get("evidence_keys")):
-                errors.append(f"{where}: ground_truth.evidence_keys 必须是非空字符串列表")
+            if not _is_str_list(ground_truth.get("evidence_keys")) and not _evidence_key_groups_valid(
+                ground_truth.get("evidence_keys")
+            ):
+                errors.append(
+                    f"{where}: ground_truth.evidence_keys 必须是非空列表（元素为字符串或 {{'any_of': [...]}} 组）"
+                )
             required_tools = ground_truth.get("required_tools")
             if not _is_str_list(required_tools):
                 errors.append(f"{where}: ground_truth.required_tools 必须是非空字符串列表")

@@ -132,6 +132,60 @@ def register_tools(agent: Agent) -> Agent:
 
     @agent.tool
     @_memoized
+    def check_container_state(ctx: RunContext[AgentDeps], service: str) -> str:
+        """查容器真实状态：运行/退出原因/OOMKilled/ExitCode/重启次数/内存上限。
+
+        判断「容器是 OOM 被杀还是自己退出」「是否达到内存上限」时用这个，
+        check_service 只探活，看不到退出原因。
+        """
+        service_cfg = next(
+            (svc for svc in ctx.deps.descriptor.get("services", []) if svc.get("name") == service),
+            None,
+        )
+        if not service_cfg:
+            return f"系统中无服务「{service}」"
+        container = service_cfg.get("container")
+        if not container:
+            return f"服务「{service}」不是容器化部署，无容器状态可查"
+        try:
+            import subprocess
+
+            proc = subprocess.run(
+                [
+                    "docker", "inspect", container,
+                    "--format",
+                    '{{.State.Status}}|OOMKilled={{.State.OOMKilled}}|ExitCode={{.State.ExitCode}}'
+                    '|Restarts={{.RestartCount}}|Memory={{.HostConfig.Memory}}'
+                    '|OOMScoreAdj={{.HostConfig.OomScoreAdj}}|FinishedAt={{.State.FinishedAt}}',
+                ],
+                capture_output=True, text=True, timeout=15,
+            )
+            if proc.returncode != 0:
+                return f"docker inspect {container} 失败: {(proc.stderr or '').strip()[:200]}"
+            fields = proc.stdout.strip().split("|")
+            lines = [f"容器 {container} 状态:"]
+            for part in fields:
+                if "|" not in part:
+                    lines.append(f"  {part}")
+                    continue
+                k, v = part.split("|", 1)
+                label = {
+                    "OOMKilled": "OOM被杀(OOMKilled)",
+                    "ExitCode": "退出码(ExitCode)",
+                    "Restarts": "重启次数",
+                    "Memory": "内存上限(Memory limit)",
+                    "FinishedAt": "退出时间",
+                }.get(k, k)
+                if k == "Status":
+                    lines.append(f"  状态: {v}")
+                else:
+                    lines.append(f"  {label}: {v}")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"check_container_state 失败: {exc}"
+
+    @agent.tool
+    @_memoized
     def read_logs(ctx: RunContext[AgentDeps], service: str, lines: int = 50) -> str:
         if ctx.deps.remote_command:
             result = ctx.deps.remote_command("fetch_logs", {"service": service, "lines": lines})

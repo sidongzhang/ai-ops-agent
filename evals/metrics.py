@@ -57,16 +57,38 @@ def key_match_weight(answer: str, key: str) -> float:
     return 0.0
 
 
-def evidence_hits(answer: str, evidence_keys: Sequence[str]) -> list[dict]:
-    """逐 key 的命中明细，供轨迹/报告审计。"""
-    return [
-        {"key": key, "weight": key_match_weight(answer, key)}
-        for key in evidence_keys
-    ]
+def evidence_key_weight(answer: str, key) -> float:
+    """一个 evidence_key 条目的命中权重。
+
+    key 可以是：
+      * 字符串：按 key_match_weight 计分；
+      * dict ``{"any_of": [str, ...]}``：等价表述组，取组内最高权重——
+        同一证据的多种自然表述（中英文/原文错误类名/通俗说法）都应被认可。
+    """
+    if isinstance(key, dict):
+        alternatives = list(key.get("any_of") or [])
+        if not alternatives:
+            return 0.0
+        return max(key_match_weight(answer, str(alt)) for alt in alternatives)
+    return key_match_weight(answer, str(key))
 
 
-def rca_accuracy(answer: str, evidence_keys: Sequence[str]) -> float:
-    """答案对 ground_truth 证据词的加权覆盖率（部分命中记 0.5）。"""
+def evidence_hits(answer: str, evidence_keys: Sequence) -> list[dict]:
+    """逐 key 的命中明细，供轨迹/报告审计。key 支持 str 或 {"any_of": [...]} 组。"""
+    hits = []
+    for key in evidence_keys:
+        weight = evidence_key_weight(answer, key)
+        display = (
+            key.get("any_of", [key])[0]
+            if isinstance(key, dict) and key.get("any_of")
+            else str(key)
+        )
+        hits.append({"key": display, "weight": weight})
+    return hits
+
+
+def rca_accuracy(answer: str, evidence_keys: Sequence) -> float:
+    """答案对 ground_truth 证据词的加权覆盖率（部分命中记 0.5，any_of 组内取最高）。"""
     if not evidence_keys:
         return 0.0
     total = sum(item["weight"] for item in evidence_hits(answer, evidence_keys))
