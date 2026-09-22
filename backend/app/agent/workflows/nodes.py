@@ -4,14 +4,19 @@ import logging
 from .models import AnalysisDeps, AnalysisResult, analysis_agent
 from .persistence import update_workflow_db
 from .state import WorkflowState
-from ...services.systems.restart import annotate_restart_action
-from ...services.workflows.actions import normalize_action
-from ...services.workflows.execution import execute_workflow_action, verify_action_recovery_async
+
+# 注意：services.*（restart/workflows.actions/execution）在函数内延迟导入。
+# app.main 先加载 agent.workflows.runner，若此处顶层 import services.workflows，
+# 会经 services/workflows/__init__ -> service -> agent.workflows.runner 形成循环导入。
+
 
 log = logging.getLogger(__name__)
 
 
 async def analyze_node(state: WorkflowState) -> dict:
+    from ...services.systems.restart import annotate_restart_action
+    from ...services.workflows.actions import normalize_action
+
     try:
         result = await analysis_agent.run(
             state["question"],
@@ -63,6 +68,8 @@ async def analyze_node(state: WorkflowState) -> dict:
 
 
 async def execute_node(state: WorkflowState) -> dict:
+    from ...services.workflows.execution import execute_workflow_action, verify_action_recovery_async
+
     thread_id = state["thread_id"]
     action = state.get("proposed_action", {})
 

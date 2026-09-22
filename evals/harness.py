@@ -91,7 +91,8 @@ def patch_knowledge_docs_root(docs_root: str | Path | None = None, *, keyword_on
 
     root = Path(docs_root) if docs_root else DEFAULT_DOCS_ROOT
     store.DOCS_ROOT = root
-    store._cache.clear()
+    # pgvector 版 store：指纹缓存；keyword_only 时还会把 _embed 打桩为 None（自动走关键词降级）
+    store._fingerprint_cache.clear()
     if keyword_only:
         store._embed = lambda texts: None  # type: ignore[assignment]
     return store
