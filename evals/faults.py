@@ -281,7 +281,22 @@ def teardown(
         for line in notes:
             _echo(f"    - {line}", echo)
     elif action == "http":
-        notes = teardown_commands or ["（http 注入无自动回滚，按 setup 说明人工恢复）"]
+        # http 注入无配置级回滚，但 dataset 可给出 docker 命令兜底
+        # （如 Prometheus /-/quit 后需 docker restart 恢复进程）。
+        for line in teardown_commands:
+            parts = line.strip().split()
+            if parts and parts[0] == "docker":
+                require_docker()
+                if parts[1] == "restart" and len(parts) > 2:
+                    steps.append(docker_restart(parts[2]))
+                elif parts[1] in ("start", "stop") and len(parts) > 2:
+                    steps.append(_run(parts))
+                else:
+                    notes.append(f"（http teardown 暂只支持 docker restart/start/stop，收到: {line}）")
+            else:
+                notes.append(line)
+        if not steps and not notes:
+            notes = ["（http 注入无自动回滚，按 setup 说明人工恢复）"]
         for line in notes:
             _echo(f"[teardown:http] {line}", echo)
     elif action in DOCKER_ACTIONS:

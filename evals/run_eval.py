@@ -61,6 +61,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="模型路由模式，默认 auto")
     parser.add_argument("--concurrency", type=int, default=1, help="并发用例数（默认 1；>1 为实验性）")
     parser.add_argument("--timeout", type=float, default=300.0, help="单用例超时秒数（默认 300）")
+    parser.add_argument(
+        "--no-isolate", action="store_true", dest="no_isolate",
+        help="关闭逐例故障隔离（默认：--run 时逐例 注入→跑全部消融→恢复，避免跨用例环境污染）",
+    )
     parser.add_argument("--out-dir", default="", help="报告输出目录（默认 evals/results/<timestamp>/）")
     parser.add_argument("--dataset", default="", help="数据集 JSONL 路径")
     parser.add_argument("--descriptors-dir", default="", help="descriptor fixture 目录")
@@ -159,6 +163,50 @@ def cmd_faults(args, cases: list[dict]) -> int:
         return 3
 
 
+def _run_isolated(
+    selected: list[dict],
+    groups: list[str],
+    options: harness.RunOptions,
+    timeout_s: float,
+    journal: Path,
+) -> list[dict]:
+    """逐例隔离执行：注入故障 → 跑该用例全部消融组 → 恢复环境 → 下一条。
+
+    背景：--inject-all 批首注入 + 批内不恢复会导致跨用例环境污染
+    （如 svc-unreachable 停掉 Redis/MySQL/Prometheus，污染后续 redis/mysql 组）。
+    manual 用例仍不自动注入（保持原语义），仅运行。
+    """
+    records: list[dict] = []
+    total_cases = len(selected)
+    for idx, case in enumerate(selected, 1):
+        cid = case.get("id", "")
+        faulted_by_us = False
+        if faults.case_needs_docker(case):
+            # 先幂等清理该用例可能的历史残留，再注入
+            try:
+                faults.teardown(case, journal_path=journal, echo=None)
+            except Exception:  # noqa: BLE001 - 清理失败不阻塞评测
+                pass
+            try:
+                record = faults.inject(case, journal_path=journal, echo=None)
+                faulted_by_us = True
+                print(f"  [隔离 {idx}/{total_cases}] {cid} 注入 {case['inject']['action']} → ok={record.get('ok')}")
+            except Exception as exc:  # noqa: BLE001 - 注入失败按无故障环境跑并记录
+                print(f"  [隔离 {idx}/{total_cases}] {cid} 注入失败: {exc}")
+        else:
+            print(f"  [隔离 {idx}/{total_cases}] {cid} · manual/http 用例，跳过自动注入")
+        try:
+            for group in groups:
+                records.append(_run_one(case, group, options, timeout_s))
+        finally:
+            if faulted_by_us:
+                try:
+                    faults.teardown(case, journal_path=journal, echo=None)
+                except Exception:  # noqa: BLE001
+                    pass
+    return records
+
+
 def cmd_eval(args, cases: list[dict]) -> int:
     if args.concurrency > 1:
         print("[warn] --concurrency>1 为实验性：pydantic-ai run_sync 与共享 Agent 实例并非线程安全。", file=sys.stderr)
@@ -214,6 +262,8 @@ def cmd_eval(args, cases: list[dict]) -> int:
         with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
             futures = [pool.submit(_run_one, case, group, options, args.timeout) for case, group in tasks]
             records = [future.result() for future in futures]
+    elif not args.no_isolate and not options.dry_run:
+        records = _run_isolated(selected, groups, options, args.timeout, journal)
     else:
         records = [_run_one(case, group, options, args.timeout) for case, group in tasks]
 
