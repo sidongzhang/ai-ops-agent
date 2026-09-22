@@ -179,6 +179,18 @@ start_docker() {
     say "  - 已按 STACK_OLLAMA=0 跳过 ollama"
   fi
 
+  # 2026-09-22 起 dev 数据库统一 Postgres（backend .env 的 DATABASE_URL 指向 5432）
+  say "  → 启动 Postgres 平台库…"
+  if docker inspect deploy-platform-db-1 >/dev/null 2>&1; then
+    docker start deploy-platform-db-1 >/dev/null 2>&1 || true
+  else
+    # deploy compose 对 api/worker 有必填变量，占位值仅为通过解析，只启动 platform-db
+    ( cd "$ROOT" && JWT_SECRET=dev-placeholder ENCRYPTION_KEY=dev-placeholder \
+      DEEPSEEK_API_KEY= FEISHU_APP_ID= FEISHU_APP_SECRET= \
+      docker compose -f deploy/docker-compose.yml up -d platform-db >/dev/null 2>&1 ) || true
+  fi
+  ok "platform-db (pgvector) 已启动"
+
   say "  → 启动 algp 中间件 (mysql:3307 / rabbitmq:5672)…"
   for c in algp-mysql algp-rabbitmq; do
     if docker inspect "$c" >/dev/null 2>&1; then
@@ -191,6 +203,7 @@ start_docker() {
 
   wait_port 3306 "aiops MySQL" 60
   wait_port 6379 "Redis" 60
+  wait_port 5432 "Postgres 平台库" 90
   wait_port 3307 "algp MySQL" 90
 }
 
@@ -198,6 +211,7 @@ stop_docker() {
   step "停止 Docker"
   ( cd "$ROOT" && docker compose stop >/dev/null 2>&1 ) \
     && ok "ai-ops-agent 容器已停止" || warn "ai-ops-agent 容器停止异常"
+  docker stop deploy-platform-db-1 >/dev/null 2>&1 && ok "Postgres 平台库已停止" || true
   docker stop algp-mysql algp-rabbitmq >/dev/null 2>&1 \
     && ok "algp 容器已停止" || true
   if colima status >/dev/null 2>&1; then
@@ -374,6 +388,7 @@ status() {
   check "$P_BACKEND"  "后端 API"
   check "$P_FRONTEND" "前端 Vite"
   check "$P_CADDY"    "Caddy 网关"
+  check 5432          "Postgres 平台库"
   check "$P_ALGP"     "algp 后端"
   check "$P_SVOM"     "svom 前端"
   check "$P_HXMT"     "hxmt-worker"

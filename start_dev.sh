@@ -5,7 +5,14 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== AIOps Platform 开发服务器 ==="
 
-# 1. 数据库迁移
+# 1. 数据库迁移（需先启动 Postgres 平台库，可用桌面"启动AIOps栈"或下述命令）
+if ! nc -z 127.0.0.1 5432 2>/dev/null; then
+  echo "→ Postgres (5432) 未运行，尝试启动 deploy/docker-compose.yml 的 platform-db…"
+  JWT_SECRET=dev-placeholder ENCRYPTION_KEY=dev-placeholder \
+    DEEPSEEK_API_KEY= FEISHU_APP_ID= FEISHU_APP_SECRET= \
+    docker compose -f "$REPO_DIR/deploy/docker-compose.yml" up -d platform-db
+  sleep 3
+fi
 echo "→ 运行数据库迁移..."
 cd "$REPO_DIR/backend"
 .venv/bin/alembic upgrade head
