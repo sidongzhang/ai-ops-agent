@@ -3,6 +3,7 @@ from .auth import Org, User
 from .collectors import Collector
 from .diagnostics import DiagnosisReport
 from .incidents import Incident
+from .knowledge import KnowledgeMemory
 from .messages import SystemMessage
 from .notifications import NotificationDelivery
 from .systems import MonitoredSystem, Service
@@ -15,6 +16,7 @@ __all__ = [
     "AuditLog",
     "DiagnosisReport",
     "Incident",
+    "KnowledgeMemory",
     "MonitoredSystem",
     "Collector",
     "SystemMessage",

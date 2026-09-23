@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     # 默认关闭：模型输出的数字可能出错，一旦写进知识库就会被后续诊断当作"权威依据"引用，
     # 形成自我投毒的闭环。知识库应由人工维护。
     diagnosis_auto_runbook: bool = False
+    # 结构化长期记忆（带来源/置信度/有效性闭环，污染风险受控）：诊断/工作流完成后自动沉淀
+    diagnosis_memory_enabled: bool = True
 
     # 单次诊断的资源上限，防止 agent 陷入循环无限烧 token。
     # 每多一轮 loop 都要重发整段上下文，所以这三项同时也是成本闸门。

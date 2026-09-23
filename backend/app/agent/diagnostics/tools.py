@@ -16,7 +16,7 @@ from pydantic_ai import Agent, RunContext
 
 from ...services.descriptors.health import collect_health, read_service_logs, search_service_logs
 from ...services.descriptors.prompt import build_prompt
-from .knowledge.store import get_relevant_context, search_knowledge_hits
+from .knowledge.store import get_relevant_context, search_with_memories
 from .skill_router import get_skill_steps
 
 log = logging.getLogger(__name__)
@@ -480,7 +480,7 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         遇到不熟悉的故障类型、需要参考历史处理经验或查找操作步骤时调用。
         返回语义相关的文档片段；知识库为空或无匹配时返回空字符串。"""
         system_id = ctx.deps.descriptor.get("id", "default")
-        hits = search_knowledge_hits(query, system_id)
+        hits = search_with_memories(query, system_id)
         if not hits:
             return "知识库中暂无相关记录。可基于实时探活和日志继续分析，并说明知识库无匹配。"
         doc_names = "、".join(hit["name"] for hit in hits)

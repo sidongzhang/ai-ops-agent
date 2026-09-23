@@ -29,7 +29,7 @@ class DiagnosisEvidenceTests(unittest.TestCase):
     def test_build_knowledge_refs(self) -> None:
         from unittest.mock import patch
 
-        with patch("app.services.diagnostics.evidence.search_knowledge_hits") as search_mock, patch(
+        with patch("app.services.diagnostics.evidence.search_with_memories") as search_mock, patch(
             "app.services.diagnostics.evidence.read_doc"
         ) as read_mock:
             search_mock.return_value = [{"name": "runbook.md", "snippet": "Redis 内存高", "score": 0.9}]
@@ -44,7 +44,7 @@ class DiagnosisEvidenceTests(unittest.TestCase):
     def test_build_knowledge_refs_from_question_when_no_tool_call(self) -> None:
         from unittest.mock import patch
 
-        with patch("app.services.diagnostics.evidence.search_knowledge_hits") as search_mock, patch(
+        with patch("app.services.diagnostics.evidence.search_with_memories") as search_mock, patch(
             "app.services.diagnostics.evidence.read_doc"
         ) as read_mock:
             search_mock.return_value = [

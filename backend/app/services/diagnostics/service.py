@@ -7,7 +7,7 @@ from sqlmodel import Session
 
 from app.agent.diagnostics.runner import diagnose_with_details
 from app.agent.diagnostics.skill_router import list_skills, match_skill
-from app.agent.diagnostics.knowledge.store import get_relevant_context
+from app.agent.diagnostics.knowledge.store import get_relevant_context_with_memories as get_relevant_context
 from app.core.security import decrypt_sensitive_fields, encrypt_sensitive_fields
 from app.repositories.systems import list_enabled_services_for_system
 from app.services.collectors.exec import select_online_collector
@@ -572,6 +572,17 @@ def complete_diagnosis_report(
         _finalize_report(report_id, org_id, system_id, status="success", result=result)
     except Exception:  # noqa: BLE001
         log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
+    # 结构化记忆：诊断成功后沉淀经验（污染受控：置信度 0.5、待回查验证）
+    if settings.diagnosis_memory_enabled and result:
+        from app.services.knowledge.memory import save_memory
+
+        save_memory(
+            org_id=org_id,
+            system_id=system_id,
+            question=question,
+            answer=result.answer,
+            report_id=report_id,
+        )
 
 
 def diagnose_system(

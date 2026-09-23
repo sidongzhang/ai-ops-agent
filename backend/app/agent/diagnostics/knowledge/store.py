@@ -213,6 +213,18 @@ def get_relevant_context(query: str, system_id: str, max_chars: int = MAX_CHARS)
     return "\n\n".join(hit["snippet"] for hit in hits)
 
 
+def get_relevant_context_with_memories(query: str, system_id: str, max_chars: int = MAX_CHARS) -> str:
+    """知识库 + 结构化记忆联合版：记忆条目带置信度标注注入上下文。"""
+    hits = search_with_memories(query, system_id, max_chars=max_chars)
+    if not hits:
+        return ""
+    parts = []
+    for hit in hits:
+        tag = "🧠记忆" if hit.get("memory") else "知识库"
+        parts.append(f"[{tag} | {hit['name']}]\n{hit['snippet']}")
+    return "\n\n".join(parts)
+
+
 def search_knowledge_hits(query: str, system_id: str, max_chars: int = MAX_CHARS) -> list[dict]:
     """检索知识库，返回 [{name, snippet, score}]，按相关度排序、同文档去重。"""
     if _sync_index(system_id):
@@ -221,6 +233,33 @@ def search_knowledge_hits(query: str, system_id: str, max_chars: int = MAX_CHARS
             return _dedupe_hits(hits)
     hits = _keyword_hits(query, system_id, max_chars)
     return _dedupe_hits(hits)
+
+
+def search_with_memories(query: str, system_id: str, max_chars: int = MAX_CHARS) -> list[dict]:
+    """知识库 + 结构化记忆联合检索：记忆按置信度/有效性加权，作为额外命中合并。
+
+    记忆条目标记 source='memory'，name 前缀「记忆」，UI/审计可见来源。
+    """
+    hits = search_knowledge_hits(query, system_id, max_chars=max_chars)
+    try:
+        from ...services.knowledge.memory import search_memories
+
+        sid = _as_int_system_id(system_id)
+        if sid is None:
+            return hits
+        memories = search_memories(system_id=sid, query=query, max_results=2)
+        for m in memories:
+            snippet = f"【{m['validity']}】根因: {m['root_cause']}" + (f" | 处置: {m['remedy']}" if m["remedy"] else "")
+            hits.append({
+                "name": f"记忆({m['source']}, 置信度{m['confidence']:.1f}) {m['symptom'][:30]}",
+                "snippet": snippet[:400],
+                "score": m["score"],
+                "memory": True,
+            })
+        hits.sort(key=lambda h: -h.get("score", 0))
+    except Exception as exc:  # noqa: BLE001 - 记忆检索失败不影响知识库结果
+        log.debug(f"[memory] 合并记忆检索失败: {exc}")
+    return hits
 
 
 def _dedupe_hits(hits: list[dict]) -> list[dict]:

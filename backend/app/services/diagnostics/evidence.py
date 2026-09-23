@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.agent.diagnostics.knowledge.store import read_doc, search_knowledge_hits
+from app.agent.diagnostics.knowledge.store import read_doc, search_with_memories
 
 TOOL_LABELS = {
     "check_service": "健康检查",
@@ -180,9 +180,9 @@ def build_knowledge_refs(
         query = payload.get("query") if isinstance(payload, dict) else ""
         if not query:
             continue
-        add_hits(search_knowledge_hits(query, str(system_id)))
+        add_hits(search_with_memories(query, str(system_id)))
 
     if question:
-        add_hits(search_knowledge_hits(question, str(system_id)))
+        add_hits(search_with_memories(question, str(system_id)))
 
     return refs

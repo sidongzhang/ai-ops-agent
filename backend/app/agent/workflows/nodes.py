@@ -79,6 +79,20 @@ async def execute_node(state: WorkflowState) -> dict:
         combined_result = f"{execution_result}\n\n恢复回查：{verification}"
         final_status = "done" if recovered else "error"
         update_workflow_db(thread_id, final_status, combined_result, executed=True)
+        # 结构化记忆验证闭环：回查结果直接回填记忆有效性（recovered→confirmed / 失败→failed 防污染）
+        from app.core.config import settings as app_settings
+
+        if app_settings.diagnosis_memory_enabled and state.get("diagnosis"):
+            from ...services.knowledge.memory import save_memory
+
+            save_memory(
+                org_id=int(state.get("org_id") or 0),
+                system_id=int(state.get("system_id") or 0),
+                question=str(state.get("question") or "")[:500],
+                answer=str(state.get("diagnosis") or "")[:2000],
+                source="model",
+                validity="confirmed_success" if recovered else "failed",
+            )
         log.info("[workflow:%s] 执行完成，回查=%s", thread_id, recovered)
         return {"execution_result": combined_result, "final_status": final_status}
     except Exception as exc:
