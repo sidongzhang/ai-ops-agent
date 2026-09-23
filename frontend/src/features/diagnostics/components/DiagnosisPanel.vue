@@ -15,6 +15,7 @@ const {
   decide,
   chatBox,
   clearMessages,
+  exportHistoryBackup,
   loadHistory,
   loadModelOptions,
   diagnosing,
@@ -28,6 +29,19 @@ const {
   lastQuestion,
   liveStepIcon,
 } = useDiagnosisChat(props.systemId)
+
+import { message } from 'ant-design-vue'
+
+async function onClearHistoryConfirmed() {
+  // 二次确认通过后：先自动导出备份，再执行清空
+  const count = await exportHistoryBackup()
+  if (count < 0) {
+    message.warning('备份导出失败，已取消清空操作（服务端诊断历史仍保留）')
+    return
+  }
+  message.info(`已导出 ${count} 条诊断报告备份`)
+  await clearMessages()
+}
 
 watch(
   () => props.draftQuestion,
@@ -119,8 +133,20 @@ function modelOptionLabel(option) {
           style="margin-right:6px"
         >🔧 申请修复</a-button>
       </a-tooltip>
-      <a-tooltip title="清空服务端诊断历史">
-        <a-button type="text" size="small" :disabled="messages.length === 0" @click="clearMessages">🧹</a-button>
+      <a-tooltip title="开启新对话（服务端诊断历史仍保留）">
+        <a-button size="small" :disabled="diagnosing || messages.length === 0" @click="startNewChat"
+          style="margin-right:6px">🆕 新对话</a-button>
+      </a-tooltip>
+      <a-tooltip title="导出备份并清空服务端诊断历史（不可恢复）">
+        <a-popconfirm
+          title="将先自动导出 JSON 备份，然后永久清空服务端诊断历史，确认？"
+          ok-text="导出备份并清空"
+          cancel-text="取消"
+          :ok-button-props="{ danger: true }"
+          @confirm="onClearHistoryConfirmed"
+        >
+          <a-button type="text" size="small" danger :disabled="messages.length === 0">🗑 清空历史</a-button>
+        </a-popconfirm>
       </a-tooltip>
     </template>
 

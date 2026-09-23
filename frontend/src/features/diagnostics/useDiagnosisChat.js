@@ -176,6 +176,36 @@ export function useDiagnosisChat(systemId) {
     }
   }
 
+  function startNewChat() {
+    // 只清空本地对话视图；服务端诊断历史保留（点「历史」可随时查看）
+    messages.value = []
+    lastQuestion.value = ''
+    message.success('已开启新对话（服务端诊断历史仍保留）')
+  }
+
+  async function exportHistoryBackup() {
+    // 清空服务端历史前，先把全量诊断报告导出为 JSON 备份（防误丢）
+    try {
+      const { data } = await api.get(`/systems/${systemId}/diagnosis-reports`, {
+        params: { limit: 200 },
+      })
+      const reports = data || []
+      const blob = new Blob([JSON.stringify(reports, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `diagnosis-history-backup-${systemId}-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      return reports.length
+    } catch (error) {
+      message.error(extractErrorMessage(error, '导出诊断历史备份失败'))
+      return -1
+    }
+  }
+
   async function clearMessages() {
     try {
       await api.delete(`/systems/${systemId}/diagnosis-reports`)
@@ -321,7 +351,6 @@ export function useDiagnosisChat(systemId) {
     requestFix,
     decide,
     chatBox,
-    clearMessages,
     loadHistory,
     loadModelOptions,
     diagnosing,
@@ -334,6 +363,9 @@ export function useDiagnosisChat(systemId) {
     renderMd,
     lastQuestion,
     liveStepIcon,
+    startNewChat,
+    exportHistoryBackup,
+    clearMessages,
   }
 }
 
