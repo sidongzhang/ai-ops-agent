@@ -25,6 +25,7 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3",
     "psycopg[binary]>=3.2",
     "websockets>=13.0",
+    "mcp>=2.0",
 ]
 
 [tool.setuptools.packages.find]
