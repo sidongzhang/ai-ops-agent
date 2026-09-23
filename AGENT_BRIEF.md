@@ -418,3 +418,10 @@ CELERY_BROKER_URL=redis://127.0.0.1:6379/0
 - [x] 生产化改造（2026-09-22）：数据库全量切 Postgres（启动自动 Alembic）· LangGraph 审批状态 AsyncPostgresSaver 持久化 · RAG 迁移 pgvector 并修复 runbook 主键错位
 - [x] Agent 离线评测真跑基线（三轮方法学迭代 + 数据集扩容 112 条，权威基线见 docs/evals/baseline-112-20260922.md；
       结论：RCA 0.90~0.93、成功率 96~97%、full 组正贡献坐实；下一靶点：跨轮上下文压缩与工具收口）
+
+### 2026-09-23 增补
+- **取证子代理**：DeepAgents 式上下文隔离（investigator.py），主代理 investigate() 按服务委派，
+  子代理工具调用冒泡进主轨迹（评分/审计/UI 全可见）。112 条回归：tokens -16.4%（12.6k，达标）、
+  成功率 98.2% 超基线、RCA 0.892。遗留：延迟 +2.6x（子代理串行），缓解方向为子代理内批量并行。
+- **诊断实时工具链**：前端轮询报告 evidence 实时渲染取证步骤（✅/⏳ 图标）。
+- 环境加固：colima 4CPU/6GB、MySQL mem_limit 512m。
