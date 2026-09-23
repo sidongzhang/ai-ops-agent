@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import api from '../../../api'
+import MemoriesCard from '../components/MemoriesCard.vue'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -166,6 +167,8 @@ onMounted(async () => {
         <p class="page-sub">上传操作手册、排障文档和业务说明，AI 诊断时会优先参考这些专属知识。</p>
       </div>
     </div>
+
+    <MemoriesCard :id="id" />
 
     <div class="stats-grid">
       <div v-for="item in stats" :key="item.label" class="stat-card">

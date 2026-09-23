@@ -114,6 +114,90 @@ def search_knowledge_docs(
     return {"query": q, "context": get_relevant_context(q, str(system.id), max_chars=2000)}
 
 
+# ---- 结构化记忆（AI 经验条目：人工确认入口） ----
+
+from sqlmodel import select
+
+from ..models.knowledge import (
+    CONFIDENCE_HUMAN,
+    VALIDITY_CONFIRMED,
+    VALIDITY_FAILED,
+    KnowledgeMemory,
+)
+
+
+@router.get("/{system_id}/knowledge/memories")
+def list_knowledge_memories(
+    system_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+):
+    system = require_system(session, system_id, org_id)
+    rows = session.exec(
+        select(KnowledgeMemory)
+        .where(KnowledgeMemory.system_id == system.id)
+        .order_by(KnowledgeMemory.updated_at.desc())
+        .limit(50)
+    ).all()
+    return [
+        {
+            "id": m.id,
+            "symptom": m.symptom,
+            "root_cause": m.root_cause,
+            "remedy": m.remedy,
+            "source": m.source,
+            "confidence": m.confidence,
+            "validity": m.validity,
+            "hit_count": m.hit_count,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in rows
+    ]
+
+
+@router.post("/knowledge/memories/{memory_id}/confirm")
+def confirm_knowledge_memory(
+    memory_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+):
+    """人工确认记忆有效：confidence → 1.0，检索权重提升到最高。"""
+    from datetime import datetime, timezone
+
+    from ..models.knowledge import CONFIDENCE_HUMAN, VALIDITY_CONFIRMED
+
+    memory = session.get(KnowledgeMemory, memory_id)
+    if not memory or memory.org_id != org_id:
+        raise HTTPException(404, "记忆条目不存在")
+    memory.validity = VALIDITY_CONFIRMED
+    memory.confidence = CONFIDENCE_HUMAN
+    memory.source = "human" if memory.source != "human" else memory.source
+    memory.updated_at = datetime.now(timezone.utc)
+    session.add(memory)
+    session.commit()
+    return {"id": memory.id, "validity": memory.validity, "confidence": memory.confidence}
+
+
+@router.post("/knowledge/memories/{memory_id}/invalidate")
+def invalidate_knowledge_memory(
+    memory_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+):
+    """人工标记记忆失效：validity → failed（检索直接排除）。"""
+    from datetime import datetime, timezone
+
+    memory = session.get(KnowledgeMemory, memory_id)
+    if not memory or memory.org_id != org_id:
+        raise HTTPException(404, "记忆条目不存在")
+    memory.validity = "failed"
+    memory.confidence = 0.1
+    memory.updated_at = datetime.now(timezone.utc)
+    session.add(memory)
+    session.commit()
+    return {"id": memory.id, "validity": memory.validity, "confidence": memory.confidence}
+
+
 @router.delete("/{system_id}/knowledge/docs/{name}")
 def delete_knowledge_doc(
     system_id: int,
