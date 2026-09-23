@@ -134,6 +134,8 @@ export function useDiagnosisChat(systemId) {
   const diagnosing = ref(false)
   const fixing = ref(false)
   const chatBox = ref(null)
+  const lastReportId = ref(null)
+  const followUp = ref(true)
   const markdownReady = ref(false)
   const lastQuestion = ref('')
   const modelChoice = ref(localStorage.getItem('diagnosis:model-choice') || 'auto')
@@ -248,10 +250,12 @@ export function useDiagnosisChat(systemId) {
     })
     await scrollBottom()
     try {
-      const { data } = await api.post(`/systems/${systemId}/diagnose`, {
-        question: q,
-        model_mode: modelChoice.value,
-      })
+      const body = { question: q, model_mode: modelChoice.value }
+      // 会话式追问：开启追问且有上一轮报告时，携带 follow_up_report_id
+      if (followUp.value && lastReportId.value) {
+        body.follow_up_report_id = lastReportId.value
+      }
+      const { data } = await api.post(`/systems/${systemId}/diagnose`, body)
       if (data.status === 'running' && data.id) {
         const report = await waitForDiagnosisReport(systemId, data.id, (partial) => {
           const steps = partial.evidence || []
@@ -271,6 +275,9 @@ export function useDiagnosisChat(systemId) {
         }
       } else {
         messages.value[pendingIndex] = buildAgentMessageFromDiagnose(data)
+      }
+      if (data.id) {
+        lastReportId.value = data.id
       }
     } catch (error) {
       messages.value[pendingIndex] = {
@@ -363,6 +370,7 @@ export function useDiagnosisChat(systemId) {
     renderMd,
     lastQuestion,
     liveStepIcon,
+    followUp,
     startNewChat,
     exportHistoryBackup,
     clearMessages,

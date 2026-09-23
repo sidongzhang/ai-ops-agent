@@ -65,6 +65,7 @@ class AgentDeps:
     question: str = ""
     skill_steps: str | None = None
     knowledge_context: str = ""
+    conversation_context: str = ""
     remote_command: Callable[[str, dict], dict] | None = None
     business_data_query: Callable[[str], str] | None = None
     business_dataset_query: Callable[[str, str, str], str] | None = None
@@ -90,6 +91,13 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         parts = [base]
         if skill_steps:
             parts.append(skill_steps)
+        if ctx.deps.conversation_context:
+            parts.append(
+                "## 对话上下文（用户基于上一轮诊断继续提问）\n"
+                f"{ctx.deps.conversation_context}\n\n"
+                "⚠️ 回答当前问题时优先引用上轮已确认的事实，**不要为已取证的内容重复调用工具**；"
+                "若当前问题与上一轮无关，忽略上文按正常流程诊断。"
+            )
         if ctx.deps.data_catalog:
             parts.append(
                 "## 可用业务数据集（只读，按天聚合）\n"

@@ -542,6 +542,7 @@ def complete_diagnosis_report(
     actor_id: str = "",
     model_mode: str = "auto",
     model_name: str = "",
+    follow_up_report_id: int | None = None,
 ) -> None:
     from app.core.database import engine
 
@@ -560,6 +561,7 @@ def complete_diagnosis_report(
                 model_mode=model_mode,
                 model_name=model_name,
                 on_progress=_progress_recorder(report_id, org_id, system_id),
+                follow_up_report_id=follow_up_report_id,
             )
         except Exception as exc:  # noqa: BLE001
             log.exception("[diagnose] 诊断执行失败 report_id=%s", report_id)
@@ -595,6 +597,7 @@ def diagnose_system(
     existing_report_id: int | None = None,
     model_mode: str = "auto",
     model_name: str = "",
+    follow_up_report_id: int | None = None,
     on_progress=None,
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
@@ -603,6 +606,15 @@ def diagnose_system(
     template = match_skill(question, _disabled_template_names(system))
     descriptor = system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
     knowledge_context = get_relevant_context(question, str(system.id))
+    conversation_context = ""
+    if follow_up_report_id:
+        prev_report = session.get(DiagnosisReport, follow_up_report_id)
+        if prev_report and prev_report.org_id == org_id and prev_report.system_id == system.id:
+            prev_answer = (prev_report.answer or "")[:1200]
+            conversation_context = (
+                f"上一轮问题: {(prev_report.question or '')[:300]}\n"
+                f"上一轮结论: {prev_answer}"
+            )
     dataset_query, data_catalog = _business_dataset_query(session, system, org_id, actor_id)
     try:
         run = diagnose_with_details(
@@ -612,6 +624,7 @@ def diagnose_system(
             system_id=system.id,
             skill_steps=template["steps"] if template else "",
             knowledge_context=knowledge_context,
+            conversation_context=conversation_context,
             remote_command=_remote_command(session, system),
             business_data_query=_business_data_query(session, system, org_id, actor_id),
             business_dataset_query=dataset_query,

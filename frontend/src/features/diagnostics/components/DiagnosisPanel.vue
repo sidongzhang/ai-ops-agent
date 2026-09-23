@@ -1,5 +1,5 @@
 <script setup>
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useDiagnosisChat } from '../useDiagnosisChat'
 import DiagnosisEvidenceChain from './DiagnosisEvidenceChain.vue'
 
@@ -28,9 +28,14 @@ const {
   renderMd,
   lastQuestion,
   liveStepIcon,
+  followUp,
 } = useDiagnosisChat(props.systemId)
 
 import { message } from 'ant-design-vue'
+
+const followUpAvailable = computed(() =>
+  messages.value.some((m) => m.role === 'agent' && m.status === 'success' && m.reportId)
+)
 
 async function onClearHistoryConfirmed() {
   // 二次确认通过后：先自动导出备份，再执行清空
@@ -279,6 +284,10 @@ function modelOptionLabel(option) {
     </div>
 
     <div class="chat-input-row">
+      <label v-if="followUpAvailable" class="followup-switch">
+        <input type="checkbox" v-model="followUp" />
+        追问（基于上一轮结论）
+      </label>
       <a-select
         v-model:value="modelChoice"
         class="model-select"
@@ -522,6 +531,15 @@ function modelOptionLabel(option) {
 }
 .action-card__result--error { border-color: rgba(255,77,79,.4); }
 
+.followup-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-color-secondary, #888);
+  white-space: nowrap;
+  cursor: pointer;
+}
 .chat-input-row {
   display: flex;
   gap: 8px;
@@ -595,7 +613,16 @@ function modelOptionLabel(option) {
 .bubble--agent :deep(hr) { border: none; border-top: 1px solid var(--border-color); margin: 8px 0; }
 
 @media (max-width: 720px) {
-  .chat-input-row {
+  .followup-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-color-secondary, #888);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chat-input-row {
     flex-direction: column;
   }
   .model-select {

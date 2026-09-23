@@ -28,6 +28,8 @@ class DiagnoseRequest(BaseModel):
     question: str
     model_mode: Literal["auto", "default", "local", "api", "advanced"] = "auto"
     model_name: str = Field(default="", max_length=128)
+    # 会话式追问：携带上一轮诊断报告 id，Agent 基于上轮结论回答当前问题（不重复取证）
+    follow_up_report_id: int | None = None
 
 
 class DiagnoseResponse(BaseModel):

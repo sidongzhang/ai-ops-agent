@@ -51,15 +51,20 @@ def diagnose_system(
         )
         if started.id is None:
             raise HTTPException(500, "诊断任务创建失败")
+        complete_kwargs = {
+            "actor_id": str(user.id),
+            "model_mode": body.model_mode,
+            "model_name": body.model_name,
+        }
+        if body.follow_up_report_id:
+            complete_kwargs["follow_up_report_id"] = body.follow_up_report_id
         background_tasks.add_task(
             complete_diagnosis_report,
             started.id,
             system_id,
             org_id,
             body.question,
-            actor_id=str(user.id),
-            model_mode=body.model_mode,
-            model_name=body.model_name,
+            **complete_kwargs,
         )
         return started
     except LookupError as exc:
