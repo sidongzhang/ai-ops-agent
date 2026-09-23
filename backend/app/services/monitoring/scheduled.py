@@ -77,6 +77,10 @@ def run_scheduled_health_checks() -> dict:
                 descriptor = system_to_descriptor(system, services)
                 results = collect_health(descriptor)
                 alert_if_needed(system, results, session)
+                # 容器级 OOM / 异常退出巡检（Agent 诊断发现过的这类故障，现在主动告警）
+                from app.services.monitoring.oom_watch import check_container_ooms
+
+                check_container_ooms(session, system, descriptor)
 
                 system.last_health = {"services": results}
                 system.last_report_at = utcnow()
