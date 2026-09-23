@@ -2,6 +2,7 @@
 import functools
 import inspect
 import json
+import logging
 import shlex
 import socket
 import subprocess
@@ -16,6 +17,8 @@ from ...services.descriptors.health import collect_health, read_service_logs, se
 from ...services.descriptors.prompt import build_prompt
 from .knowledge.store import get_relevant_context, search_knowledge_hits
 from .skill_router import get_skill_steps
+
+log = logging.getLogger(__name__)
 
 
 def _memoized(func):
@@ -69,7 +72,7 @@ class AgentDeps:
     tool_cache: dict = field(default_factory=dict)
 
 
-def register_tools(agent: Agent) -> Agent:
+def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
     @agent.system_prompt
     def system_prompt(ctx: RunContext[AgentDeps]) -> str:
         base = build_prompt(ctx.deps.descriptor)
@@ -342,6 +345,45 @@ def register_tools(agent: Agent) -> Agent:
             return "\n".join(lines[:80]) or raw[:500]
         except Exception as exc:
             return f"Redis 命令执行失败: {exc}"
+
+    # ---- 取证子代理到此为止：以下工具仅主代理可用 ----
+    if evidence_only:
+        return agent
+
+    @agent.tool
+    def investigate(ctx: RunContext[AgentDeps], task: str) -> str:
+        """把一段多步取证委派给子代理执行：它独立调用工具收集证据，只返回紧凑的证据摘要。
+
+        适用：需要连续调用 3 个以上工具、或要翻大量日志/指标才能下结论的场景。
+        简单单点检查（查一个服务状态、查一条指标）直接调对应工具即可，不用委派。
+        委派时把任务描述写清楚：查什么服务、关注什么指标、要什么证据。
+        """
+        from .investigator import get_evidence_agent
+        from .models import default_model
+
+        sub_deps = AgentDeps(
+            descriptor=ctx.deps.descriptor,
+            question=task,
+            remote_command=ctx.deps.remote_command,
+            business_data_query=ctx.deps.business_data_query,
+            business_dataset_query=ctx.deps.business_dataset_query,
+            tool_cache=ctx.deps.tool_cache,  # 共享缓存：子代理查过的主代理侧不再重复
+        )
+        try:
+            result = get_evidence_agent().run_sync(
+                task,
+                deps=sub_deps,
+                model=default_model(),
+                retries=2,
+            )
+            summary = str(result.output).strip()
+            return f"【子代理取证报告】\n{summary[:2200]}"
+        except Exception as exc:  # noqa: BLE001 - 委派失败降级为主代理自己查
+            log.warning("[investigate] 子代理执行失败，降级为主代理直接取证: %s", exc)
+            return (
+                f"取证子代理执行失败（{str(exc)[:120]}）。\n"
+                "请改用 check_service / read_logs / query_prometheus 等工具直接取证。"
+            )
 
     @agent.tool
     @_memoized

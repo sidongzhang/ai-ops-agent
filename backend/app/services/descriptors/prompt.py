@@ -35,6 +35,10 @@ def build_prompt(descriptor: SystemDescriptor) -> str:
         "",
         "## 工具使用要点",
         "- 首选 list_services 总览，再用 check_service 定点确认。",
+        "- 体检/全面排查/逐个服务分析/一次涉及 ≥2 个服务的任务：**必须用 investigate 按服务或按主题委派**，"
+        "每个服务一次委派（如 investigate('全面检查 Redis 状态与风险')），你只读它返回的证据摘要。",
+        "- 只有单点检查（查一个服务、看一条指标）才直接调 check_service / read_logs 等工具；"
+        "直接调用工具的总次数有限（24 次），委派子代理不占用你的预算。",
         "- 判断容器是 OOM 被杀还是自行退出，必须用 check_container_state（check_service 看不到退出原因）。",
         "  ⚠️ Kafka 指标来自 kafka-exporter，正确名称：kafka_consumergroup_lag / "
         "kafka_consumergroup_lag_sum / kafka_consumergroup_current_offset / kafka_topic_partitions / "

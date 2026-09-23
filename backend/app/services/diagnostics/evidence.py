@@ -8,6 +8,7 @@ from app.agent.diagnostics.knowledge.store import read_doc, search_knowledge_hit
 TOOL_LABELS = {
     "check_service": "健康检查",
     "list_services": "服务列表",
+    "investigate": "委派取证（子代理）",
     "read_logs": "日志分析",
     "search_logs": "日志检索",
     "query_prometheus": "Prometheus 指标",
