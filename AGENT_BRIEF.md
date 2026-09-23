@@ -429,3 +429,8 @@ CELERY_BROKER_URL=redis://127.0.0.1:6379/0
   （不硬塞弱相关剧本）。路由基准：纯语义 42.3% 劣于关键词 59.8%——已记录为负结果。
   112 条回归：成功率 100% 首次满分、RCA 0.92、幻觉 0%（docs/evals/round-routing-20260923.md）。
 - **诊断历史操作拆分**：🆕 新对话 / 🗑 清空历史（二次确认 + 自动 JSON 备份导出，防误清）。
+- **MCP 工具层**：backend/app/agent/diagnostics/mcp_server.py 把 8 个只读运维工具
+  （探活/容器状态/日志/PromQL/Redis/Kafka 白名单）暴露为标准 MCP 协议服务。
+  启动：MCP_SYSTEM_ID=1 .venv/bin/python -m app.agent.diagnostics.mcp_server（stdio）
+  或 --transport sse --port 8765。任何 MCP 客户端（Claude Desktop/Cursor 等）可直接使用。
+  已实测：stdio 标准握手 + list_tools + 真实调用 + 危险命令拒绝。
