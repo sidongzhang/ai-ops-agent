@@ -108,6 +108,7 @@ def diagnose_with_details(
             business_data_query=business_data_query,
             business_dataset_query=business_dataset_query,
             data_catalog=data_catalog,
+            progress_sink=on_progress,
         )
         try:
             result = diagnose_agent.run_sync(
@@ -193,12 +194,21 @@ def diagnose_with_details(
         if settings.diagnosis_auto_runbook:
             _append_to_runbook(system_id, descriptor, question, answer)
 
+        # 合并子代理冒泡的工具调用（nested_tool_calls 由 investigate 写入 deps），
+        # 保证审计链/评分/轨迹都能看到子代理内部的取证步骤。
+        nested = [
+            {"tool": c.get("tool", "unknown"), "input": c.get("input") or {},
+             "status": c.get("status", "success"), "duration_ms": c.get("duration_ms", 0),
+             "output": c.get("output", ""), "call_id": c.get("call_id", "")}
+            for c in (deps.nested_tool_calls or [])
+            if c.get("tool") and c.get("status") != "started"
+        ]
         return DiagnosisRun(
             answer=answer,
             model=model_name,
             duration_ms=round(elapsed * 1000),
             total_tokens=usage.total_tokens or 0,
-            tool_calls=_extract_tool_calls(result.all_messages()),
+            tool_calls=_extract_tool_calls(result.all_messages()) + nested,
         )
     except Exception:
         if generation:
