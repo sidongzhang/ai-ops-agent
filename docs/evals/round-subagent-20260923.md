@@ -84,3 +84,19 @@
 线上对齐：`evidence_coverage_rate` ↔ `analytics.diagnosis_evidence_rate_pct`；`task_success_rate` 是 analytics `diagnosis_success_rate_pct` 的离线严格版（线上只统计诊断是否完成，离线额外要求工具命中 + 证据词命中 + 无幻觉）。
 
 产物：`summary.json`（机器可读）、`summary.md`（本文件）、`trajectories.jsonl`（每条用例完整 tool_calls 轨迹）。
+
+
+## 追加优化（合并委派，2026-09-23）
+
+**改动**：多服务体检从 3 次串行委派合并为 1 次委派（子代理一轮内批量并行取证）。
+
+| 指标 | 子代理初版 | 合并委派版 |
+|---|---|---|
+| 平均耗时 | 12.7s | **6.5s（-49%）** |
+| 成功率 | 98.2% | **99.1%（历史新高）** |
+| RCA | 0.892 | **0.914** |
+| 幻觉 | 0% | 0% |
+
+延迟取舍基本消除：比原始直调基线（4.9s）仅 +1.6s，但换来主上下文隔离与 tokens -16%。
+关键认知：耗时大头是 LLM 往返轮次（deepseek 已自动批量并行、pydantic-ai 默认并行执行工具），
+减少**串行委派次数**是唯一有效杠杆。
