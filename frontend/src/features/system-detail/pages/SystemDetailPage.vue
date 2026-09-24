@@ -110,6 +110,8 @@ const remoteActionsSectionRef = ref(null)
 
 const system = ref(null)
 const knowledgeDocCount = ref(0)
+const dailyReportEnabled = ref(false)
+const dailyReportLoading = ref(false)
 const systemForOnboarding = computed(() => (
   system.value ? { ...system.value, knowledge_doc_count: knowledgeDocCount.value } : null
 ))
@@ -258,6 +260,28 @@ const systemAccessTag = computed(() => {
   return system.value.restart_capability?.enabled ? '远程可控' : '远程接入'
 })
 const { metrics, metricsLoading } = useMetricsPolling(props.id)
+
+async function loadDailyReportConfig() {
+  try {
+    const { data } = await api.get(`/systems/${props.id}/daily-report`)
+    dailyReportEnabled.value = Boolean(data.enabled)
+  } catch {
+    dailyReportEnabled.value = false
+  }
+}
+
+async function updateDailyReport(enabled) {
+  dailyReportLoading.value = true
+  try {
+    const { data } = await api.put(`/systems/${props.id}/daily-report`, { enabled })
+    dailyReportEnabled.value = Boolean(data.enabled)
+    message.success(enabled ? '已启用每日健康日报（每天 08:00）' : '已关闭每日健康日报')
+  } catch (error) {
+    message.error(error?.response?.data?.detail || '日报设置更新失败')
+  } finally {
+    dailyReportLoading.value = false
+  }
+}
 const {
   notifyCfg,
   notifyEditingSecret,
@@ -281,6 +305,7 @@ async function loadSystem() {
     system.value = data
     knowledgeDocCount.value = docsResult.data.length
     syncNotifyFromSystem(data)
+    loadDailyReportConfig()
   } catch { message.error('加载系统失败') }
 }
 
@@ -642,6 +667,8 @@ onMounted(() => {
             <MonitoringConfigCard :system-id="props.id" :system="system" />
             <NotifyConfigCard
               :system="system"
+              :daily-report-enabled="dailyReportEnabled"
+              :daily-report-loading="dailyReportLoading"
               :notify-cfg="notifyCfg"
               :notify-editing-secret="notifyEditingSecret"
               :notify-loading="notifyLoading"
@@ -652,6 +679,7 @@ onMounted(() => {
               @edit-secret="startEditingNotifySecret"
               @save="saveNotify"
               @test="testNotify"
+              @toggle-daily-report="updateDailyReport"
             />
           </a-card>
           </div>

@@ -2,6 +2,7 @@
 import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlmodel import Session
 
 from ..core.database import get_session
@@ -44,6 +45,10 @@ from ..services.systems.service import (
 router = APIRouter(prefix="/systems", tags=["systems"])
 
 
+class DailyReportConfigIn(BaseModel):
+    enabled: bool
+
+
 @router.post("", response_model=SystemOut, status_code=status.HTTP_201_CREATED)
 def create_system(body: SystemCreate, session: Session = Depends(get_session),
                   org_id: int = Depends(get_current_org_id),
@@ -75,6 +80,42 @@ def get_system(system_id: int, session: Session = Depends(get_session),
         return get_system_detail(session, system_id, org_id, user)
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+
+
+@router.get("/{system_id}/daily-report")
+def get_daily_report_config(
+    system_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
+):
+    try:
+        system = get_system_detail(session, system_id, org_id, user)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    config = (system.infra or {}).get("daily_report") or {}
+    return {"enabled": bool(config.get("enabled", False)), "timezone": "Asia/Shanghai", "send_at": "08:00"}
+
+
+@router.put("/{system_id}/daily-report")
+def update_daily_report_config(
+    system_id: int,
+    body: DailyReportConfigIn,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(require_operator),
+):
+    try:
+        system = require_system(session, system_id, org_id)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    infra = dict(system.infra or {})
+    infra["daily_report"] = {"enabled": body.enabled}
+    system.infra = infra
+    session.add(system)
+    session.commit()
+    session.refresh(system)
+    return {"enabled": body.enabled, "timezone": "Asia/Shanghai", "send_at": "08:00"}
 
 
 @router.delete("/{system_id}", status_code=status.HTTP_204_NO_CONTENT)

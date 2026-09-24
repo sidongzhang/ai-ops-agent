@@ -2,6 +2,7 @@
 
 from .celery import celery
 from ..services.monitoring.scheduled import run_scheduled_health_checks
+from ..services.monitoring.daily_report import run_daily_health_reports
 from ..services.log_analysis import process_uploaded_log_analysis
 from ..services.message_processing import process_message_by_id
 
@@ -9,6 +10,12 @@ from ..services.message_processing import process_message_by_id
 @celery.task(name="app.tasks.health_check_all_systems", bind=True, max_retries=2)
 def health_check_all_systems(self):
     return run_scheduled_health_checks()
+
+
+@celery.task(name="app.tasks.daily_health_reports", bind=True, max_retries=1)
+def daily_health_reports(self):
+    """生成并推送已启用系统的昨日健康日报。"""
+    return run_daily_health_reports()
 
 
 @celery.task(name="app.tasks.process_open_message", bind=True, max_retries=2)

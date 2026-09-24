@@ -9,6 +9,8 @@ const props = defineProps({
   notifySecretAlreadySet: { type: Object, required: true },
   notifyTestLoading: { type: Boolean, default: false },
   notifyTestResult: { type: Object, default: null },
+  dailyReportEnabled: { type: Boolean, default: false },
+  dailyReportLoading: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -16,6 +18,7 @@ const emit = defineEmits([
   'edit-secret',
   'save',
   'test',
+  'toggle-daily-report',
 ])
 
 const guideOpen = ref([])
@@ -125,6 +128,20 @@ function channelReady(value) {
         </a-tag>
       </div>
       <div class="notify-summary">勾选外部渠道后填写参数并保存。不选则告警只进消息中心。</div>
+    </div>
+
+    <div class="daily-report-setting">
+      <div>
+        <div class="daily-report-title">每日健康日报</div>
+        <div class="daily-report-desc">每天 08:00 汇总昨日告警、恢复、诊断记录和当前服务状态，发送到站内及已配置通知渠道。</div>
+      </div>
+      <a-switch
+        :checked="dailyReportEnabled"
+        :loading="dailyReportLoading"
+        checked-children="开"
+        un-checked-children="关"
+        @change="(checked) => emit('toggle-daily-report', checked)"
+      />
     </div>
 
     <a-collapse v-model:activeKey="guideOpen" ghost expand-icon-position="start" class="notify-guide">
@@ -375,6 +392,18 @@ function channelReady(value) {
   padding-top: 16px;
   border-top: 1px solid var(--border-color);
 }
+.daily-report-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-muted, rgba(120, 120, 120, .04));
+}
+.daily-report-title { font-size: 13px; font-weight: 650; color: var(--text); }
+.daily-report-desc { margin-top: 3px; font-size: 12px; line-height: 1.5; color: var(--text-subtle); }
 .notify-title-row {
   display: flex;
   align-items: center;

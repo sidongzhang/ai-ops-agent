@@ -26,6 +26,7 @@ Browser ──HTTPS──▶  frontend (Vue3 + Ant Design Vue 4)
                       │     └── 知识库：pgvector 语义检索 + 关键词降级
                       ├── 审批工作流（LangGraph，AsyncPostgresSaver 持久化）
                       ├── 统一消息中心（站内/飞书/邮件/Webhook 并行 + 失败重试）
+                      ├── 每日健康日报（按系统启用，每天 08:00 汇总昨日告警/恢复/诊断/健康状态）
                       ├── 业务系统开放接入（Token + 告警/健康/日报上报 + 去重）
                       ├── 实时指标聚合（Prometheus/Redis/Kafka/MySQL）
                       ├── 事故(incidents)/审计(audit_logs)/效率分析
@@ -429,6 +430,9 @@ CELERY_BROKER_URL=redis://127.0.0.1:6379/0
   （不硬塞弱相关剧本）。路由基准：纯语义 42.3% 劣于关键词 59.8%——已记录为负结果。
   112 条回归：成功率 100% 首次满分、RCA 0.92、幻觉 0%（docs/evals/round-routing-20260923.md）。
 - **诊断历史操作拆分**：🆕 新对话 / 🗑 清空历史（二次确认 + 自动 JSON 备份导出，防误清）。
+- **每日健康日报**：系统配置页按系统启用；Celery Beat 每天上海时间 08:00 汇总昨日告警/恢复、
+  成功诊断与当前服务健康状态，LLM 生成摘要，写入统一消息中心并推送已配置渠道；
+  同一系统同一报告日期幂等，失败时降级规则摘要。API：GET/PUT `/systems/{id}/daily-report`。
 - **MCP 工具层**：backend/app/agent/diagnostics/mcp_server.py 把 8 个只读运维工具
   （探活/容器状态/日志/PromQL/Redis/Kafka 白名单）暴露为标准 MCP 协议服务。
   启动：MCP_SYSTEM_ID=1 .venv/bin/python -m app.agent.diagnostics.mcp_server（stdio）
