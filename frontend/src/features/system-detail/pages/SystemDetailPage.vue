@@ -71,6 +71,19 @@ async function enableService(service) {
   }
 }
 
+async function enableUnavailableService(service) {
+  serviceActionLoading.value.enable = service.id
+  try {
+    await api.post(`/systems/${props.id}/services/${service.id}/enable-monitoring-unavailable`)
+    message.warning(`已将「${service.name}」纳入监控；当前测试失败状态会持续告警，待服务恢复后重新测试。`)
+    await loadSystem()
+  } catch (error) {
+    message.error(error?.response?.data?.detail || '纳入监控失败')
+  } finally {
+    serviceActionLoading.value.enable = null
+  }
+}
+
 async function restartService(service) {
   const target = system.value?.restart_capability?.services?.find((item) => item.name === service.name)
   const targetText = target?.container || target?.systemd_unit || service.name
@@ -648,6 +661,7 @@ onMounted(() => {
               @delete-service="deleteService"
               @test-service="testService"
               @enable-service="enableService"
+              @enable-unavailable-service="enableUnavailableService"
               @restart-service="restartService"
             />
             <div v-if="showCollectorCard" ref="collectorSectionRef">

@@ -8,7 +8,7 @@ const props = defineProps({
   actionLoading: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['add-service', 'delete-service', 'test-service', 'enable-service', 'restart-service'])
+const emit = defineEmits(['add-service', 'delete-service', 'test-service', 'enable-service', 'enable-unavailable-service', 'restart-service'])
 
 const sectionOpen = ref([])
 
@@ -121,6 +121,17 @@ function restartHint(service) {
               >
                 启用
               </a-button>
+              <a-popconfirm
+                v-if="!service.enabled && service.probe_status === 'failed'"
+                title="该服务当前不可达。启用后会持续监控并产生异常告警，确认纳入监控？"
+                ok-text="纳入监控"
+                cancel-text="暂不启用"
+                @confirm="emit('enable-unavailable-service', service)"
+              >
+                <a-button size="small" danger :loading="actionLoading.enable === service.id">
+                  仍启用监控
+                </a-button>
+              </a-popconfirm>
               <a-tooltip v-if="service.enabled" :title="restartHint(service)">
                 <a-button
                   size="small"

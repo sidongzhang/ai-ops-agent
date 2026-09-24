@@ -199,6 +199,51 @@ def enable_service_draft(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
+@router.post("/{system_id}/services/{service_id}/enable-monitoring-unavailable", response_model=ServiceOut)
+def enable_unavailable_service_monitoring(
+    system_id: int,
+    service_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(require_operator),
+):
+    """显式把当前不可达/测试失败的服务纳入监控。
+
+    不篡改 probe_status/detail；启用后在线 Collector 会持续探测并上报告警。
+    这是“监控一个当前故障服务”的合法路径，与“测试通过后启用”分开审计。
+    """
+    from ..models.systems import Service
+    from ..services.systems.service import require_system
+
+    system = require_system(session, system_id, org_id)
+    service = session.get(Service, service_id)
+    if not service or service.system_id != system.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "服务不存在")
+    if service.enabled:
+        return service
+    service.enabled = True
+    session.add(service)
+    from ..services.audit import record_audit_event
+
+    record_audit_event(
+        session,
+        org_id=org_id,
+        system_id=system.id,
+        event_type="service.monitoring_enabled_unavailable",
+        actor_type="user",
+        actor_id=str(user.id),
+        target_type="service",
+        target_id=service.id,
+        status="warning",
+        output={"name": service.name, "probe_status": service.probe_status,
+                "probe_detail": service.probe_detail,
+                "note": "operator explicitly enabled monitoring while unavailable"},
+    )
+    session.commit()
+    session.refresh(service)
+    return service
+
+
 @router.delete("/{system_id}/services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_service(system_id: int, service_id: int,
                    session: Session = Depends(get_session),
