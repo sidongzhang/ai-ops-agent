@@ -169,6 +169,8 @@ export function useDiagnosisChat(systemId) {
       }
       const workflowMessages = workflows.map(buildActionMessageFromWorkflow)
       messages.value = mergeTimelineMessages(rebuilt, workflowMessages)
+      const latestReport = [...reports].reverse().find((report) => report.status === 'success' && report.id)
+      lastReportId.value = latestReport?.id || null
       const lastUser = [...rebuilt].reverse().find((item) => item.role === 'user')
       if (lastUser?.text) lastQuestion.value = lastUser.text
     } catch (error) {
@@ -182,6 +184,7 @@ export function useDiagnosisChat(systemId) {
     // 只清空本地对话视图；服务端诊断历史保留（点「历史」可随时查看）
     messages.value = []
     lastQuestion.value = ''
+    lastReportId.value = null
     message.success('已开启新对话（服务端诊断历史仍保留）')
   }
 

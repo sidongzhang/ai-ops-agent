@@ -575,7 +575,9 @@ def complete_diagnosis_report(
     except Exception:  # noqa: BLE001
         log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
     # 结构化记忆：诊断成功后沉淀经验（污染受控：置信度 0.5、待回查验证）
-    if settings.diagnosis_memory_enabled and result:
+    from app.core.config import settings as app_settings
+
+    if app_settings.diagnosis_memory_enabled and result:
         from app.services.knowledge.memory import save_memory
 
         save_memory(

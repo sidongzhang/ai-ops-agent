@@ -132,7 +132,7 @@ def _alert_oom(session: Session, system: MonitoredSystem, findings: dict, new_oo
             "容器已被系统强杀或自行退出。" if findings[new_oom[0]].get("oom_killed")
             else f"容器 ExitCode={findings[new_oom[0]]['exit_code']} 退出。"
         ),
-        suggestion="\n".join(_oom_remedy(name, findings[name]) for name in new_oom),
+        suggestion=[_oom_remedy(name, findings[name]) for name in new_oom],
         source="container_oom_watch",
         related={"oom_services": new_oom, "findings": {k: v for k, v in findings.items() if k in new_oom}},
     )
