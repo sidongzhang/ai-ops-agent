@@ -105,12 +105,14 @@ export const SERVICE_COLORS = {
   custom: '#6B7280',
   http: '#22C55E',
   tcp: '#3B82F6',
+  camunda_embedded: '#0EA5E9',
 }
 
 export const CONNECTOR_FIELDS = {
   http: [['health_url', 'HTTP 健康检查 URL', 'https://example.com/health']],
   tcp: [['host', '主机', 'example.com'], ['port', '端口', '443']],
   prometheus: [['url', 'Prometheus 地址', 'http://prom:9090'], ['up_query', '探活 PromQL', 'up']],
+  camunda_embedded: [['metrics_url', '宿主应用 actuator/prometheus 地址', 'http://127.0.0.1:9037/algp/actuator/prometheus']],
   ssh: [
     ['host', '主机', '10.0.0.1'],
     ['port', 'SSH 端口', '22'],
@@ -128,6 +130,10 @@ export const CONNECTOR_FIELDS = {
     ['log_file', '日志文件', 'logs/app.log'],
   ],
   k8s: [['namespace', '命名空间', 'default'], ['selector', 'Pod 选择器', 'app=backend'], ['context', '集群上下文（可选）', '']],
+  camunda_embedded: [
+    ['metrics_url', '宿主应用 actuator/prometheus 地址', 'http://127.0.0.1:9037/algp/actuator/prometheus'],
+    ['engine_rest', '外部 engine-rest 地址（可选）', 'http://127.0.0.1:8101/engine-rest'],
+  ],
 }
 
 export const CONNECTORS = Object.keys(CONNECTOR_FIELDS)

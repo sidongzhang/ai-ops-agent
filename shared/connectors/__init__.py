@@ -1,6 +1,7 @@
 """
 连接器包：按服务描述符里的 connector 字段实例化对应连接器。
-内置 local / http / tcp / ssh / prometheus / k8s 六种，新增类型只需在此注册。
+内置 local / http / tcp / ssh / prometheus / k8s / camunda_embedded 七种，
+新增类型只需在此注册。
 """
 from .base import Connector
 from .local import LocalConnector
@@ -9,6 +10,7 @@ from .tcp import TcpConnector
 from .ssh import SshConnector
 from .prometheus import PrometheusConnector
 from .k8s import K8sConnector
+from .camunda import CamundaEmbeddedConnector
 
 _REGISTRY = {
     'local': LocalConnector,
@@ -17,6 +19,7 @@ _REGISTRY = {
     'ssh': SshConnector,
     'prometheus': PrometheusConnector,
     'k8s': K8sConnector,
+    'camunda_embedded': CamundaEmbeddedConnector,
 }
 
 
