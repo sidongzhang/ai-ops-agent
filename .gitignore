@@ -10,6 +10,8 @@ __pycache__/
 .pytest_cache/
 
 # data / runtime artifacts
+# 本地历史备份（已迁移的 SQLite 库），不入库
+backend/archive/
 agent/chroma_db/
 backend/app/agent/diagnostics/knowledge/docs/*
 !backend/app/agent/diagnostics/knowledge/docs/.gitkeep

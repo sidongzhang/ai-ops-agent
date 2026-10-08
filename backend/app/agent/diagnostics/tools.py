@@ -14,7 +14,9 @@ from urllib.parse import urlparse
 import httpx
 from pydantic_ai import Agent, RunContext
 
+from ...services.descriptors.container_state import format_container_state, inspect_container
 from ...services.descriptors.health import collect_health, read_service_logs, search_service_logs
+from ...services.descriptors.ops_policy import kafka_command_denied, redis_command_denied
 from ...services.descriptors.prompt import build_prompt
 from .knowledge.store import get_relevant_context, search_with_memories
 from .skill_router import get_skill_steps
@@ -164,42 +166,10 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         container = service_cfg.get("container")
         if not container:
             return f"服务「{service}」不是容器化部署，无容器状态可查"
-        try:
-            import subprocess
-
-            proc = subprocess.run(
-                [
-                    "docker", "inspect", container,
-                    "--format",
-                    '{{.State.Status}}|OOMKilled={{.State.OOMKilled}}|ExitCode={{.State.ExitCode}}'
-                    '|Restarts={{.RestartCount}}|Memory={{.HostConfig.Memory}}'
-                    '|OOMScoreAdj={{.HostConfig.OomScoreAdj}}|FinishedAt={{.State.FinishedAt}}',
-                ],
-                capture_output=True, text=True, timeout=15,
-            )
-            if proc.returncode != 0:
-                return f"docker inspect {container} 失败: {(proc.stderr or '').strip()[:200]}"
-            fields = proc.stdout.strip().split("|")
-            lines = [f"容器 {container} 状态:"]
-            for part in fields:
-                if "|" not in part:
-                    lines.append(f"  {part}")
-                    continue
-                k, v = part.split("|", 1)
-                label = {
-                    "OOMKilled": "OOM被杀(OOMKilled)",
-                    "ExitCode": "退出码(ExitCode)",
-                    "Restarts": "重启次数",
-                    "Memory": "内存上限(Memory limit)",
-                    "FinishedAt": "退出时间",
-                }.get(k, k)
-                if k == "Status":
-                    lines.append(f"  状态: {v}")
-                else:
-                    lines.append(f"  {label}: {v}")
-            return "\n".join(lines)
-        except Exception as exc:
-            return f"check_container_state 失败: {exc}"
+        state = inspect_container(container)
+        if state is None:
+            return f"docker inspect {container} 失败（容器不存在或 Docker 不可用）"
+        return format_container_state(state)
 
     @agent.tool
     @_memoized
@@ -276,12 +246,10 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
     @agent.tool
     @_memoized
     def run_kafka_command(ctx: RunContext[AgentDeps], subcommand: str) -> str:
+        denied = kafka_command_denied(subcommand)
+        if denied:
+            return denied
         parts = shlex.split(subcommand)
-        if not parts or parts[0] not in ("topics", "consumer-groups"):
-            return "安全限制：只允许 topics 或 consumer-groups 子命令"
-        dangerous = {"--create", "--delete", "--alter", "--reset-offsets", "--execute"}
-        if any(part in dangerous for part in parts):
-            return f"安全限制：拒绝写操作 {[part for part in parts if part in dangerous]}"
 
         if ctx.deps.remote_command:
             kafka = next(
@@ -318,9 +286,9 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
     @agent.tool
     @_memoized
     def run_redis_command(ctx: RunContext[AgentDeps], command: str) -> str:
-        first = command.strip().upper().split()[0]
-        if first not in {"INFO", "DBSIZE", "CLIENT", "CONFIG", "SLOWLOG", "KEYS", "TTL", "TYPE", "LLEN", "SCARD", "ZCARD", "HLEN", "STRLEN", "OBJECT"}:
-            return f"安全限制：拒绝执行写命令「{first}」，仅允许只读命令。"
+        denied = redis_command_denied(command)
+        if denied:
+            return denied
 
         if ctx.deps.remote_command:
             redis = next(

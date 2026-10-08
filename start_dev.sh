@@ -1,56 +1,19 @@
 #!/bin/bash
-# AIOps Platform — 开发环境一键启动
+# AIOps Platform — 开发环境一键启动（薄包装）
+#
+# 说明：真正的启动/停止编排统一由 scripts/stack-launcher.sh 负责（桌面“启动AIOps栈”
+# 用的也是它）。这里保留入口名，避免历史习惯/文档失效，同时消除两套启动逻辑分叉。
+#
+#   ./start_dev.sh          → 等价于 stack-launcher.sh up
+#   ./start_dev.sh status   → 查看状态
+#   ./start_dev.sh down     → 停止全部
 set -e
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+LAUNCHER="$REPO_DIR/scripts/stack-launcher.sh"
 
-echo "=== AIOps Platform 开发服务器 ==="
-
-# 1. 数据库迁移（需先启动 Postgres 平台库，可用桌面"启动AIOps栈"或下述命令）
-if ! nc -z 127.0.0.1 5432 2>/dev/null; then
-  echo "→ Postgres (5432) 未运行，尝试启动 deploy/docker-compose.yml 的 platform-db…"
-  JWT_SECRET=dev-placeholder ENCRYPTION_KEY=dev-placeholder \
-    DEEPSEEK_API_KEY= FEISHU_APP_ID= FEISHU_APP_SECRET= \
-    docker compose -f "$REPO_DIR/deploy/docker-compose.yml" up -d platform-db
-  sleep 3
-fi
-echo "→ 运行数据库迁移..."
-cd "$REPO_DIR/backend"
-.venv/bin/alembic upgrade head
-
-# 2. 启动后端（screen 会话，持久运行）
-BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
-BACKEND_PUBLIC_HOST="${BACKEND_PUBLIC_HOST:-$(ipconfig getifaddr en0 2>/dev/null || echo localhost)}"
-
-echo "→ 启动后端 ${BACKEND_HOST}:8000..."
-screen -dmS aiops-backend .venv/bin/uvicorn app.main:app --host "$BACKEND_HOST" --port 8000 --reload
-sleep 2
-if curl -s http://localhost:8000/healthz > /dev/null 2>&1; then
-  echo "   ✅ 后端运行中"
-else
-  echo "   ❌ 后端启动失败！"
+if [ ! -x "$LAUNCHER" ]; then
+  echo "找不到启动脚本: $LAUNCHER" >&2
   exit 1
 fi
 
-# 3. 启动前端（screen 会话，持久运行）
-echo "→ 启动前端 :5173..."
-cd "$REPO_DIR/frontend"
-if lsof -i :5173 > /dev/null 2>&1; then
-  echo "   ⏩ 前端已在运行"
-else
-  screen -dmS aiops-frontend npx vite --port 5173
-  sleep 3
-  if curl -sI http://localhost:5173/ > /dev/null 2>&1; then
-    echo "   ✅ 前端运行中"
-  else
-    echo "   ❌ 前端启动失败！"
-    exit 1
-  fi
-fi
-
-echo ""
-echo "=== 服务已启动 ==="
-echo "后端 API:   http://${BACKEND_PUBLIC_HOST}:8000"
-echo "API 文档:   http://${BACKEND_PUBLIC_HOST}:8000/docs"
-echo "前端控制台: http://localhost:5173"
-echo ""
-echo "停止: screen -X -S aiops-backend quit; screen -X -S aiops-frontend quit"
+exec "$LAUNCHER" "${@:-up}"

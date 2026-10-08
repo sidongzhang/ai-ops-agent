@@ -9,13 +9,13 @@
 告警冷却沿用系统级 last_alert_at（alert_if_needed 同款机制）。
 """
 import logging
-import subprocess
 
 from sqlmodel import Session
 
 from app.models.messages import SystemMessage
 from app.models.systems import MonitoredSystem
 from app.services.audit import record_audit_event
+from app.services.descriptors.container_state import inspect_container, state_signature
 from app.services.messages import create_alert_message
 from app.services.notifications.alerts import (
     configured_notification_channels,
@@ -25,42 +25,6 @@ from app.services.notifications.alerts import (
 log = logging.getLogger(__name__)
 
 
-def _inspect_container(container: str) -> dict | None:
-    try:
-        proc = subprocess.run(
-            ["docker", "inspect", container, "--format",
-             "Status={{.State.Status}}|OOMKilled={{.State.OOMKilled}}|ExitCode={{.State.ExitCode}}"
-             "|Restarts={{.RestartCount}}|FinishedAt={{.State.FinishedAt}}"],
-            capture_output=True, text=True, timeout=15,
-        )
-        if proc.returncode != 0:
-            return None
-        fields = dict(kv.split("=", 1) for kv in proc.stdout.strip().split("|") if "=" in kv)
-        return {
-            "status": fields.get("Status", "unknown"),
-            "oom_killed": fields.get("OOMKilled") == "true",
-            "exit_code": int(fields.get("ExitCode", "0") or 0),
-            "restarts": int(fields.get("Restarts", "0") or 0),
-            "finished_at": fields.get("FinishedAt", ""),
-        }
-    except Exception as exc:  # noqa: BLE001 - docker 不可用时静默跳过本轮
-        log.debug(f"[oom-watch] inspect {container} 失败: {exc}")
-        return None
-
-
-def _signature(state: dict) -> str:
-    """状态指纹：变化才告警/恢复（同一次故障不重复提醒）。"""
-    if not state:
-        return "none"
-    if state.get("oom_killed"):
-        return "oom"
-    if state.get("status") == "exited":
-        return f"exited:{state.get('exit_code')}"
-    if state.get("status") == "running":
-        return "running"
-    return f"{state.get('status')}:{state.get('exit_code')}"
-
-
 def check_container_ooms(session: Session, system: MonitoredSystem, descriptor: dict) -> None:
     """巡检附加步骤：容器级 OOM/异常退出检测。状态变化 → 告警或自动恢复。"""
     findings: dict[str, dict] = {}
@@ -68,7 +32,7 @@ def check_container_ooms(session: Session, system: MonitoredSystem, descriptor: 
         container = svc.get("container")
         if not container:
             continue
-        state = _inspect_container(container)
+        state = inspect_container(container)
         if state:
             findings[svc.get("name", container)] = state
 
@@ -81,12 +45,12 @@ def check_container_ooms(session: Session, system: MonitoredSystem, descriptor: 
     # 新发故障：本次 OOM/exited 且上一轮不是同状态
     new_oom = [
         name for name, st in findings.items()
-        if _signature(st) in ("oom", f"exited:{st.get('exit_code')}") and prev.get(name) != _signature(st)
+        if state_signature(st) in ("oom", f"exited:{st.get('exit_code')}") and prev.get(name) != state_signature(st)
     ]
     # 恢复：上次是故障态、本次 running
     recovered = [
         name for name, st in findings.items()
-        if _signature(st) == "running" and _signature(prev.get(name, {}) or {}) != "running"
+        if state_signature(st) == "running" and state_signature(prev.get(name, {}) or {}) != "running"
     ]
 
     system.last_health = {**last_health, "oom_watch": findings}
@@ -126,7 +90,7 @@ def _alert_oom(session: Session, system: MonitoredSystem, findings: dict, new_oo
         title=f"系统「{system.name}」检测到容器异常退出",
         summary=f"容器级故障：{services}（OOMKilled / 非零退出）",
         content=f"平台容器巡检发现以下服务容器异常：\n" + "\n".join(
-            f"{name}: {_signature(findings[name])}" for name in new_oom
+            f"{name}: {state_signature(findings[name])}" for name in new_oom
         ),
         diagnosis=(
             "容器已被系统强杀或自行退出。" if findings[new_oom[0]].get("oom_killed")

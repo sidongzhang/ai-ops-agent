@@ -1,12 +1,7 @@
 """Connector runtime wiring."""
-import os
-import sys
+from ...core.shared_path import ensure_shared_path
 
-from ...core.config import settings
-
-_shared = os.path.join(settings.repo_root, "shared")
-if _shared not in sys.path:
-    sys.path.insert(0, _shared)
+ensure_shared_path()
 
 from connectors import get_connector  # noqa: E402
 

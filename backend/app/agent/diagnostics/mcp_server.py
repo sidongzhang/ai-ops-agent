@@ -32,11 +32,13 @@ for p in (_here.parent.parent.parent, _here.parent.parent, _here):
 from mcp.server.mcpserver import MCPServer
 
 from app.services.descriptors.builder import system_to_descriptor
+from app.services.descriptors.container_state import format_container_state, inspect_container
 from app.services.descriptors.health import (
     collect_health,
     read_service_logs,
     search_service_logs,
 )
+from app.services.descriptors.ops_policy import kafka_command_denied, redis_command_denied
 
 logging.basicConfig(level=logging.INFO, format="[mcp-server] %(levelname)s %(message)s")
 log = logging.getLogger("aiops-mcp")
@@ -115,8 +117,6 @@ async def health_check(service: str) -> str:
     description="查容器真实状态：运行/退出原因/OOMKilled/退出码/内存上限/重启次数",
 )
 async def check_container_state(service: str) -> str:
-    import subprocess
-
     d = _descriptor()
     svc = next((s for s in d.get("services", []) if s.get("name") == service), None)
     if not svc:
@@ -124,17 +124,10 @@ async def check_container_state(service: str) -> str:
     container = svc.get("container")
     if not container:
         return f"服务「{service}」不是容器化部署，无容器状态可查"
-    proc = await _run_blocking(
-        lambda: subprocess.run(
-            ["docker", "inspect", container, "--format",
-             "Status={{.State.Status}}|OOMKilled={{.State.OOMKilled}}|ExitCode={{.State.ExitCode}}"
-             "|Restarts={{.RestartCount}}|Memory={{.HostConfig.Memory}}|FinishedAt={{.State.FinishedAt}}"],
-            capture_output=True, text=True, timeout=15,
-        )
-    )
-    if proc.returncode != 0:
-        return f"docker inspect {container} 失败: {(proc.stderr or '').strip()[:200]}"
-    return f"容器 {container}: {proc.stdout.strip()}"
+    state = await _run_blocking(inspect_container, container)
+    if state is None:
+        return f"docker inspect {container} 失败（容器不存在或 Docker 不可用）"
+    return format_container_state(state)
 
 
 @server.tool(
@@ -191,9 +184,6 @@ async def query_prometheus(promql: str) -> str:
         return f"Prometheus 查询失败: {exc}"
 
 
-REDIS_READONLY = ("INFO", "DBSIZE", "CONFIG GET", "SLOWLOG", "SCAN", "CLIENT", "MEMORY", "GET")
-
-
 @server.tool(
     name="run_redis_command",
     description="在 Redis 上执行只读命令（INFO/DBSIZE/CONFIG GET/SLOWLOG 等，写命令一律拒绝）",
@@ -201,13 +191,13 @@ REDIS_READONLY = ("INFO", "DBSIZE", "CONFIG GET", "SLOWLOG", "SCAN", "CLIENT", "
 async def run_redis_command(command: str) -> str:
     import subprocess
 
+    denied = redis_command_denied(command)
+    if denied:
+        return denied
     d = _descriptor()
     svc = next((s for s in d.get("services", []) if s.get("name", "").upper() == "REDIS"), None)
     if not svc:
         return "该系统未注册 Redis 服务"
-    upper = command.strip().upper()
-    if not any(upper.startswith(a) for a in ("INFO", "DBSIZE", "CONFIG GET", "SLOWLOG", "KEYS", "SCAN", "CLIENT", "MEMORY")):
-        return f"拒绝执行：仅放行只读命令（INFO/DBSIZE/CONFIG GET/SLOWLOG 等），收到: {command[:80]}"
     host, port = svc.get("host", "127.0.0.1"), int(svc.get("port", 6379))
     container = svc.get("container") or ""
     base = ["docker", "exec", container, "redis-cli"] if container else ["redis-cli"]
@@ -227,6 +217,9 @@ async def run_redis_command(command: str) -> str:
 async def run_kafka_command(command: str) -> str:
     import subprocess
 
+    denied = kafka_command_denied(command)
+    if denied:
+        return denied
     d = _descriptor()
     svc = next((s for s in d.get("services", []) if s.get("name", "").upper() == "KAFKA"), None)
     if not svc:
@@ -234,13 +227,9 @@ async def run_kafka_command(command: str) -> str:
     container = svc.get("container") or ""
     if not container:
         return f"服务「{svc.get('name')}」未配置 Kafka 容器名"
-    upper = command.strip().upper()
-    if not (upper.startswith("CONSUMER-GROUPS") or upper.startswith("TOPICS --LIST")
-            or upper.startswith("TOPICS --DESCRIBE")):
-        return "拒绝执行：仅放行 CONSUMER-GROUPS --describe / TOPICS --list（只读白名单）"
 
     parts = shlex.split(command)
-    if upper.startswith("CONSUMER-GROUPS"):
+    if parts[0] == "consumer-groups":
         script = "/opt/kafka/bin/kafka-consumer-groups.sh"
     else:
         script = "/opt/kafka/bin/kafka-topics.sh"

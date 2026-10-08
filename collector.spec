@@ -25,6 +25,7 @@ a = Analysis(
         'connectors.local',
         'connectors.prometheus',
         'connectors.k8s',
+        'ops_policy',
         'websockets',
         'requests',
     ],

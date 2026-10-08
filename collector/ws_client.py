@@ -38,6 +38,7 @@ _SHARED = os.path.join(_ROOT, 'shared')
 if _SHARED not in sys.path:
     sys.path.insert(0, _SHARED)
 from connectors import get_connector  # noqa: E402
+from ops_policy import kafka_command_denied, redis_command_denied  # noqa: E402
 
 
 def _handle_command(cmd: str, args: dict, descriptor: dict) -> dict:
@@ -145,22 +146,10 @@ def _handle_command(cmd: str, args: dict, descriptor: dict) -> dict:
 
         elif cmd == "run_redis_command":
             command = str(args.get("command", "")).strip()
+            denied = redis_command_denied(command)
+            if denied:
+                return {"ok": False, "result": denied}
             parts = command.split()
-            first = parts[0].upper() if parts else ""
-            allowed = {
-                "INFO", "DBSIZE", "CLIENT", "CONFIG", "SLOWLOG", "KEYS", "TTL",
-                "TYPE", "LLEN", "SCARD", "ZCARD", "HLEN", "STRLEN", "OBJECT",
-            }
-            if first not in allowed:
-                return {"ok": False, "result": f"安全限制：拒绝执行 Redis 命令「{first}」"}
-            second = parts[1].upper() if len(parts) > 1 else ""
-            readonly_subcommands = {
-                "CLIENT": {"LIST", "INFO"},
-                "CONFIG": {"GET"},
-                "SLOWLOG": {"GET", "LEN"},
-            }
-            if first in readonly_subcommands and second not in readonly_subcommands[first]:
-                return {"ok": False, "result": f"安全限制：Redis {first} 仅允许只读子命令"}
             svc = _find_service(descriptor, str(args.get("service", "")))
             if not svc:
                 svc = next(
@@ -183,12 +172,10 @@ def _handle_command(cmd: str, args: dict, descriptor: dict) -> dict:
             return {"ok": True, "result": raw[:5000] or "(无响应)"}
 
         elif cmd == "run_kafka_command":
+            denied = kafka_command_denied(str(args.get("command", "")))
+            if denied:
+                return {"ok": False, "result": denied}
             parts = shlex.split(str(args.get("command", "")))
-            if not parts or parts[0] not in ("topics", "consumer-groups"):
-                return {"ok": False, "result": "安全限制：只允许 topics 或 consumer-groups 子命令"}
-            dangerous = {"--create", "--delete", "--alter", "--reset-offsets", "--execute"}
-            if any(part in dangerous for part in parts):
-                return {"ok": False, "result": "安全限制：拒绝 Kafka 写操作"}
             svc = _find_service(descriptor, str(args.get("service", "")))
             if not svc:
                 svc = next((item for item in descriptor.get("services", []) if "kafka" in item.get("name", "").lower()), None)
