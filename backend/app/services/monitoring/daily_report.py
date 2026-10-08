@@ -3,13 +3,13 @@ import logging
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.core.database import engine
 from app.models.diagnostics import DiagnosisReport
 from app.models.messages import SystemMessage
-from app.models.systems import MonitoredSystem, Service
+from app.models.systems import MonitoredSystem
+from app.repositories.systems import list_enabled_services_for_system
 from app.services.audit import record_audit_event
 from app.services.notifications.alerts import deliver_message_notifications
 
@@ -47,9 +47,7 @@ def _summarize(session: Session, system: MonitoredSystem, report_date: date) -> 
             DiagnosisReport.status == "success",
         ).order_by(DiagnosisReport.created_at.asc())
     ).all()
-    services = session.exec(
-        select(Service).where(Service.system_id == system.id, Service.enabled == True)  # noqa: E712
-    ).all()
+    services = list_enabled_services_for_system(session, system.id)
     health = (system.last_health or {}).get("services", [])
     health_by_name = {str(s.get("name")): s for s in health}
     service_health = [

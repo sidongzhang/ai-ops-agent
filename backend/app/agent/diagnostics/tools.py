@@ -6,7 +6,6 @@ import logging
 import shlex
 import socket
 import subprocess
-import time
 from dataclasses import dataclass, field
 from typing import Callable
 from urllib.parse import urlparse
@@ -18,8 +17,9 @@ from ...services.descriptors.container_state import format_container_state, insp
 from ...services.descriptors.health import collect_health, read_service_logs, search_service_logs
 from ...services.descriptors.ops_policy import kafka_command_denied, redis_command_denied
 from ...services.descriptors.prompt import build_prompt
-from .knowledge.store import get_relevant_context, search_with_memories
+from .knowledge.store import search_with_memories
 from .skill_router import get_skill_steps
+from .tool_events import NESTED_OUTPUT_LIMIT, iter_tool_events, safe_emit
 
 log = logging.getLogger(__name__)
 
@@ -351,52 +351,38 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             business_dataset_query=ctx.deps.business_dataset_query,
             tool_cache=ctx.deps.tool_cache,  # 共享缓存：子代理查过的主代理侧不再重复
         )
-        # 子代理工具调用冒泡：写进主 deps 的 nested_tool_calls（审计链/评分可见），
-        # 并经主代理的 progress_sink 冒泡到证据链与前端实时工具链。
+        # 子代理工具调用冒泡：同一份规范化载荷同时写进主 deps 的 nested_tool_calls
+        # （审计链/评分/轨迹可见）与主代理的 progress_sink（证据链与前端实时工具链）。
         main_nested = ctx.deps.nested_tool_calls
         main_sink = ctx.deps.progress_sink
-        started: dict[str, float] = {}
 
         async def sub_handler(_ctx, events) -> None:
-            from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
-
-            async for event in events:
-                if isinstance(event, FunctionToolCallEvent):
-                    part = event.part
-                    raw_id = part.tool_call_id or f"{part.tool_name}:{len(nested)}"
-                    call_id = f"sub-{raw_id}"
-                    started[raw_id] = time.monotonic()
-                    try:
-                        args = part.args_as_dict()
-                    except Exception:  # noqa: BLE001
-                        args = str(part.args or "")[:500]
+            async for payload in iter_tool_events(events, id_prefix="sub-"):
+                if payload["kind"] == "tool_start":
                     main_nested.append({
-                        "tool": part.tool_name,
-                        "input": args,
+                        "tool": payload["tool"],
+                        "input": payload["input"],
                         "status": "started",
                         "duration_ms": 0,
                         "output": "",
-                        "call_id": call_id,
+                        "call_id": payload["call_id"],
                     })
-                    if main_sink:
-                        main_sink({"kind": "tool_start", "call_id": call_id,
-                                   "tool": part.tool_name, "input": args})
-                elif isinstance(event, FunctionToolResultEvent):
-                    part = event.part
-                    raw_id = getattr(part, "tool_call_id", "")
-                    call_id = f"sub-{raw_id}"
-                    item = next((c for c in main_nested if c.get("call_id") == call_id), None)
-                    outcome = str(getattr(part, "outcome", "") or "success")
-                    out = str(getattr(part, "content", "") or event.content or "")
+                else:
+                    item = next(
+                        (c for c in main_nested if c.get("call_id") == payload["call_id"]),
+                        None,
+                    )
                     if item is None:
-                        item = {"tool": "unknown", "input": {}, "status": outcome,
-                                "duration_ms": 0, "output": out[:600], "call_id": call_id}
+                        item = {
+                            "tool": payload["tool"] or "unknown",
+                            "input": {},
+                            "call_id": payload["call_id"],
+                        }
                         main_nested.append(item)
-                    item["status"] = outcome
-                    item["output"] = out[:600]
-                    if main_sink:
-                        main_sink({"kind": "tool_end", "call_id": call_id, "tool": item["tool"],
-                                   "status": outcome, "output": out[:600], "duration_ms": 0})
+                    item["status"] = payload["status"]
+                    item["duration_ms"] = payload["duration_ms"]
+                    item["output"] = payload["output"][:NESTED_OUTPUT_LIMIT]
+                safe_emit(main_sink, payload)
 
         try:
             result = get_evidence_agent().run_sync(

@@ -74,6 +74,7 @@ from app.services.messages import (
     retry_failed_notifications,
 )
 from app.services.systems import service as systems_service
+from app.services.systems import lifecycle as systems_lifecycle
 from app.services.systems.restart import annotate_restart_action, build_restart_capability
 from app.services.systems.service import create_system, update_notify, update_restart_policy
 from app.repositories.systems import list_enabled_services_for_system
@@ -223,9 +224,9 @@ class SystemServiceTests(unittest.TestCase):
             def health(self):
                 return True, f"{self.service['name']} reachable"
 
-        original_get_connector = systems_service.get_connector
+        original_get_connector = systems_lifecycle.get_connector
         try:
-            systems_service.get_connector = lambda service, descriptor: _FakeConnector(service, descriptor)
+            systems_lifecycle.get_connector = lambda service, descriptor: _FakeConnector(service, descriptor)
             with Session(self.engine) as session:
                 system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API", local=True)
                 session.add(system)
@@ -252,7 +253,7 @@ class SystemServiceTests(unittest.TestCase):
                     select(AuditLog).where(AuditLog.target_id == str(draft.id))
                 ))
         finally:
-            systems_service.get_connector = original_get_connector
+            systems_lifecycle.get_connector = original_get_connector
 
         self.assertTrue(result.ok)
         self.assertEqual(result.detail, "Redis reachable")
@@ -268,9 +269,9 @@ class SystemServiceTests(unittest.TestCase):
             def health(self):
                 return True, "reachable"
 
-        original_get_connector = systems_service.get_connector
+        original_get_connector = systems_lifecycle.get_connector
         try:
-            systems_service.get_connector = lambda *args, **kwargs: _FakeConnector()
+            systems_lifecycle.get_connector = lambda *args, **kwargs: _FakeConnector()
             with Session(self.engine) as session:
                 system = MonitoredSystem(org_id=1, key="prod-api", name="生产 API", local=True)
                 session.add(system)
@@ -294,7 +295,7 @@ class SystemServiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "测试通过"):
                     systems_service.enable_service_draft(session, system.id, draft.id, 1)
         finally:
-            systems_service.get_connector = original_get_connector
+            systems_lifecycle.get_connector = original_get_connector
 
         self.assertEqual(updated.probe_status, "draft")
         self.assertIsNone(updated.tested_at)
@@ -310,12 +311,12 @@ class SystemServiceTests(unittest.TestCase):
             token_hash="hash",
         )
         calls: list[tuple[int, str, dict]] = []
-        original_primary = systems_service._get_primary_collector
-        original_is_connected = systems_service.manager.is_connected
-        original_send = systems_service.manager.send_command
+        original_primary = systems_lifecycle.get_primary_collector
+        original_is_connected = systems_lifecycle.manager.is_connected
+        original_send = systems_lifecycle.manager.send_command
         try:
-            systems_service._get_primary_collector = lambda *args, **kwargs: collector
-            systems_service.manager.is_connected = lambda collector_id: collector_id == collector.id
+            systems_lifecycle.get_primary_collector = lambda *args, **kwargs: collector
+            systems_lifecycle.manager.is_connected = lambda collector_id: collector_id == collector.id
 
             async def _fake_send(collector_id, cmd, args=None, timeout=30.0):
                 calls.append((collector_id, cmd, args or {}))
@@ -324,7 +325,7 @@ class SystemServiceTests(unittest.TestCase):
                     "result": [{"name": "Remote API", "ok": True, "detail": "remote-ok"}],
                 }
 
-            systems_service.manager.send_command = _fake_send
+            systems_lifecycle.manager.send_command = _fake_send
 
             with Session(self.engine) as session:
                 system = MonitoredSystem(org_id=1, key="remote-api", name="远程 API", local=False)
@@ -339,9 +340,9 @@ class SystemServiceTests(unittest.TestCase):
                 )
                 result = asyncio.run(systems_service.test_service_draft(session, system.id, draft.id, 1))
         finally:
-            systems_service._get_primary_collector = original_primary
-            systems_service.manager.is_connected = original_is_connected
-            systems_service.manager.send_command = original_send
+            systems_lifecycle.get_primary_collector = original_primary
+            systems_lifecycle.manager.is_connected = original_is_connected
+            systems_lifecycle.manager.send_command = original_send
 
         self.assertTrue(result.ok)
         self.assertEqual(result.detail, "remote-ok")
@@ -352,9 +353,9 @@ class SystemServiceTests(unittest.TestCase):
             def health(self):
                 return False, "connection refused"
 
-        original_get_connector = systems_service.get_connector
+        original_get_connector = systems_lifecycle.get_connector
         try:
-            systems_service.get_connector = lambda *args, **kwargs: _FailedConnector()
+            systems_lifecycle.get_connector = lambda *args, **kwargs: _FailedConnector()
             with Session(self.engine) as session:
                 with self.assertRaisesRegex(ValueError, "测试未通过"):
                     create_system(
@@ -377,7 +378,7 @@ class SystemServiceTests(unittest.TestCase):
                     select(MonitoredSystem).where(MonitoredSystem.key == "broken-system")
                 ).all()
         finally:
-            systems_service.get_connector = original_get_connector
+            systems_lifecycle.get_connector = original_get_connector
 
         self.assertEqual(systems, [])
 

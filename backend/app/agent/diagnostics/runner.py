@@ -8,8 +8,6 @@ from typing import Callable
 
 from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.messages import (
-    FunctionToolCallEvent,
-    FunctionToolResultEvent,
     ToolCallPart,
     ToolReturnPart,
 )
@@ -18,6 +16,7 @@ from app.agent.llm import default_endpoint, endpoint_for_mode, make_chat_model
 from app.core.config import settings
 from .knowledge.store import append_runbook_entry
 from .models import default_model, pick_model
+from .tool_events import iter_tool_events, safe_emit
 from .tools import AgentDeps, register_tools
 from .tracing import get_langfuse
 
@@ -239,53 +238,11 @@ def _usage_limits() -> UsageLimits:
 
 def _build_event_stream_handler(on_progress: Callable[[dict], None]):
     """Translate pydantic-ai stream events into compact progress payloads."""
-    started: dict[str, float] = {}
-
     async def handler(_ctx, events) -> None:
-        async for event in events:
-            if isinstance(event, FunctionToolCallEvent):
-                part = event.part
-                call_id = part.tool_call_id or f"{part.tool_name}:{len(started)}"
-                started[call_id] = time.monotonic()
-                try:
-                    args = part.args_as_dict()
-                except Exception:
-                    args = str(part.args or "")[:1000]
-                _safe_progress(
-                    on_progress,
-                    {
-                        "kind": "tool_start",
-                        "call_id": call_id,
-                        "tool": part.tool_name,
-                        "input": args,
-                    },
-                )
-            elif isinstance(event, FunctionToolResultEvent):
-                part = event.part
-                call_id = getattr(part, "tool_call_id", "") or ""
-                began = started.pop(call_id, None)
-                outcome = getattr(part, "outcome", "success")
-                output = getattr(part, "content", None) or event.content or ""
-                _safe_progress(
-                    on_progress,
-                    {
-                        "kind": "tool_end",
-                        "call_id": call_id,
-                        "tool": getattr(part, "tool_name", "") or "",
-                        "status": "success" if outcome == "success" else str(outcome),
-                        "duration_ms": round((time.monotonic() - began) * 1000) if began else 0,
-                        "output": str(output)[:1500],
-                    },
-                )
+        async for payload in iter_tool_events(events):
+            safe_emit(on_progress, payload)
 
     return handler
-
-
-def _safe_progress(on_progress: Callable[[dict], None], payload: dict) -> None:
-    try:
-        on_progress(payload)
-    except Exception as exc:  # noqa: BLE001
-        log.debug(f"[diagnose] 进度回调失败（不影响诊断）: {exc}")
 
 
 _CONCLUSION_MARKER = re.compile(r"^[\s>*#\-]*(?:\*\*)?\s*结论\s*(?:\*\*)?\s*[:：]", re.MULTILINE)

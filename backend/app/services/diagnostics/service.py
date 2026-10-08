@@ -6,16 +6,11 @@ import time
 from sqlmodel import Session
 
 from app.agent.diagnostics.runner import diagnose_with_details
-from app.agent.diagnostics.skill_router import list_skills, match_skill
+from app.agent.diagnostics.skill_router import match_skill
 from app.agent.diagnostics.knowledge.store import get_relevant_context_with_memories as get_relevant_context
-from app.core.security import decrypt_sensitive_fields, encrypt_sensitive_fields
 from app.repositories.systems import list_enabled_services_for_system
 from app.services.collectors.exec import select_online_collector
-from app.schemas import (
-    DiagnosticTemplateOut,
-    DiagnosticTemplateSettingsUpdate,
-    DiagnoseResponse,
-)
+from app.schemas import DiagnoseResponse
 from app.services.audit import record_audit_event
 from app.services.data_analysis import (
     analyze_system_data,
@@ -35,65 +30,22 @@ from app.services.diagnostics.evidence import (
     summarize_text,
 )
 from app.models.diagnostics import DiagnosisReport
+from app.services.diagnostics.kafka_fallback import (
+    is_kafka_lag_question as _is_kafka_lag_question,
+    kafka_lag_fallback as _kafka_lag_fallback,
+)
+from app.services.diagnostics.responses import build_diagnose_response as _build_diagnose_response
+from app.services.diagnostics.templates import disabled_template_names as _disabled_template_names
+# 模板管理已拆到 templates.py，这里 re-export 保持既有 import 路径不变。
+from app.services.diagnostics.templates import (
+    list_diagnostic_templates,
+    update_diagnostic_templates,
+)
 from app.services.diagnostics.reports import save_diagnosis_report
 from app.services.systems.service import require_system
 from app.services.realtime.websocket import manager
 
 log = logging.getLogger(__name__)
-
-
-def _disabled_template_names(system) -> set[str]:
-    infra = decrypt_sensitive_fields(system.infra or {})
-    settings = infra.get("diagnostic_templates") or {}
-    return {str(name) for name in settings.get("disabled_names", [])}
-
-
-def list_diagnostic_templates(
-    session: Session,
-    system_id: int,
-    org_id: int,
-) -> list[DiagnosticTemplateOut]:
-    system = require_system(session, system_id, org_id)
-    disabled = _disabled_template_names(system)
-    return [
-        DiagnosticTemplateOut(**skill, enabled=skill["name"] not in disabled)
-        for skill in list_skills()
-    ]
-
-
-def update_diagnostic_templates(
-    session: Session,
-    system_id: int,
-    org_id: int,
-    body: DiagnosticTemplateSettingsUpdate,
-    *,
-    actor_id: str = "",
-) -> list[DiagnosticTemplateOut]:
-    system = require_system(session, system_id, org_id)
-    valid_names = {skill["name"] for skill in list_skills()}
-    disabled = sorted(set(body.disabled_names))
-    unknown = [name for name in disabled if name not in valid_names]
-    if unknown:
-        raise ValueError(f"未知诊断模板：{', '.join(unknown)}")
-
-    infra = decrypt_sensitive_fields(system.infra or {})
-    infra["diagnostic_templates"] = {"disabled_names": disabled}
-    system.infra = encrypt_sensitive_fields(infra)
-    session.add(system)
-    record_audit_event(
-        session,
-        org_id=org_id,
-        system_id=system.id,
-        event_type="diagnostic_templates.updated",
-        actor_type="user",
-        actor_id=actor_id,
-        target_type="system",
-        target_id=str(system.id),
-        input={"disabled_names": disabled},
-        output={"enabled_count": len(valid_names) - len(disabled)},
-    )
-    session.commit()
-    return list_diagnostic_templates(session, system.id, org_id)
 
 
 def _evidence_sources(steps: str, tool_calls: list[dict]) -> list[str]:
@@ -238,157 +190,6 @@ def _user_id_from_actor(actor_id: str) -> int | None:
         return int(actor_id)
     except ValueError:
         return None
-
-
-def _build_diagnose_response(
-    *,
-    report_id: int | None,
-    system_id: int,
-    status: str = "success",
-    answer: str,
-    template_name: str = "",
-    template_description: str = "",
-    model: str = "",
-    duration_ms: int = 0,
-    total_tokens: int = 0,
-    evidence_sources: list[str] | None = None,
-    tool_calls: list[dict] | None = None,
-    evidence: list[dict] | None = None,
-    evidence_steps: list[str] | None = None,
-    knowledge_refs: list[dict] | None = None,
-    error_message: str = "",
-) -> DiagnoseResponse:
-    tool_calls = tool_calls or []
-    evidence = evidence or build_evidence_from_tool_calls(tool_calls)
-    evidence_steps = evidence_steps or build_evidence_steps(tool_calls)
-    return DiagnoseResponse(
-        id=report_id,
-        system_id=system_id,
-        status=status,
-        answer=answer,
-        template_name=template_name,
-        template_description=template_description,
-        model=model,
-        duration_ms=duration_ms,
-        total_tokens=total_tokens,
-        evidence_sources=evidence_sources or [],
-        evidence_steps=evidence_steps,
-        tool_calls=tool_calls,
-        evidence=evidence,
-        knowledge_refs=knowledge_refs or [],
-        error_message=error_message,
-    )
-
-
-def _is_kafka_lag_question(question: str) -> bool:
-    lowered = question.lower()
-    return "kafka" in lowered and any(
-        marker in lowered
-        for marker in ("积压", "lag", "堆积", "消息", "consumer", "消费")
-    )
-
-
-def _kafka_lag_fallback(
-    session: Session,
-    system,
-    org_id: int,
-    question: str,
-    *,
-    started_at: float,
-    user_id: int | None,
-    existing_report_id: int | None,
-) -> DiagnoseResponse:
-    from app.services.monitoring.metrics import get_metrics
-
-    metrics = get_metrics(session, system.id, org_id)
-    kafka = metrics.kafka
-    if not kafka.available:
-        answer = (
-            "我没有拿到 Kafka 的可用指标，暂时无法判断是否存在消息积压。\n\n"
-            "建议先确认 Kafka 服务已启用监控，并且 Prometheus/kafka-exporter 或采集器已经接入。"
-        )
-    elif kafka.consumer_groups:
-        top_groups = sorted(kafka.consumer_groups, key=lambda item: item.lag, reverse=True)[:10]
-        rows = "\n".join(
-            f"- 消费组 `{item.group}` / Topic `{item.topic}`：Lag `{item.lag}`"
-            for item in top_groups
-        )
-        if kafka.total_lag > 0:
-            answer = (
-                f"有消息积压。当前 Kafka 总 Lag 为 `{kafka.total_lag}`。\n\n"
-                f"积压明细：\n{rows}\n\n"
-                "建议优先检查 Lag 最高的消费组：确认消费者实例是否在线、消费线程是否阻塞、"
-                "下游数据库/接口是否变慢，以及是否需要临时扩容消费者。"
-            )
-        else:
-            answer = (
-                "当前没有发现 Kafka 消息积压。已查询到消费者组指标，但总 Lag 为 `0`。\n\n"
-                f"消费者组明细：\n{rows}"
-            )
-    else:
-        answer = (
-            "Kafka 当前可达，但没有查询到消费者组 Lag 数据。\n\n"
-            "这通常表示暂无活跃消费者组、kafka-exporter 未采集 consumer group 指标，"
-            "或当前系统没有注册对应的 Prometheus 指标。"
-        )
-
-    duration_ms = round((time.monotonic() - started_at) * 1000)
-    tool_calls = [
-        {
-            "tool": "kafka_metrics_fallback",
-            "input": {"question": question},
-            "status": "success",
-            "duration_ms": duration_ms,
-            "output": {
-                "available": kafka.available,
-                "brokers": kafka.brokers,
-                "topics": kafka.topics,
-                "total_lag": kafka.total_lag,
-                "consumer_groups": [item.model_dump() for item in kafka.consumer_groups[:20]],
-            },
-        }
-    ]
-    evidence_sources = ["Kafka 运行数据"]
-    evidence_items = build_evidence_from_tool_calls(tool_calls)
-    evidence_steps = build_evidence_steps(tool_calls)
-
-    if existing_report_id:
-        report = session.get(DiagnosisReport, existing_report_id)
-        if not report:
-            raise LookupError("诊断报告不存在")
-    else:
-        report = save_diagnosis_report(
-            session,
-            org_id=org_id,
-            system_id=system.id,
-            user_id=user_id,
-            report_type="diagnose",
-            question=question,
-            answer=answer,
-            template_name="Kafka 积压兜底诊断",
-            template_description="模型工具调用失败时，使用平台已采集 Kafka 指标直接分析积压状态",
-            model="deterministic-kafka-metrics",
-            duration_ms=duration_ms,
-            evidence_sources=evidence_sources,
-            evidence_steps=evidence_steps,
-            tool_calls=tool_calls,
-            evidence=evidence_items,
-            commit=True,
-        )
-
-    return _build_diagnose_response(
-        report_id=report.id,
-        system_id=system.id,
-        answer=answer,
-        template_name="Kafka 积压兜底诊断",
-        template_description="模型工具调用失败时，使用平台已采集 Kafka 指标直接分析积压状态",
-        model="deterministic-kafka-metrics",
-        duration_ms=duration_ms,
-        evidence_sources=evidence_sources,
-        tool_calls=tool_calls,
-        evidence=evidence_items,
-        evidence_steps=evidence_steps,
-    )
 
 
 def _progress_recorder(report_id: int, org_id: int, system_id: int):
