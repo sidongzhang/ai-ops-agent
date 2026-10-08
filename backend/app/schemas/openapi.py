@@ -78,3 +78,5 @@ class OpenDiagnosisIn(BaseModel):
     actor_id: str = Field(default="", max_length=128)
     model_mode: Literal["auto", "default", "local", "api", "advanced"] = "auto"
     business_context: dict[str, Any] = Field(default_factory=dict)
+    # 会话式追问：带上上一轮诊断报告 id，平台会把「上一轮问题+结论」注入本轮上下文。
+    follow_up_report_id: int | None = None

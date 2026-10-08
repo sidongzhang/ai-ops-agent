@@ -212,6 +212,7 @@ def create_external_diagnosis(
         _external_diagnosis_question(body.question.strip(), message, body.business_context),
         actor_id=actor_id,
         model_mode=body.model_mode,
+        follow_up_report_id=body.follow_up_report_id,
     )
     return started
 

@@ -381,10 +381,13 @@ def complete_diagnosis_report(
     if app_settings.diagnosis_memory_enabled and result:
         from app.services.knowledge.memory import save_memory
 
+        # 记忆的 symptom 必须是「用户原始问题」：外部链路会把只读快照拼进
+        # 传给模型的 question，若直接落库会把大段上下文写进记忆（污染检索）。
+        # report.question 始终是 start_diagnosis 时保存的原始问题。
         save_memory(
             org_id=org_id,
             system_id=system_id,
-            question=question,
+            question=(report.question or question),
             answer=result.answer,
             report_id=report_id,
         )
