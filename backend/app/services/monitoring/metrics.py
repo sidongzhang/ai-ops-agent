@@ -1,6 +1,5 @@
 """Metrics collection for monitored systems."""
 import logging
-import asyncio
 import socket
 import time
 from urllib.parse import urlparse
@@ -106,7 +105,9 @@ def _remote_metric_readers(session: Session, system, descriptor: dict):
 
     def send(command: str, args: dict):
         try:
-            result = asyncio.run(manager.send_command(collector.id, command, args))
+            # 同步（线程池）上下文 -> 必须用 send_command_sync 回到主事件循环等回包，
+            # 用 asyncio.run 会新建临时循环导致回包唤不醒、必然超时。
+            result = manager.send_command_sync(collector.id, command, args)
         except Exception as exc:  # noqa: BLE001
             log.debug("[metrics] remote collector command failed: %s", exc)
             return None

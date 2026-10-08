@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Callable
@@ -465,11 +464,14 @@ def _remote_query_executor(session: Session, system) -> Callable | None:
 
     def execute(sql: str, params: dict, max_rows: int) -> list[dict[str, Any]]:
         try:
-            result = asyncio.run(manager.send_command(
+            # 必须在采集器 WebSocket 所在的主事件循环上等待回包；
+            # 这里处于同步（线程池）上下文，用 send_command_sync，
+            # 不能用 asyncio.run —— 那会新建临时循环，回包永远唤不醒它，必然 30s 超时。
+            result = manager.send_command_sync(
                 collector.id,
                 "run_readonly_query",
                 {"sql": sql, "params": params, "max_rows": max_rows},
-            ))
+            )
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"远程只读数据库查询失败：{exc}") from exc
         if not result.get("ok"):
