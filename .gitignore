@@ -41,6 +41,7 @@ dist-prod/
 
 # personal / not part of the project
 docs/resume/
+docs/项目简历与学习计划.md
 
 # PyInstaller build artifacts
 build/
