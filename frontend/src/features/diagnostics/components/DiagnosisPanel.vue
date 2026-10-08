@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch } from 'vue'
 import { useDiagnosisChat } from '../useDiagnosisChat'
+import { parseAnswer } from '../parseAnswer'
 import DiagnosisEvidenceChain from './DiagnosisEvidenceChain.vue'
 
 const props = defineProps({
@@ -35,6 +36,14 @@ import { message } from 'ant-design-vue'
 
 const followUpAvailable = computed(() =>
   messages.value.some((m) => m.role === 'agent' && m.status === 'success' && m.reportId)
+)
+
+// 与 SVOM 浮窗一致的展示骨架：把回答拆成 结论/影响/建议/关键证据/待确认，
+// 拆不出来时回退为整段 markdown（structured=false → null）。
+const parsedAnswers = computed(() =>
+  messages.value.map((m) =>
+    m.role === 'agent' && m.text && m.status !== 'running' ? parseAnswer(m.text) : null,
+  ),
 )
 
 async function onClearHistoryConfirmed() {
@@ -182,6 +191,52 @@ function modelOptionLabel(option) {
           :class="['msg-row', message.role === 'user' ? 'msg-row--user' : 'msg-row--agent']">
           <span v-if="message.role === 'user'" class="bubble bubble--user">{{ message.text }}</span>
           <div v-else class="agent-response">
+            <div :class="['agent-answer', message.status === 'running' ? 'agent-answer--running' : '']">
+              <template v-if="message.status === 'running'">
+                <a-spin size="small" class="bubble__spin" />
+                <span v-html="renderMd(message.text)" />
+                <ul v-if="message.liveSteps?.length" class="bubble__live-steps">
+                  <li
+                    v-for="step in message.liveSteps"
+                    :key="step.call_id || step.step"
+                    :class="['live-step', `live-step--${step.status || 'started'}`]"
+                  >
+                    <span class="live-step__icon">{{ liveStepIcon(step.status) }}</span>
+                    <span class="live-step__label">{{ step.label }}</span>
+                    <span class="live-step__detail">{{ step.detail }}</span>
+                  </li>
+                </ul>
+              </template>
+
+              <template v-else-if="parsedAnswers[index] && parsedAnswers[index].structured">
+                <div class="verdict-line">
+                  <span :class="['verdict-dot', 'verdict-dot--' + (parsedAnswers[index].confidence || 'unknown')]" />
+                  <div class="verdict-body">
+                    <p class="verdict-text">{{ parsedAnswers[index].conclusion }}</p>
+                    <p v-if="parsedAnswers[index].impact" class="verdict-impact">影响：{{ parsedAnswers[index].impact }}</p>
+                  </div>
+                  <span v-if="parsedAnswers[index].confidenceText" class="confidence-pill">{{ parsedAnswers[index].confidenceText }}</span>
+                </div>
+
+                <div v-if="parsedAnswers[index].advice" class="answer-section">
+                  <div class="answer-section__title">建议</div>
+                  <div class="md" v-html="renderMd(parsedAnswers[index].advice)" />
+                </div>
+
+                <details v-if="parsedAnswers[index].evidence" class="answer-details">
+                  <summary>关键证据</summary>
+                  <div class="md answer-details__body" v-html="renderMd(parsedAnswers[index].evidence)" />
+                </details>
+
+                <details v-if="parsedAnswers[index].pending" class="answer-details">
+                  <summary>待确认</summary>
+                  <div class="md answer-details__body" v-html="renderMd(parsedAnswers[index].pending)" />
+                </details>
+              </template>
+
+              <span v-else v-html="renderMd(message.text)" />
+            </div>
+
             <DiagnosisEvidenceChain
               v-if="message.role === 'agent' && message.status !== 'running' && (message.evidence?.length || message.evidenceSources?.length || message.templateDescription || message.knowledgeRefs?.length)"
               :system-id="systemId"
@@ -196,21 +251,6 @@ function modelOptionLabel(option) {
               :report-id="message.reportId"
               :report-type="message.reportType"
             />
-            <div :class="['bubble', 'bubble--agent', message.status === 'running' ? 'bubble--running' : '']">
-              <a-spin v-if="message.status === 'running'" size="small" class="bubble__spin" />
-              <span v-html="renderMd(message.text)" />
-              <ul v-if="message.status === 'running' && message.liveSteps?.length" class="bubble__live-steps">
-                <li
-                  v-for="step in message.liveSteps"
-                  :key="step.call_id || step.step"
-                  :class="['live-step', `live-step--${step.status || 'started'}`]"
-                >
-                  <span class="live-step__icon">{{ liveStepIcon(step.status) }}</span>
-                  <span class="live-step__label">{{ step.label }}</span>
-                  <span class="live-step__detail">{{ step.detail }}</span>
-                </li>
-              </ul>
-            </div>
           </div>
         </div>
 
@@ -334,9 +374,9 @@ function modelOptionLabel(option) {
 .chat-box {
   height: 360px;
   overflow-y: auto;
-  background: var(--body-bg);
+  background: transparent;
   border-radius: 10px;
-  padding: 12px;
+  padding: 4px 2px;
   margin-bottom: 12px;
   scroll-behavior: smooth;
 }
@@ -354,28 +394,41 @@ function modelOptionLabel(option) {
 .msg-row { margin: 8px 0; }
 .msg-row--user { text-align: right; }
 .msg-row--agent { text-align: left; }
-.agent-response { max-width: 88%; }
-.bubble { display: inline-block; max-width: 85%; font-size: 14px; line-height: 1.65; }
+.agent-response { max-width: 100%; }
+.bubble { display: inline-block; max-width: 85%; font-size: 14px; line-height: 1.7; }
 .agent-response .bubble { max-width: 100%; }
 .bubble--user {
   padding: 9px 14px;
-  border-radius: 18px 18px 4px 18px;
-  background: var(--primary);
-  color: #fff;
+  border-radius: 18px;
+  background: var(--body-bg);
+  color: var(--text);
 }
-.bubble--agent {
-  padding: 10px 14px;
-  border-radius: 4px 18px 18px 18px;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 1px 4px rgba(0,0,0,.05);
-  text-align: left;
-}
-.bubble--running {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
+.agent-answer { font-size: 14px; line-height: 1.7; color: var(--text); text-align: left; word-break: break-word; }
+.agent-answer--running { display: flex; align-items: flex-start; gap: 8px; }
+
+/* 结论：唯一焦点 */
+.verdict-line { display: flex; align-items: flex-start; gap: 9px; }
+.verdict-dot { flex-shrink: 0; width: 9px; height: 9px; margin-top: 8px; border-radius: 50%; background: var(--primary); }
+.verdict-dot--high { background: #d48806; }
+.verdict-dot--medium { background: var(--primary); }
+.verdict-dot--low { background: #b9b9b9; }
+.verdict-body { flex: 1; min-width: 0; }
+.verdict-text { margin: 0; font-size: 14px; font-weight: 600; color: var(--text); }
+.verdict-impact { margin: 4px 0 0; color: var(--text-subtle); font-size: 13px; font-weight: 400; }
+.confidence-pill { flex-shrink: 0; padding: 1px 8px; border: 1px solid var(--border-color); border-radius: 999px; color: var(--text-subtle); font-size: 11px; white-space: nowrap; }
+
+/* 建议 */
+.answer-section { margin-top: 14px; }
+.answer-section__title { margin-bottom: 4px; color: var(--text-subtle); font-size: 12px; font-weight: 600; }
+
+/* 折叠披露 */
+.answer-details { margin-top: 12px; }
+.answer-details > summary { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; margin-left: -8px; border-radius: 8px; color: var(--text-subtle); font-size: 12px; cursor: pointer; }
+.answer-details > summary::-webkit-details-marker { display: none; }
+.answer-details > summary::before { content: '▸'; font-size: 10px; color: var(--text-subtle); transition: transform .15s; }
+.answer-details[open] > summary::before { transform: rotate(90deg); }
+.answer-details > summary:hover { background: color-mix(in srgb, var(--border-color) 32%, transparent); color: var(--text); }
+.answer-details__body { margin-top: 8px; padding-left: 14px; border-left: 2px solid var(--border-color); }
 .bubble__spin {
   margin-top: 3px;
   flex-shrink: 0;
@@ -562,55 +615,55 @@ function modelOptionLabel(option) {
   min-width: 0;
   flex: 1;
 }
-.bubble--agent :deep(p) { margin: 0 0 8px; }
-.bubble--agent :deep(p:last-child) { margin-bottom: 0; }
-.bubble--agent :deep(h1),
-.bubble--agent :deep(h2),
-.bubble--agent :deep(h3) {
+.agent-answer :deep(p) { margin: 0 0 8px; }
+.agent-answer :deep(p:last-child) { margin-bottom: 0; }
+.agent-answer :deep(h1),
+.agent-answer :deep(h2),
+.agent-answer :deep(h3) {
   font-size: 13px; font-weight: 700; margin: 12px 0 6px;
   color: var(--text); letter-spacing: .02em;
 }
-.bubble--agent :deep(h1):first-child,
-.bubble--agent :deep(h2):first-child,
-.bubble--agent :deep(h3):first-child { margin-top: 0; }
-.bubble--agent :deep(table) {
+.agent-answer :deep(h1):first-child,
+.agent-answer :deep(h2):first-child,
+.agent-answer :deep(h3):first-child { margin-top: 0; }
+.agent-answer :deep(table) {
   border-collapse: collapse; width: 100%; font-size: 13px; margin: 10px 0;
   border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);
 }
-.bubble--agent :deep(thead tr) { background: var(--body-bg); }
-.bubble--agent :deep(th) {
+.agent-answer :deep(thead tr) { background: var(--body-bg); }
+.agent-answer :deep(th) {
   padding: 7px 12px; font-weight: 600; font-size: 12px;
   color: var(--text-subtle); text-transform: uppercase;
   letter-spacing: .04em; border-bottom: 2px solid var(--border-color);
   text-align: left; white-space: nowrap;
 }
-.bubble--agent :deep(td) {
+.agent-answer :deep(td) {
   padding: 7px 12px; border-bottom: 1px solid var(--border-color);
   vertical-align: top; line-height: 1.55;
 }
-.bubble--agent :deep(tbody tr:last-child td) { border-bottom: none; }
-.bubble--agent :deep(tbody tr:nth-child(even)) {
+.agent-answer :deep(tbody tr:last-child td) { border-bottom: none; }
+.agent-answer :deep(tbody tr:nth-child(even)) {
   background: color-mix(in srgb, var(--body-bg) 60%, transparent);
 }
-.bubble--agent :deep(code) {
+.agent-answer :deep(code) {
   background: var(--body-bg); border: 1px solid var(--border-color);
   padding: 1px 5px; border-radius: 3px; font-size: 12px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
 }
-.bubble--agent :deep(pre) {
+.agent-answer :deep(pre) {
   background: var(--body-bg); border: 1px solid var(--border-color);
   border-radius: 6px; padding: 10px; overflow-x: auto; margin: 8px 0;
 }
-.bubble--agent :deep(pre code) { background: none; border: none; padding: 0; }
-.bubble--agent :deep(ul), .bubble--agent :deep(ol) { padding-left: 20px; margin: 4px 0; }
-.bubble--agent :deep(li) { margin: 2px 0; }
-.bubble--agent :deep(strong) { font-weight: 600; color: var(--text); }
-.bubble--agent :deep(blockquote) {
+.agent-answer :deep(pre code) { background: none; border: none; padding: 0; }
+.agent-answer :deep(ul), .agent-answer :deep(ol) { padding-left: 20px; margin: 4px 0; }
+.agent-answer :deep(li) { margin: 2px 0; }
+.agent-answer :deep(strong) { font-weight: 600; color: var(--text); }
+.agent-answer :deep(blockquote) {
   border-left: 3px solid var(--primary); margin: 6px 0; padding: 4px 10px;
   color: var(--text-subtle); background: color-mix(in srgb, var(--primary) 6%, transparent);
   border-radius: 0 4px 4px 0;
 }
-.bubble--agent :deep(hr) { border: none; border-top: 1px solid var(--border-color); margin: 8px 0; }
+.agent-answer :deep(hr) { border: none; border-top: 1px solid var(--border-color); margin: 8px 0; }
 
 @media (max-width: 720px) {
   .followup-switch {

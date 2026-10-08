@@ -163,10 +163,8 @@ function goKnowledgePage() {
 
 <style scoped>
 .evidence-chain {
-  margin: 0 0 8px 2px;
-  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border-color));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--primary) 4%, var(--card-bg));
+  margin: 6px 0 10px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -176,11 +174,17 @@ function goKnowledgePage() {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 5px 8px;
+  margin-left: -8px;
   border: none;
+  border-radius: 8px;
   background: transparent;
   cursor: pointer;
   text-align: left;
+}
+
+.evidence-toggle:hover {
+  background: color-mix(in srgb, var(--border-color) 32%, transparent);
 }
 
 .evidence-toggle-main {
