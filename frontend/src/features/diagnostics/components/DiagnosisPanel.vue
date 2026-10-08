@@ -46,6 +46,11 @@ const parsedAnswers = computed(() =>
   ),
 )
 
+// 关键证据里含 Markdown 表格（明细）时默认展开，避免"查到了却看不到"。
+function hasTable(text) {
+  return /\|/.test(String(text || ''))
+}
+
 async function onClearHistoryConfirmed() {
   // 二次确认通过后：先自动导出备份，再执行清空
   const count = await exportHistoryBackup()
@@ -223,7 +228,7 @@ function modelOptionLabel(option) {
                   <div class="md" v-html="renderMd(parsedAnswers[index].advice)" />
                 </div>
 
-                <details v-if="parsedAnswers[index].evidence" class="answer-details">
+                <details v-if="parsedAnswers[index].evidence" class="answer-details" :open="hasTable(parsedAnswers[index].evidence)">
                   <summary>关键证据</summary>
                   <div class="md answer-details__body" v-html="renderMd(parsedAnswers[index].evidence)" />
                 </details>
