@@ -408,7 +408,7 @@ function modelOptionLabel(option) {
   background: var(--body-bg);
   color: var(--text);
 }
-.agent-answer { font-size: 14px; line-height: 1.7; color: var(--text); text-align: left; word-break: break-word; }
+.agent-answer { font-size: 14px; line-height: 1.7; color: var(--text); text-align: left; word-break: break-word; overflow-x: auto; }
 .agent-answer--running { display: flex; align-items: flex-start; gap: 8px; }
 
 /* 结论：唯一焦点 */
@@ -644,7 +644,7 @@ function modelOptionLabel(option) {
 }
 .agent-answer :deep(td) {
   padding: 7px 12px; border-bottom: 1px solid var(--border-color);
-  vertical-align: top; line-height: 1.55;
+  vertical-align: top; line-height: 1.55; white-space: nowrap;
 }
 .agent-answer :deep(tbody tr:last-child td) { border-bottom: none; }
 .agent-answer :deep(tbody tr:nth-child(even)) {

@@ -111,10 +111,12 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
                 "不要凭快照里的空字段或 0 值猜测，也不要回答「证据不足」。"
                 "取到 0 条时要明确说明「该时间段内确实没有记录」，而不是「无法确认」。\n"
                 "⚠️ 用户要求「明细 / 详情 / 详细信息 / 列出 / 都有哪些」时，"
-                "必须把查询返回的记录**逐条列出关键字段**（Markdown 表格，最多 20 行，"
-                "列如 task_id / run_id / search_type / analysis_status / 切割数 / 时间 等），"
+                "必须把查询返回的记录**逐条列出关键字段**（Markdown 表格，最多 20 行）"
                 "放在「关键证据」里；不要只回答总数或 ID 区间、再让用户去指定条件重查——"
-                "你已经查到了就直接给出。"
+                "你已经查到了就直接给出。\n"
+                "⚠️ 表格要**窄而清爽**：只保留 5~6 个关键列（如 task_id、search_type、"
+                "analysis_status、切割完成/需、create_time），列名用简短中文；"
+                "run_id、t_cat_id 这类超长标识默认不列，除非用户明确要看（要看时也请截断中段）。"
             )
         if ctx.deps.knowledge_context:
             parts.append(
