@@ -26,59 +26,90 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def newly_failed_services(old_health: dict, new_results: list[dict]) -> list[str]:
-    old_map = {service["name"]: service.get("ok", True) for service in old_health.get("services", [])}
-    return [
-        result["name"]
-        for result in new_results
-        if not result["ok"] and old_map.get(result["name"], True)
-    ]
-
-
-def recovered_services(old_health: dict, new_results: list[dict]) -> list[str]:
-    old_map = {service["name"]: service.get("ok", True) for service in old_health.get("services", [])}
-    return [
-        result["name"]
-        for result in new_results
-        if result.get("ok") and old_map.get(result["name"], True) is False
-    ]
-
-
-def resolve_recovered_alerts(system: MonitoredSystem, recovered: list[str], session: Session) -> None:
-    if not recovered:
-        return
-    recovered_set = set(recovered)
-    active = session.exec(
+def _open_alert_messages(system: MonitoredSystem, session: Session) -> list[SystemMessage]:
+    return list(session.exec(
         select(SystemMessage).where(
             SystemMessage.system_id == system.id,
             SystemMessage.org_id == system.org_id,
             SystemMessage.message_type == "alert",
             SystemMessage.status != "resolved",
         )
-    ).all()
+    ))
+
+
+def reconcile_alerts(system: MonitoredSystem, new_results: list[dict], session: Session) -> list[str]:
+    """按**当前状态**对齐告警，返回「当前异常且没有任何未解决告警覆盖」的服务名。
+
+    为什么不用「上一轮→本轮」的跃迁判断：`system.last_health` 有多个写入方
+    （采集器上报、定时巡检、外部系统上报、容器 OOM 巡检），任一写入方都会吞掉跃迁，
+    导致告警**永久挂起**（服务早已恢复但告警不关）或反向**故障静默**（告警被误关后不再开）。
+    这里只依赖本轮结果这一权威事实：
+      * 未解决告警里的服务若当前全部正常 → 关闭
+      * 当前异常但未被任何未解决告警覆盖 → 交给调用方新建（受冷却约束）
+    """
+    if not new_results:
+        return []
+    ok_map = {str(result.get("name")): bool(result.get("ok", True)) for result in new_results}
     now = utcnow()
-    for message in active:
+    covered: set[str] = set()
+    for message in _open_alert_messages(system, session):
         failed = set((message.related or {}).get("failed_services") or [])
-        if not failed or not failed.issubset(recovered_set):
+        if not failed:
             continue
-        message.status = "resolved"
-        message.read_at = message.read_at or now
-        message.ack_at = message.ack_at or now
-        message.resolved_at = now
-        message.summary = f"已恢复：{'、'.join(sorted(failed))}"
-        message.content = f"系统「{system.name}」异常服务已恢复：{'、'.join(sorted(failed))}。"
-        session.add(message)
-        record_audit_event(
-            session,
-            org_id=system.org_id,
-            system_id=system.id,
-            event_type="message.auto_resolved",
-            actor_type="system",
-            actor_id="health-check",
-            target_type="message",
-            target_id=message.id,
-            output={"recovered_services": sorted(failed)},
+        # 服务已不在本轮结果里 = 已禁用/删除/不再监控 → 视为恢复（否则告警永久挂起）
+        def _still_broken(name: str) -> bool:
+            return name in ok_map and not ok_map[name]
+
+        if not any(_still_broken(name) for name in failed):
+            message.status = "resolved"
+            message.read_at = message.read_at or now
+            message.ack_at = message.ack_at or now
+            message.resolved_at = now
+            message.summary = f"已恢复：{'、'.join(sorted(failed))}"
+            message.content = f"系统「{system.name}」异常服务已恢复：{'、'.join(sorted(failed))}。"
+            session.add(message)
+            record_audit_event(
+                session,
+                org_id=system.org_id,
+                system_id=system.id,
+                event_type="message.auto_resolved",
+                actor_type="system",
+                actor_id="health-check",
+                target_type="message",
+                target_id=message.id,
+                output={"recovered_services": sorted(failed)},
+            )
+        else:
+            covered |= {name for name in failed if name in ok_map}
+    return sorted(name for name, ok in ok_map.items() if not ok and name not in covered)
+
+
+def recently_alerted_services(
+    system: MonitoredSystem,
+    session: Session,
+    *,
+    within_seconds: int,
+) -> set[str]:
+    """冷却窗口内已经被告警过的服务名。
+
+    用于抑制**同一服务**的抖动重复告警；不影响其他服务的新故障——
+    系统级冷却会把无关服务的新故障一起压掉，造成「故障静默」。
+    """
+    from datetime import timedelta
+
+    since = utcnow() - timedelta(seconds=max(0, within_seconds))
+    rows = session.exec(
+        select(SystemMessage).where(
+            SystemMessage.system_id == system.id,
+            SystemMessage.org_id == system.org_id,
+            SystemMessage.message_type == "alert",
+            SystemMessage.created_at >= since,
         )
+    ).all()
+    names: set[str] = set()
+    for message in rows:
+        names |= set((message.related or {}).get("failed_services") or [])
+    return names
 
 
 def send_webhook_alert(url: str, system_name: str, failed_services: list[str]) -> dict:
@@ -388,20 +419,23 @@ def alert_if_needed(
     new_results: list[dict],
     session: Session,
 ) -> None:
-    resolve_recovered_alerts(system, recovered_services(system.last_health or {}, new_results), session)
-    failed = newly_failed_services(system.last_health or {}, new_results)
+    # 先按当前状态对齐：关闭已恢复的告警，拿到「异常但未被告警覆盖」的服务
+    failed = reconcile_alerts(system, new_results, session)
     if not failed:
         return
 
     now = utcnow()
-    if system.last_alert_at:
-        elapsed = (now - system.last_alert_at.replace(tzinfo=timezone.utc)).total_seconds()
-        if elapsed < settings.alert_cooldown_seconds:
-            log.info(
-                f"[alert] 系统「{system.name}」冷却期内（{elapsed:.0f}s < "
-                f"{settings.alert_cooldown_seconds}s），跳过告警"
-            )
-            return
+    # 抖动抑制：只压掉冷却窗口内**同一服务**的重复告警；
+    # 其他服务的新故障必须立刻告警（系统级冷却会造成跨服务静默）。
+    recent = recently_alerted_services(
+        system, session, within_seconds=settings.alert_cooldown_seconds
+    )
+    suppressed = [name for name in failed if name in recent]
+    failed = [name for name in failed if name not in recent]
+    if suppressed:
+        log.info(f"[alert] 系统「{system.name}」冷却期内抑制重复告警: {suppressed}")
+    if not failed:
+        return
 
     log.warning(f"[alert] 系统「{system.name}」新异常服务: {failed}")
     message = create_alert_message(session, system, failed)

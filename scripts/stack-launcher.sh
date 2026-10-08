@@ -31,6 +31,11 @@ HXMT_DIR="$(detect_dir "$HOME_DIR/Desktop/school/hxmt-worker" \
                        "$HOME_DIR/Desktop/test/hxmt-worker" \
                        "$HOME_DIR/Desktop/hxmt-worker")" \
   || HXMT_DIR="$HOME_DIR/Desktop/school/hxmt-worker"
+# ALGP DataFinder（Kafka 消费服务，独立 Spring Boot 进程，端口 9040）
+DATAFINDER_DIR="$(detect_dir "$HOME_DIR/Desktop/school/algp-master/algp-datafinder" \
+                            "$HOME_DIR/Desktop/test/algp-master/algp-datafinder" \
+                            "$HOME_DIR/Desktop/algp-master/algp-datafinder")" \
+  || DATAFINDER_DIR="$HOME_DIR/Desktop/school/algp-master/algp-datafinder"
 
 RUN_DIR="$ROOT/.dev-stack"
 LOG_DIR="$RUN_DIR/logs"
@@ -51,7 +56,8 @@ P_CADDY=80
 P_ALGP=9037
 P_SVOM=9084
 P_HXMT=8096
-APP_PORTS="$P_BACKEND $P_FRONTEND $P_CADDY $P_ALGP $P_SVOM $P_HXMT 9098 22222 20880 2019 8080"
+P_DATAFINDER=9040
+APP_PORTS="$P_BACKEND $P_FRONTEND $P_CADDY $P_ALGP $P_SVOM $P_HXMT $P_DATAFINDER 9098 22222 20880 2019 8080"
 SCREENS="aiops-backend aiops-frontend aiops-celery-worker aiops-celery-beat aiops-caddy demo-algp-backend demo-svom-frontend demo-hxmt-worker"
 
 if [ -t 1 ]; then
@@ -258,6 +264,13 @@ start_algp() {
     "java -jar target/worker.jar --spring.datasource.url='jdbc:mysql://127.0.0.1:3307/algp?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=CONVERT_TO_NULL&serverTimezone=Asia/Shanghai&autoReconnect=true&allowPublicKeyRetrieval=true' --spring.datasource.username=root --spring.datasource.password=root" \
     "$jenv export GENERAL_AIOPS_CALLBACK_URL='http://127.0.0.1:$P_ALGP/algp/system/message-center/internal/component-error';"
   wait_port "$P_HXMT" "hxmt-worker" 120
+
+  # ALGP DataFinder：Kafka 消费服务（9040）。默认配置指向 3306/zzs1234，
+  # 这里覆盖为本机栈的 MySQL 3307/root，否则起来就连不上库。
+  start_service datafinder "$DATAFINDER_DIR" \
+    "java -jar target/algp-datafinder-1.0-SNAPSHOT.jar --spring.datasource.url='jdbc:mysql://127.0.0.1:3307/algp?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true' --spring.datasource.username=root --spring.datasource.password=root --spring.kafka.bootstrap-servers=127.0.0.1:9092" \
+    "$jenv"
+  wait_port "$P_DATAFINDER" "ALGP DataFinder" 120
 
   start_service svom-frontend "$SVOM_DIR" \
     "npm run serve" "export NODE_OPTIONS='--openssl-legacy-provider';"
