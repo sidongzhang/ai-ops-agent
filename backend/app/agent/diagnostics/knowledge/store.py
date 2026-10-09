@@ -27,8 +27,8 @@ log = logging.getLogger(__name__)
 DOCS_ROOT = Path(__file__).parent / "docs"
 CHUNK_SIZE = 400
 CHUNK_OVERLAP = 60
-TOP_K = 4
-MAX_CHARS = 1500
+TOP_K = 6
+MAX_CHARS = 3000
 MIN_SCORE = 0.3          # 语义命中最低相似度（与旧版一致）
 
 # 进程内指纹缓存：避免每次检索都 stat 磁盘
@@ -263,13 +263,22 @@ def search_with_memories(query: str, system_id: str, max_chars: int = MAX_CHARS)
 
 
 def _dedupe_hits(hits: list[dict]) -> list[dict]:
+    """按「文档 + 分块内容」去重，而不是按文档名。
+
+    大文档会被切成多个分块、共用同一个 name；若按 name 去重，每份文档只会
+    剩下得分最高的那 1 个分块，导致「文档里明明有、却检索不到」。
+    """
     seen: set[str] = set()
     result: list[dict] = []
     for hit in sorted(hits, key=lambda item: item.get("score", 0), reverse=True):
         name = hit.get("name") or ""
-        if not name or name in seen:
+        snippet = (hit.get("snippet") or "").strip()
+        if not name or not snippet:
             continue
-        seen.add(name)
+        key = f"{name}::{hashlib.md5(snippet.encode('utf-8')).hexdigest()}"
+        if key in seen:
+            continue
+        seen.add(key)
         result.append(hit)
     return result
 
