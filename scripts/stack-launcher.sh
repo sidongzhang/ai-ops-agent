@@ -265,12 +265,23 @@ start_algp() {
     "$jenv export GENERAL_AIOPS_CALLBACK_URL='http://127.0.0.1:$P_ALGP/algp/system/message-center/internal/component-error';"
   wait_port "$P_HXMT" "hxmt-worker" 120
 
-  # ALGP DataFinder：Kafka 消费服务（9040）。默认配置指向 3306/zzs1234，
-  # 这里覆盖为本机栈的 MySQL 3307/root，否则起来就连不上库。
-  start_service datafinder "$DATAFINDER_DIR" \
-    "java -jar target/algp-datafinder-1.0-SNAPSHOT.jar --spring.datasource.url='jdbc:mysql://127.0.0.1:3307/algp?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true' --spring.datasource.username=root --spring.datasource.password=root --spring.kafka.bootstrap-servers=127.0.0.1:9092" \
-    "$jenv"
-  wait_port "$P_DATAFINDER" "ALGP DataFinder" 120
+  # ALGP DataFinder：Kafka 消费服务（9040）。它的 jar 是瘦包（pom 里 spring-boot
+  # 插件 skip=true，无主清单），不能用 -jar；改用显式 classpath 启动，
+  # 依赖清单缓存在 $RUN_DIR/datafinder-cp.txt，缺失时用 maven 生成一次。
+  # 默认配置指向 3306/zzs1234，这里覆盖为本机栈的 MySQL 3307/root，否则连不上库。
+  DATAFINDER_CP_FILE="$RUN_DIR/datafinder-cp.txt"
+  if [ ! -s "$DATAFINDER_CP_FILE" ]; then
+    ( cd "$ALGP_DIR" && mvn -q -o -pl algp-datafinder -am dependency:build-classpath \
+        -Dmdep.outputFile="$DATAFINDER_CP_FILE" ) || warn "DataFinder 依赖清单生成失败"
+  fi
+  if [ -s "$DATAFINDER_CP_FILE" ]; then
+    start_service datafinder "$DATAFINDER_DIR" \
+      "java -cp \"target/classes:$(cat "$DATAFINDER_CP_FILE")\" neu.algp.datafinder.AlgpDatafinderApplication --spring.datasource.url='jdbc:mysql://127.0.0.1:3307/algp?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true' --spring.datasource.username=root --spring.datasource.password=root --spring.kafka.bootstrap-servers=127.0.0.1:9092" \
+      "$jenv"
+    wait_port "$P_DATAFINDER" "ALGP DataFinder" 120
+  else
+    warn "跳过 DataFinder：缺少依赖清单 $DATAFINDER_CP_FILE"
+  fi
 
   start_service svom-frontend "$SVOM_DIR" \
     "npm run serve" "export NODE_OPTIONS='--openssl-legacy-provider';"
