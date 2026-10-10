@@ -257,6 +257,12 @@ def _handle_command(cmd: str, args: dict, descriptor: dict) -> dict:
                 },
             }
 
+        elif cmd == "archive_list":
+            return _archive_list(args)
+
+        elif cmd == "archive_read":
+            return _archive_read(args)
+
         else:
             return {"ok": False, "result": f"未知命令: {cmd}"}
 
@@ -281,6 +287,105 @@ def _json_value(value):
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     return str(value)
+
+
+# ── 归档文件只读访问（白名单根目录内）────────────────────────────
+
+_ARCHIVE_FITS_HEADER_BYTES = 2880 * 6
+
+
+def _archive_dir(base_path: str, tcat_id: str):
+    """按 <base>/<YYYY>/<MM>/<tcatId> 解析归档目录；越界或非法返回 None。"""
+    base = os.path.realpath(os.path.expanduser(str(base_path or "")))
+    tcat = re.sub(r"[^\w\-]", "", str(tcat_id or ""))  # 去掉 / \ .. 等，防路径穿越
+    if not base or not os.path.isdir(base) or not tcat:
+        return None
+    digits = re.sub(r"\D", "", tcat)
+    if len(digits) < 6:
+        return None
+    yyyy, mm = "20" + digits[0:2], digits[2:4]
+    target = os.path.realpath(os.path.join(base, yyyy, mm, tcat))
+    if target != base and not target.startswith(base + os.sep):
+        return None
+    return target
+
+
+def _archive_kind(file_name: str) -> str:
+    name = (file_name or "").lower()
+    if name.endswith(".tcat"):
+        return "tcat"
+    if name.endswith(".pdf"):
+        return "pdf"
+    if name.endswith(".json"):
+        return "json"
+    if name.endswith("_loc.fits"):
+        return "loc"
+    if name.endswith("_joint.fits"):
+        return "joint"
+    if name.endswith(".fits"):
+        return "fits"
+    return "other"
+
+
+def _fits_header_text(raw: bytes) -> str:
+    lines = []
+    for i in range(0, len(raw), 80):
+        rec = raw[i:i + 80]
+        if len(rec) < 80:
+            break
+        text = rec.decode("ascii", "replace").rstrip()
+        lines.append(text)
+        if text.strip().startswith("END"):
+            break
+    return "\n".join(lines)
+
+
+def _archive_list(args: dict) -> dict:
+    directory = _archive_dir(args.get("base_path"), args.get("tcat_id"))
+    if not directory or not os.path.isdir(directory):
+        return {"ok": True, "result": {"archive_dir": directory or "", "files": [], "total": 0}}
+    files = []
+    for name in sorted(os.listdir(directory)):
+        full = os.path.join(directory, name)
+        if not os.path.isfile(full):
+            continue
+        st = os.stat(full)
+        files.append({
+            "name": name,
+            "size": st.st_size,
+            "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
+            "kind": _archive_kind(name),
+        })
+    return {"ok": True, "result": {"archive_dir": directory, "files": files, "total": len(files)}}
+
+
+def _archive_read(args: dict) -> dict:
+    directory = _archive_dir(args.get("base_path"), args.get("tcat_id"))
+    file_name = os.path.basename(str(args.get("file_name") or ""))
+    if not directory or not file_name:
+        return {"ok": False, "result": "归档目录不可用或缺少文件名"}
+    path = os.path.realpath(os.path.join(directory, file_name))
+    if not path.startswith(os.path.realpath(directory) + os.sep) or not os.path.isfile(path):
+        return {"ok": False, "result": "文件不存在或不在归档目录内"}
+    try:
+        max_bytes = max(1, min(int(args.get("max_bytes") or 65536), 262144))
+    except (TypeError, ValueError):
+        max_bytes = 65536
+    size = os.path.getsize(path)
+    with open(path, "rb") as fh:
+        raw = fh.read(max_bytes)
+    kind = _archive_kind(file_name)
+    if kind in ("loc", "joint", "fits"):
+        return {"ok": True, "result": {
+            "name": file_name, "size": size, "kind": kind, "format": "fits",
+            "header": _fits_header_text(raw[: _ARCHIVE_FITS_HEADER_BYTES]),
+            "truncated": size > max_bytes,
+        }}
+    return {"ok": True, "result": {
+        "name": file_name, "size": size, "kind": kind, "format": "text",
+        "text": raw.decode("utf-8", "replace"),
+        "truncated": size > max_bytes,
+    }}
 
 
 async def _ws_loop(ws_url: str, collector_key: str, get_descriptor: Callable[[], dict]) -> None:

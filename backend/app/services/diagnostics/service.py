@@ -77,6 +77,58 @@ def _remote_command(session: Session, system):
     return execute
 
 
+def _archive_access(session: Session, system, org_id: int):
+    """构建 agent 的归档只读工具（列文件 / 读内容），经采集器在 ALGP 侧执行。
+
+    归档根目录取自 system.infra.archive.base_path；具体目录按
+    <base>/<YYYY>/<MM>/<tcatId> 在采集器侧解析并做白名单校验。
+    """
+    from app.core.security import decrypt_sensitive_fields
+
+    if system.local:
+        return None, None
+    infra = decrypt_sensitive_fields(system.infra or {})
+    base_path = str((infra.get("archive") or {}).get("base_path") or "").strip()
+    if not base_path:
+        return None, None
+    collector = select_online_collector(session, system.id)
+    if not collector or not manager.is_connected(collector.id):
+        return None, None
+
+    def _send(command: str, args: dict) -> dict:
+        try:
+            return manager.send_command_sync(collector.id, command, args)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "result": str(exc)}
+
+    def list_files(tcat_id: str) -> str:
+        resp = _send("archive_list", {"base_path": base_path, "tcat_id": tcat_id})
+        data = resp.get("result") if resp.get("ok") else None
+        if not isinstance(data, dict):
+            return f"归档文件列举失败：{resp.get('result')}"
+        files = data.get("files") or []
+        if not files:
+            return f"未找到归档文件（目录：{data.get('archive_dir') or '未知'}）。"
+        lines = [f"归档目录：{data.get('archive_dir')}", f"共 {data.get('total', len(files))} 个文件："]
+        for item in files:
+            lines.append(
+                f"- {item.get('name')}（{item.get('kind', '')}，{item.get('size', 0)} 字节，{item.get('mtime', '')}）"
+            )
+        return "\n".join(lines)
+
+    def read_file(tcat_id: str, file_name: str) -> str:
+        resp = _send("archive_read", {"base_path": base_path, "tcat_id": tcat_id, "file_name": file_name})
+        data = resp.get("result") if resp.get("ok") else None
+        if not isinstance(data, dict):
+            return f"读取归档文件失败：{resp.get('result')}"
+        head = f"文件 {data.get('name')}（{data.get('format')}，{data.get('size')} 字节）"
+        if data.get("format") == "fits":
+            return f"{head}\nFITS 头：\n{data.get('header') or '(空)'}"
+        return f"{head}\n内容：\n{data.get('text') or '(空)'}"
+
+    return list_files, read_file
+
+
 def _business_data_query(session: Session, system, org_id: int, actor_id: str):
     config = get_readonly_database_config(session, system.id, org_id)
     if not config.enabled:
@@ -423,6 +475,7 @@ def diagnose_system(
                 f"上一轮结论: {prev_answer}"
             )
     dataset_query, data_catalog = _business_dataset_query(session, system, org_id, actor_id)
+    archive_list, archive_read = _archive_access(session, system, org_id)
     try:
         run = diagnose_with_details(
             descriptor,
@@ -435,6 +488,8 @@ def diagnose_system(
             remote_command=_remote_command(session, system),
             business_data_query=_business_data_query(session, system, org_id, actor_id),
             business_dataset_query=dataset_query,
+            archive_list=archive_list,
+            archive_read=archive_read,
             data_catalog=data_catalog,
             model_mode=model_mode,
             model_name=model_name,

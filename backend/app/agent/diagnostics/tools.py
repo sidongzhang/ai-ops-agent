@@ -71,6 +71,8 @@ class AgentDeps:
     remote_command: Callable[[str, dict], dict] | None = None
     business_data_query: Callable[[str], str] | None = None
     business_dataset_query: Callable[..., str] | None = None
+    archive_list: Callable[[str], str] | None = None
+    archive_read: Callable[[str, str], str] | None = None
     data_catalog: str = ""
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
     tool_cache: dict = field(default_factory=dict)
@@ -445,6 +447,28 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         if not ctx.deps.business_dataset_query:
             return "当前系统未配置可查询的业务数据集。"
         return ctx.deps.business_dataset_query(dataset, date_from, date_to, filters)
+
+    @agent.tool
+    @_memoized
+    def list_archive_files(ctx: RunContext[AgentDeps], tcat_id: str) -> str:
+        """列出某次触发/爆发(TCat)的归档目录与文件清单（文件名、类型、大小、时间）。
+
+        用户问「归档在哪 / 有哪些文件 / 有哪些产物 / 这次爆发生成了什么」时调用。
+        参数 tcat_id：触发ID（形如 tn260717_120003_gbm，也就是 t_cat_id）。"""
+        if not ctx.deps.archive_list:
+            return "当前系统未启用归档文件访问，无法列出归档文件。"
+        return ctx.deps.archive_list(tcat_id)
+
+    @agent.tool
+    @_memoized
+    def read_archive_file(ctx: RunContext[AgentDeps], tcat_id: str, file_name: str) -> str:
+        """读取某个归档文件的内容：文本文件返回文本，FITS 文件返回头摘要（头关键字）。
+
+        用于解释文件是什么、做简要分析。请先用 list_archive_files 拿到确切文件名。
+        参数 tcat_id：触发ID；file_name：文件名（如 result_tn260717_120003_gbm_loc.fits）。"""
+        if not ctx.deps.archive_read:
+            return "当前系统未启用归档文件访问，无法读取文件。"
+        return ctx.deps.archive_read(tcat_id, file_name)
 
     @agent.tool
     @_memoized

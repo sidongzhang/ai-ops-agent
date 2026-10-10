@@ -69,6 +69,8 @@ def diagnose_with_details(
     remote_command=None,
     business_data_query=None,
     business_dataset_query=None,
+    archive_list=None,
+    archive_read=None,
     data_catalog: str = "",
     conversation_context: str = "",
     model_mode: str = "auto",
@@ -108,6 +110,8 @@ def diagnose_with_details(
             remote_command=remote_command,
             business_data_query=business_data_query,
             business_dataset_query=business_dataset_query,
+            archive_list=archive_list,
+            archive_read=archive_read,
             data_catalog=data_catalog,
             progress_sink=on_progress,
         )
