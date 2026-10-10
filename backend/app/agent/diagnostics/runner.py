@@ -71,6 +71,7 @@ def diagnose_with_details(
     business_dataset_query=None,
     archive_list=None,
     archive_read=None,
+    archive_fetch=None,
     data_catalog: str = "",
     conversation_context: str = "",
     model_mode: str = "auto",
@@ -112,6 +113,7 @@ def diagnose_with_details(
             business_dataset_query=business_dataset_query,
             archive_list=archive_list,
             archive_read=archive_read,
+            archive_fetch=archive_fetch,
             data_catalog=data_catalog,
             progress_sink=on_progress,
         )

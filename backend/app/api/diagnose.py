@@ -198,3 +198,17 @@ def update_templates(
         raise HTTPException(404, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+
+@router.get("/{system_id}/diagnosis-artifacts/{token}")
+def download_diagnosis_artifact(system_id: int, token: str):
+    """下载 agent 取回的归档附件（凭不可猜的 token，免登录）。"""
+    from fastapi.responses import FileResponse
+
+    from ..services.diagnostics.artifacts import find_artifact
+
+    found = find_artifact(token)
+    if not found:
+        raise HTTPException(404, "附件不存在或已失效")
+    path, name = found
+    return FileResponse(path, filename=name, media_type="application/octet-stream")

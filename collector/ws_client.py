@@ -263,6 +263,9 @@ def _handle_command(cmd: str, args: dict, descriptor: dict) -> dict:
         elif cmd == "archive_read":
             return _archive_read(args)
 
+        elif cmd == "archive_fetch":
+            return _archive_fetch(args)
+
         else:
             return {"ok": False, "result": f"未知命令: {cmd}"}
 
@@ -385,6 +388,32 @@ def _archive_read(args: dict) -> dict:
         "name": file_name, "size": size, "kind": kind, "format": "text",
         "text": raw.decode("utf-8", "replace"),
         "truncated": size > max_bytes,
+    }}
+
+
+def _archive_fetch(args: dict) -> dict:
+    """取回归档文件（base64），用于回传给用户下载。限制单文件大小。"""
+    import base64
+
+    directory = _archive_dir(args.get("base_path"), args.get("tcat_id"))
+    file_name = os.path.basename(str(args.get("file_name") or ""))
+    if not directory or not file_name:
+        return {"ok": False, "result": "归档目录不可用或缺少文件名"}
+    path = os.path.realpath(os.path.join(directory, file_name))
+    if not path.startswith(os.path.realpath(directory) + os.sep) or not os.path.isfile(path):
+        return {"ok": False, "result": "文件不存在或不在归档目录内"}
+    try:
+        limit = max(1, min(int(args.get("max_bytes") or 2097152), 5242880))
+    except (TypeError, ValueError):
+        limit = 2097152
+    size = os.path.getsize(path)
+    if size > limit:
+        return {"ok": False, "result": f"文件过大（{size} 字节，上限 {limit}），不予回传"}
+    with open(path, "rb") as fh:
+        raw = fh.read(limit)
+    return {"ok": True, "result": {
+        "name": file_name, "size": size, "kind": _archive_kind(file_name),
+        "encoding": "base64", "content": base64.b64encode(raw).decode("ascii"),
     }}
 
 

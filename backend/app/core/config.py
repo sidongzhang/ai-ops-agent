@@ -124,5 +124,9 @@ class Settings(BaseSettings):
 
     repo_root: str = _REPO_ROOT
 
+    # 归档附件回传：下载链接对外基址；附件落盘目录（空=repo_root/.dev-stack/artifacts）
+    public_base_url: str = "http://localhost"
+    diagnosis_artifact_dir: str = ""
+
 
 settings = Settings()

@@ -73,6 +73,7 @@ class AgentDeps:
     business_dataset_query: Callable[..., str] | None = None
     archive_list: Callable[[str], str] | None = None
     archive_read: Callable[[str, str], str] | None = None
+    archive_fetch: Callable[[str, str], str] | None = None
     data_catalog: str = ""
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
     tool_cache: dict = field(default_factory=dict)
@@ -469,6 +470,18 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         if not ctx.deps.archive_read:
             return "当前系统未启用归档文件访问，无法读取文件。"
         return ctx.deps.archive_read(tcat_id, file_name)
+
+    @agent.tool
+    @_memoized
+    def fetch_archive_file(ctx: RunContext[AgentDeps], tcat_id: str, file_name: str) -> str:
+        """把某个归档文件取回平台并生成**可下载链接**（附件），发给用户。
+
+        仅当用户明确要求「把文件发给我 / 给我下载 / 发回来 / 导出这个文件」时调用。
+        返回文本里含下载链接，请原样附在回答中。
+        参数 tcat_id：触发ID；file_name：文件名（先用 list_archive_files 确认）。"""
+        if not ctx.deps.archive_fetch:
+            return "当前系统未启用归档文件回传，无法发送文件。"
+        return ctx.deps.archive_fetch(tcat_id, file_name)
 
     @agent.tool
     @_memoized

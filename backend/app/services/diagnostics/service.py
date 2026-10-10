@@ -86,14 +86,14 @@ def _archive_access(session: Session, system, org_id: int):
     from app.core.security import decrypt_sensitive_fields
 
     if system.local:
-        return None, None
+        return None, None, None
     infra = decrypt_sensitive_fields(system.infra or {})
     base_path = str((infra.get("archive") or {}).get("base_path") or "").strip()
     if not base_path:
-        return None, None
+        return None, None, None
     collector = select_online_collector(session, system.id)
     if not collector or not manager.is_connected(collector.id):
-        return None, None
+        return None, None, None
 
     def _send(command: str, args: dict) -> dict:
         try:
@@ -126,7 +126,26 @@ def _archive_access(session: Session, system, org_id: int):
             return f"{head}\nFITS 头：\n{data.get('header') or '(空)'}"
         return f"{head}\n内容：\n{data.get('text') or '(空)'}"
 
-    return list_files, read_file
+    def fetch_file(tcat_id: str, file_name: str) -> str:
+        resp = _send("archive_fetch", {"base_path": base_path, "tcat_id": tcat_id, "file_name": file_name})
+        data = resp.get("result") if resp.get("ok") else None
+        if not isinstance(data, dict):
+            return f"取回归档文件失败：{resp.get('result')}"
+        import base64
+
+        from app.core.config import settings as app_settings
+        from app.services.diagnostics.artifacts import save_artifact
+
+        try:
+            raw = base64.b64decode(data.get("content") or "")
+        except Exception as exc:  # noqa: BLE001
+            return f"取回归档文件失败：{exc}"
+        token = save_artifact(data.get("name") or file_name, raw)
+        base_url = (app_settings.public_base_url or "").rstrip("/")
+        url = f"{base_url}/systems/{system.id}/diagnosis-artifacts/{token}"
+        return f"已取回文件 {data.get('name')}（{data.get('size')} 字节）。下载链接：{url}"
+
+    return list_files, read_file, fetch_file
 
 
 def _business_data_query(session: Session, system, org_id: int, actor_id: str):
@@ -475,7 +494,7 @@ def diagnose_system(
                 f"上一轮结论: {prev_answer}"
             )
     dataset_query, data_catalog = _business_dataset_query(session, system, org_id, actor_id)
-    archive_list, archive_read = _archive_access(session, system, org_id)
+    archive_list, archive_read, archive_fetch = _archive_access(session, system, org_id)
     try:
         run = diagnose_with_details(
             descriptor,
@@ -490,6 +509,7 @@ def diagnose_system(
             business_dataset_query=dataset_query,
             archive_list=archive_list,
             archive_read=archive_read,
+            archive_fetch=archive_fetch,
             data_catalog=data_catalog,
             model_mode=model_mode,
             model_name=model_name,
