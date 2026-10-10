@@ -125,13 +125,14 @@ def _business_dataset_query(session: Session, system, org_id: int, actor_id: str
     remote_executor = _remote_query_executor(session, system)
     max_rows = int(config.get("max_rows") or 60)
 
-    def query(dataset: str, date_from: str = "", date_to: str = "") -> str:
+    def query(dataset: str, date_from: str = "", date_to: str = "", filters: dict | None = None) -> str:
         try:
             result = query_readonly_dataset(
                 config,
                 dataset,
                 date_from=date_from,
                 date_to=date_to,
+                filters=filters or None,
                 max_rows=max_rows,
                 executor=remote_executor,
             )

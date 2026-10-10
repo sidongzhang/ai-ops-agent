@@ -70,7 +70,7 @@ class AgentDeps:
     conversation_context: str = ""
     remote_command: Callable[[str, dict], dict] | None = None
     business_data_query: Callable[[str], str] | None = None
-    business_dataset_query: Callable[[str, str, str], str] | None = None
+    business_dataset_query: Callable[..., str] | None = None
     data_catalog: str = ""
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
     tool_cache: dict = field(default_factory=dict)
@@ -429,20 +429,22 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         dataset: str,
         date_from: str = "",
         date_to: str = "",
+        filters: dict | None = None,
     ) -> str:
-        """查询业务系统的只读统计数据集（按天聚合的运行量、切割次数、文件量、产物量、卡住任务等）。
+        """查询业务系统的只读数据集（按天的运行量/切割/文件/产物/卡住任务，以及归档文件索引等）。
 
         用户问「今天/某天执行了多少次」「有多少条记录」「成功多少、失败多少」「卡住多少」
         这类量化问题时必须调用本工具取真实数据，不要凭快照猜测或回答证据不足。
         参数：
           dataset：数据集名称，只能从 system prompt 的「可用业务数据集」里选。
-          date_from / date_to：日期区间，格式 YYYY-MM-DD；留空表示不限制。
-          查询今天的数据时，date_from 和 date_to 都填今天。
-        返回值末尾会给出「汇总」行。需要总数时直接引用汇总行，不要自己对明细行做加减。
-        只执行受控的 SELECT 聚合查询，不会修改任何业务数据。"""
+          date_from / date_to：日期区间，格式 YYYY-MM-DD；留空表示不限制。查询今天时两个都填今天。
+          filters：可选，按列精确过滤，如 {"t_cat_id": "tn260717_120003_gbm"}；
+                   只允许目录里标注「可按 … 过滤」的列，用别的列会报错。
+        返回值末尾会给出「汇总」行；需要总数时直接引用汇总行，不要自己对明细行做加减。
+        只执行受控的 SELECT 查询，不会修改任何业务数据。"""
         if not ctx.deps.business_dataset_query:
             return "当前系统未配置可查询的业务数据集。"
-        return ctx.deps.business_dataset_query(dataset, date_from, date_to)
+        return ctx.deps.business_dataset_query(dataset, date_from, date_to, filters)
 
     @agent.tool
     @_memoized
