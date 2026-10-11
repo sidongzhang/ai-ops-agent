@@ -14,24 +14,33 @@ from pydantic_ai.messages import (
 )
 
 from app.agent.llm import default_endpoint, endpoint_for_mode, make_chat_model
+from app.agent.lazy_agent import LazyAgent
 from app.core.config import settings
 from .knowledge.store import append_runbook_entry
 from .history import compact_messages
-from .models import default_model, pick_model
+from .models import pick_model
 from .tool_events import iter_tool_events, safe_emit
 from .tools import AgentDeps, register_tools
 from .tracing import get_langfuse
 
 log = logging.getLogger(__name__)
 
-diagnose_agent = register_tools(Agent(default_model(), deps_type=AgentDeps))
-text_fallback_agent = Agent(
-    default_model(),
-    output_type=str,
-    instructions=(
-        "你是智能运维诊断助手。工具调用链路失败时，请基于用户问题、系统描述、"
-        "已知证据和错误信息给出可执行的中文诊断建议。不要输出 JSON。"
+# 延迟构造：import 本模块不应要求 LLM 凭证（CI/离线评测会直接 import）。
+# 两个 agent 都在调用处显式传 model=，所以这里不绑定默认模型 —— 构造时也不会建立
+# OpenAI 客户端，无凭证环境下 run 仍可用（评测用 TestModel 替换）。
+diagnose_agent = LazyAgent(
+    lambda: register_tools(Agent(deps_type=AgentDeps)),
+    name="diagnose",
+)
+text_fallback_agent = LazyAgent(
+    lambda: Agent(
+        output_type=str,
+        instructions=(
+            "你是智能运维诊断助手。工具调用链路失败时，请基于用户问题、系统描述、"
+            "已知证据和错误信息给出可执行的中文诊断建议。不要输出 JSON。"
+        ),
     ),
+    name="text_fallback",
 )
 
 

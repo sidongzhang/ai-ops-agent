@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 
+from app.agent.lazy_agent import LazyAgent
 from app.agent.llm import default_endpoint, make_chat_model
 
 
@@ -31,11 +32,7 @@ def make_analysis_model() -> OpenAIChatModel:
     return make_chat_model(default_endpoint())
 
 
-analysis_agent = Agent(
-    make_analysis_model(),
-    output_type=AnalysisResult,
-    deps_type=AnalysisDeps,
-    system_prompt="""你是智能运维专家。根据用户的问题和系统描述，提供：
+_ANALYSIS_PROMPT = """你是智能运维专家。根据用户的问题和系统描述，提供：
 1. 简明的诊断分析（diagnosis）
 2. 一个建议执行的修复/排查动作（proposed_action）
 
@@ -52,12 +49,25 @@ analysis_agent = Agent(
 - manual            ：需要人工执行的操作；manual_steps 列出具体步骤
 
 优先级：能自动修复 > 日志排查 > 人工操作。
-重启容器风险低且可逆，优先考虑；数据清理需谨慎，选 manual 说明风险。""",
-)
+重启容器风险低且可逆，优先考虑；数据清理需谨慎，选 manual 说明风险。"""
 
 
-@analysis_agent.system_prompt
-def inject_descriptor(ctx: RunContext[AnalysisDeps]) -> str:
-    import json
+def _build_analysis_agent() -> Agent:
+    """延迟构造（见 LazyAgent）：import 本模块不应要求 LLM 凭证。"""
+    agent = Agent(
+        make_analysis_model(),
+        output_type=AnalysisResult,
+        deps_type=AnalysisDeps,
+        system_prompt=_ANALYSIS_PROMPT,
+    )
 
-    return f"\n\n系统描述（JSON）：\n{json.dumps(ctx.deps.descriptor, ensure_ascii=False, indent=2)}"
+    @agent.system_prompt
+    def inject_descriptor(ctx: RunContext[AnalysisDeps]) -> str:
+        import json
+
+        return f"\n\n系统描述（JSON）：\n{json.dumps(ctx.deps.descriptor, ensure_ascii=False, indent=2)}"
+
+    return agent
+
+
+analysis_agent = LazyAgent(_build_analysis_agent, name="workflow_analysis")

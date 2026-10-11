@@ -466,7 +466,7 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             result = get_evidence_agent().run_sync(
                 task,
                 deps=sub_deps,
-                model=default_model(),
+                model=ctx.model or default_model(),
                 retries=2,
                 event_stream_handler=sub_handler,
             )
@@ -492,7 +492,7 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         返回：各专家结论摘要（角色化）。"""
         from .specialists import ROLE_ORDER, run_specialists
 
-        findings = run_specialists(ctx.deps, task, specialists or list(ROLE_ORDER))
+        findings = run_specialists(ctx.deps, task, specialists or list(ROLE_ORDER), model=ctx.model)
         return "\n\n".join(f"【{role} 专家】\n{text}" for role, text in findings.items())
 
     @agent.tool

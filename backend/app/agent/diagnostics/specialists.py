@@ -25,13 +25,14 @@ ROLE_FOCUS = {
 ROLE_ORDER = ("infra", "metrics", "logs", "cache_mq")
 
 
-def run_specialists(deps: AgentDeps, task: str, roles=None) -> dict[str, str]:
-    """并行运行专家子代理，返回 {role: 摘要}。"""
+def run_specialists(deps: AgentDeps, task: str, roles=None, *, model=None) -> dict[str, str]:
+    """并行运行专家子代理，返回 {role: 摘要}。model 缺省时回退默认模型。"""
     from .investigator import get_evidence_agent
     from .models import default_model
 
     agent = get_evidence_agent()
     selected = [r for r in (roles or []) if r in ROLE_FOCUS] or list(ROLE_ORDER)
+    run_model = model or default_model()
 
     def _one(role: str) -> tuple[str, str]:
         sub = AgentDeps(
@@ -44,7 +45,7 @@ def run_specialists(deps: AgentDeps, task: str, roles=None) -> dict[str, str]:
         )
         prompt = f"角色：{role} 专家。{ROLE_FOCUS[role]}\n任务：{task}"
         try:
-            result = agent.run_sync(prompt, deps=sub, model=default_model(), retries=1)
+            result = agent.run_sync(prompt, deps=sub, model=run_model, retries=1)
             return role, str(result.output).strip()[:1500]
         except Exception as exc:  # noqa: BLE001 - 单个专家失败不影响整体
             log.debug("[specialists] %s 专家失败: %s", role, exc)

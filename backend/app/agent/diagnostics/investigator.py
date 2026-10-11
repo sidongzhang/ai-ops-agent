@@ -36,10 +36,7 @@ def get_evidence_agent() -> Agent:
     """进程级单例：取证子代理构建一次复用（模型与主代理一致）。"""
     global _evidence_agent
     if _evidence_agent is None:
-        from .models import default_model
-
         _evidence_agent = Agent(
-            default_model(),
             deps_type=AgentDeps,
             instructions=INVESTIGATOR_PROMPT,
         )
