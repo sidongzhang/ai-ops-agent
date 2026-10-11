@@ -472,6 +472,21 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             )
 
     @agent.tool
+    def consult_specialists(ctx: RunContext[AgentDeps], task: str, specialists: list | None = None) -> str:
+        """把一次复杂排查**并行**派给若干"专家子代理"（infra / metrics / logs / cache_mq），汇总各自证据。
+
+        适用：需要**同时**看多类证据（健康 + 指标 + 日志 + 中间件）的复杂故障——比串行逐个查更快、
+        每个专家上下文独立不互相挤爆。
+        参数：
+          task：要排查的任务（写清楚看哪些服务/关注什么）。
+          specialists：可选子集，如 ["metrics","logs"]；留空=全部四位专家。
+        返回：各专家结论摘要（角色化）。"""
+        from .specialists import ROLE_ORDER, run_specialists
+
+        findings = run_specialists(ctx.deps, task, specialists or list(ROLE_ORDER))
+        return "\n\n".join(f"【{role} 专家】\n{text}" for role, text in findings.items())
+
+    @agent.tool
     @_memoized
     @_untrusted
     def query_business_data(ctx: RunContext[AgentDeps], question: str) -> str:
