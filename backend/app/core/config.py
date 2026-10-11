@@ -138,6 +138,8 @@ class Settings(BaseSettings):
 
     # 代码沙箱用的解释器（空=平台自身 python）。指到装了 numpy/matplotlib 的独立 venv 即可出图。
     sandbox_python: str = ""
+    # 代码沙箱容器镜像（非空则优先在一次性容器里执行：--network none + 资源限额 + 用完即毁）
+    sandbox_container_image: str = ""
 
     # 证据约束（防幻觉）：含具体数字但无任何取证工具调用时，在回答后附"未取证"提示
     diagnosis_evidence_guard: bool = True

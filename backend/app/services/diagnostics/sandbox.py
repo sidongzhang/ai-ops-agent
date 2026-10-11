@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from typing import Mapping
 
 from app.core.config import settings
@@ -47,13 +48,58 @@ def _safe_name(name: str) -> str:
     return base or "input"
 
 
+def _docker_env() -> dict:
+    """docker CLI 用的环境：未设 DOCKER_HOST 时自动指向 colima 的 socket。"""
+    env = dict(os.environ)
+    if not env.get("DOCKER_HOST"):
+        sock = os.path.expanduser("~/.colima/default/docker.sock")
+        if os.path.exists(sock):
+            env["DOCKER_HOST"] = f"unix://{sock}"
+    return env
+
+
+def _docker_argv(workdir: str, name: str) -> list[str] | None:
+    """配置了沙箱镜像且 docker 可用时，返回一次性容器执行命令；否则 None。"""
+    image = (settings.sandbox_container_image or "").strip()
+    if not image or not shutil.which("docker"):
+        return None
+    return [
+        "docker", "run", "--rm", "--name", name,
+        "--network", "none",                 # 断网：读不到平台密钥、连不上内网/数据库
+        "--memory", "1g", "--cpus", "1", "--pids-limit", "256",
+        "-v", f"{workdir}:/work", "-w", "/work",
+        image, "python", "-I", f"/work/{_SCRIPT_NAME}",
+    ]
+
+
+def _cleanup_container(argv: list[str] | None) -> None:
+    """超时/结束后强制移除容器（subprocess 超时只杀 docker 客户端，容器会残留）。"""
+    if not argv or "--name" not in argv:
+        return
+    name = argv[argv.index("--name") + 1]
+    try:
+        subprocess.run(["docker", "rm", "-f", name], env=_docker_env(), capture_output=True, timeout=20)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _new_workdir() -> str:
+    """在 $HOME 下（colima 共享目录内）创建一次性工作目录，确保容器 bind mount 可见。"""
+    base = os.path.join(settings.repo_root, ".dev-stack", "sandbox-work")
+    try:
+        os.makedirs(base, exist_ok=True)
+        return tempfile.mkdtemp(prefix="run-", dir=base)
+    except Exception:  # noqa: BLE001 - 兜底用系统临时目录（容器模式下可能不可见）
+        return tempfile.mkdtemp(prefix="aiops-sbx-")
+
+
 def run_python(code: str, files: Mapping[str, bytes] | None = None, timeout: int = DEFAULT_TIMEOUT) -> dict:
     """在工作目录内执行 code，返回 {ok, stdout, stderr, outputs, returncode}。
 
     outputs: {文件名: bytes}，即脚本新产生（不含输入文件与本脚本）的文件。
     """
     files = files or {}
-    workdir = tempfile.mkdtemp(prefix="aiops-sbx-")
+    workdir = _new_workdir()
     try:
         used: set[str] = set()
         for name, data in files.items():
@@ -76,17 +122,22 @@ def run_python(code: str, files: Mapping[str, bytes] | None = None, timeout: int
             "PYTHONDONTWRITEBYTECODE": "1",
             "MPLBACKEND": "Agg",          # matplotlib 无界面后端，便于在沙箱里保存图片
         }
+        docker_argv = _docker_argv(workdir, f"aiops-sbx-{uuid.uuid4().hex[:12]}")
+        argv = docker_argv or [settings.sandbox_python or sys.executable, "-I", script_path]
         try:
             proc = subprocess.run(
-                [settings.sandbox_python or sys.executable, "-I", script_path],
+                argv,
                 cwd=workdir,
-                env=env,
+                env=(_docker_env() if docker_argv else env),
                 capture_output=True,
                 timeout=timeout,
-                preexec_fn=_preexec if os.name == "posix" else None,
+                preexec_fn=_preexec if (os.name == "posix" and not docker_argv) else None,
             )
         except subprocess.TimeoutExpired:
+            _cleanup_container(docker_argv)
             return {"ok": False, "stdout": "", "stderr": f"执行超时（>{timeout}s）", "outputs": {}, "returncode": None}
+        finally:
+            _cleanup_container(docker_argv)
 
         outputs: dict[str, bytes] = {}
         for name in sorted(os.listdir(workdir)):
