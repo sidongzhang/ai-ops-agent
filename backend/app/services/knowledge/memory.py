@@ -7,6 +7,7 @@
 """
 import logging
 import re
+from datetime import datetime, timezone
 
 from sqlalchemy import text
 
@@ -27,6 +28,12 @@ VALIDITY_WEIGHT = {
     "unconfirmed": 0.5,
     "failed": 0.0,          # 处置无效的记忆直接排除（防污染核心）
 }
+
+# 近重复合并阈值：语义相似度 ≥ 该值视为"同一条经验"，合并而非新增
+DEDUP_SIMILARITY = 0.93
+# 时间衰减半衰期（天）：越久的经验权重越低，避免旧经验压过近期有效经验
+DECAY_HALF_LIFE_DAYS = 180.0
+DECAY_FLOOR = 0.3
 
 
 def _embed_one(value: str) -> list | None:
@@ -86,14 +93,45 @@ def save_memory(
         vec = _embed_one(_memory_text(symptom, root_cause, remedy))
         if vec is None:
             return None   # 无向量则检索不可达，写入无意义
+        qv = "[" + ",".join(f"{x:.7g}" for x in vec) + "]"
         with Session(engine) as session:
-            dup = session.execute(
-                text("SELECT id FROM knowledge_memories WHERE system_id = :sid AND symptom = :sym LIMIT 1"),
-                {"sid": system_id, "sym": symptom},
+            # 近重复：语义上几乎同一条经验 → 合并（提升置信度），避免记忆堆积/污染
+            near = session.execute(
+                text(
+                    """
+                    SELECT id, confidence,
+                           1 - (embedding <=> CAST(:qv AS vector)) AS similarity
+                    FROM knowledge_memories
+                    WHERE system_id = :sid AND embedding IS NOT NULL
+                    ORDER BY embedding <=> CAST(:qv AS vector)
+                    LIMIT 1
+                    """
+                ),
+                {"qv": qv, "sid": system_id},
             ).first()
-            if dup:
-                return None
-            qv = "[" + ",".join(f"{x:.7g}" for x in vec) + "]"
+            if near and float(near.similarity or 0) >= DEDUP_SIMILARITY:
+                merged_conf = (
+                    1.0 if source == "human"
+                    else min(0.95, max(float(near.confidence or 0.5), confidence) + 0.05)
+                )
+                session.execute(
+                    text(
+                        """
+                        UPDATE knowledge_memories
+                        SET root_cause = :rc, remedy = :rem, confidence = :conf, updated_at = now(),
+                            validity = CASE WHEN :val = :unconf THEN validity ELSE :val END
+                        WHERE id = :id
+                        """
+                    ),
+                    {
+                        "rc": root_cause[:2000], "rem": remedy[:2000], "conf": merged_conf,
+                        "val": validity, "unconf": VALIDITY_UNCONFIRMED, "id": near.id,
+                    },
+                )
+                session.commit()
+                log.info("[memory] 近重复合并 id=%s（相似度=%.3f，置信度→%.2f）",
+                         near.id, float(near.similarity or 0), merged_conf)
+                return int(near.id)
             session.execute(
                 text(
                     """
@@ -197,8 +235,8 @@ def search_memories(
             rows = session.execute(
                 text(
                     """
-                    SELECT symptom, root_cause, remedy, source, confidence, validity,
-                           1 - (embedding <=> CAST(:qv AS vector)) AS similarity
+                    SELECT id, symptom, root_cause, remedy, source, confidence, validity,
+                           1 - (embedding <=> CAST(:qv AS vector)) AS similarity, created_at
                     FROM knowledge_memories
                     WHERE system_id = :sid
                       AND validity != :failed
@@ -209,19 +247,40 @@ def search_memories(
                 ),
                 {"qv": qv, "sid": system_id, "failed": VALIDITY_FAILED, "k": max_results * 3},
             ).all()
+        now = datetime.now(timezone.utc)
         hits = []
-        for symptom, root_cause, remedy, source, confidence, validity, similarity in rows:
+        for mid, symptom, root_cause, remedy, source, confidence, validity, similarity, created_at in rows:
             conf = float(confidence or 0.5)
-            weight = {"confirmed_success": 1.0, "unconfirmed": 0.6}.get(validity, 0.5)
-            score = round(float(similarity or 0) * conf * weight, 4)
+            weight = VALIDITY_WEIGHT.get(validity, 0.5)
+            age_days = 0.0
+            if created_at is not None:
+                try:
+                    age_days = max(0.0, (now - created_at).total_seconds() / 86400.0)
+                except Exception:  # noqa: BLE001
+                    age_days = 0.0
+            decay = max(DECAY_FLOOR, 0.5 ** (age_days / DECAY_HALF_LIFE_DAYS))
+            score = round(float(similarity or 0) * conf * weight * decay, 4)
             if score < 0.15:
                 continue
             hits.append({
-                "symptom": symptom, "root_cause": root_cause, "remedy": remedy,
+                "id": mid, "symptom": symptom, "root_cause": root_cause, "remedy": remedy,
                 "source": source, "confidence": conf, "validity": validity, "score": score,
             })
         hits.sort(key=lambda h: -h["score"])
-        return hits[:max_results]
+        top = hits[:max_results]
+        try:  # 命中热度（供后续排序/治理参考）
+            ids = [h["id"] for h in top if h.get("id")]
+            if ids:
+                session.execute(
+                    text("UPDATE knowledge_memories SET hit_count = hit_count + 1 WHERE id = ANY(:ids)"),
+                    {"ids": ids},
+                )
+                session.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("[memory] hit_count 更新失败: %s", exc)
+        for hit in top:
+            hit.pop("id", None)
+        return top
     except Exception as exc:  # noqa: BLE001
         log.debug("[memory] 检索失败: %s", exc)
         return []
