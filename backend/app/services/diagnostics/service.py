@@ -548,6 +548,15 @@ def diagnose_system(
     dataset_query, data_catalog = _business_dataset_query(session, system, org_id, actor_id)
     archive_list, archive_read, archive_fetch, archive_raw = _archive_access(session, system, org_id)
     run_code = _code_sandbox(system, archive_raw)
+
+    from app.agent.diagnostics.knowledge.runbooks import describe_catalog as _runbook_catalog_text
+    from app.agent.diagnostics.knowledge.runbooks import load_runbook as _load_runbook_body
+
+    runbook_catalog = _runbook_catalog_text(system.id)
+
+    def _load_runbook(name: str) -> str:
+        return _load_runbook_body(system.id, name) or ""
+
     try:
         run = diagnose_with_details(
             descriptor,
@@ -564,7 +573,9 @@ def diagnose_system(
             archive_read=archive_read,
             archive_fetch=archive_fetch,
             run_code=run_code,
+            load_runbook=_load_runbook,
             data_catalog=data_catalog,
+            runbook_catalog=runbook_catalog,
             model_mode=model_mode,
             model_name=model_name,
             on_progress=on_progress,

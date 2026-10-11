@@ -75,7 +75,9 @@ class AgentDeps:
     archive_read: Callable[[str, str], str] | None = None
     archive_fetch: Callable[[str, str], str] | None = None
     run_code: Callable[..., str] | None = None
+    load_runbook: Callable[[str], str] | None = None
     data_catalog: str = ""
+    runbook_catalog: str = ""
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
     tool_cache: dict = field(default_factory=dict)
     # 取证子代理的工具调用会冒泡到这里（保证审计链完整：required_tools 匹配、
@@ -122,6 +124,8 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
                 "analysis_status、切割完成/需、create_time），列名用简短中文；"
                 "run_id、t_cat_id 这类超长标识默认不列，除非用户明确要看（要看时也请截断中段）。"
             )
+        if ctx.deps.runbook_catalog:
+            parts.append(ctx.deps.runbook_catalog)
         if ctx.deps.knowledge_context:
             parts.append(
                 "## 知识库预检索（本系统权威，回答时必须优先遵循）\n"
@@ -501,6 +505,19 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         if not ctx.deps.run_code:
             return "当前系统未启用代码沙箱。"
         return ctx.deps.run_code(code, inputs)
+
+    @agent.tool
+    @_memoized
+    def load_runbook(ctx: RunContext[AgentDeps], name: str) -> str:
+        """加载某个「规程(runbook)」的完整步骤。
+
+        system prompt 的「可用规程」里列出了名称与适用场景；遇到相应场景时，
+        先调用本工具取得步骤，再按步骤作答，不要凭空臆造流程。
+        参数 name：规程名称（从「可用规程」里选一个）。"""
+        if not ctx.deps.load_runbook:
+            return "当前系统没有可用的规程。"
+        body = ctx.deps.load_runbook(name)
+        return body or f"未找到规程「{name}」，请从「可用规程」里选择一个名称。"
 
     @agent.tool
     @_memoized

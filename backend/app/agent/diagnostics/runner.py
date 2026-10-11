@@ -75,7 +75,9 @@ def diagnose_with_details(
     archive_read=None,
     archive_fetch=None,
     run_code=None,
+    load_runbook=None,
     data_catalog: str = "",
+    runbook_catalog: str = "",
     conversation_context: str = "",
     model_mode: str = "auto",
     model_name: str = "",
@@ -118,7 +120,9 @@ def diagnose_with_details(
             archive_read=archive_read,
             archive_fetch=archive_fetch,
             run_code=run_code,
+            load_runbook=load_runbook,
             data_catalog=data_catalog,
+            runbook_catalog=runbook_catalog,
             progress_sink=on_progress,
         )
         try:
