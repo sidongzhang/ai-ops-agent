@@ -17,6 +17,8 @@ import sys
 import tempfile
 from typing import Mapping
 
+from app.core.config import settings
+
 DEFAULT_TIMEOUT = 20
 MAX_OUTPUT_BYTES = 200_000
 MAX_OUTPUT_FILES = 20
@@ -72,10 +74,11 @@ def run_python(code: str, files: Mapping[str, bytes] | None = None, timeout: int
             "LC_ALL": "en_US.UTF-8",
             "PYTHONIOENCODING": "utf-8",
             "PYTHONDONTWRITEBYTECODE": "1",
+            "MPLBACKEND": "Agg",          # matplotlib 无界面后端，便于在沙箱里保存图片
         }
         try:
             proc = subprocess.run(
-                [sys.executable, "-I", script_path],
+                [settings.sandbox_python or sys.executable, "-I", script_path],
                 cwd=workdir,
                 env=env,
                 capture_output=True,

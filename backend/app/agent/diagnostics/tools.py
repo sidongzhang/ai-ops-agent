@@ -555,9 +555,9 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         """在工作沙箱里跑一段 Python 做数据分析，并生成可下载的报告/图表等文件。
 
         用途：需要解析/统计/变换文件内容、做计算、或生成报告/图表文件给用户时。
-        环境为**标准库**（没有 numpy/matplotlib），请用 csv、json、statistics 等，
-        需要图就手写 SVG 或输出 CSV/Markdown。用 print() 输出结论；脚本写出的文件
-        会作为「可下载产物」返回链接。
+        环境已提供 **numpy 与 matplotlib**（matplotlib 用 Agg 后端）及标准库；
+        画图请直接 `import matplotlib.pyplot as plt`，用 `plt.savefig('图.png')` 保存
+        （脚本写出的文件会作为「可下载产物」返回链接）。用 print() 输出结论。
         参数：
           code：完整的 Python 脚本。
           inputs：可选，要放进工作目录的归档文件，形如

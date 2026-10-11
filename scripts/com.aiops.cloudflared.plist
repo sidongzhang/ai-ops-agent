@@ -10,6 +10,8 @@
         <string>tunnel</string>
         <string>--config</string>
         <string>/Users/zhangsidong/.cloudflared/config.yml</string>
+        <string>--protocol</string>
+        <string>http2</string>
         <string>run</string>
     </array>
     <key>RunAtLoad</key>
