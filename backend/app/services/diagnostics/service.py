@@ -620,6 +620,10 @@ def diagnose_system(
     live_failing = _live_failing()
     failure_catalog = _failure_context(topology, live_failing)
 
+    from app.agent.diagnostics import mcp as mcp_client
+
+    mcp_catalog = mcp_client.catalog()
+
     def _failure_query() -> str:
         return (
             _failure_context(topology, live_failing)
@@ -651,6 +655,7 @@ def diagnose_system(
             changes_query=_changes_query,
             failure_catalog=failure_catalog,
             failure_query=_failure_query,
+            mcp_catalog=mcp_catalog,
             intent_text=intent_text,
             model_mode=model_mode,
             model_name=model_name,

@@ -86,6 +86,7 @@ def diagnose_with_details(
     failure_query=None,
     intent_text: str = "",
     conversation_context: str = "",
+    mcp_catalog: str = "",
     model_mode: str = "auto",
     model_name: str = "",
     on_progress: Callable[[dict], None] | None = None,
@@ -136,6 +137,7 @@ def diagnose_with_details(
             changes_query=changes_query,
             failure_catalog=failure_catalog,
             failure_query=failure_query,
+            mcp_catalog=mcp_catalog,
             intent_text=intent_text or question,
             progress_sink=on_progress,
         )
