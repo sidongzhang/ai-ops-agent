@@ -109,6 +109,8 @@ class AgentDeps:
     topology_query: Callable[[str], str] | None = None
     changes_catalog: str = ""
     changes_query: Callable[[str], str] | None = None
+    failure_catalog: str = ""
+    failure_query: Callable[[], str] | None = None
     # 用户本轮「原始问题」（不含拼接的业务上下文），用于行动意图闸门。
     intent_text: str = ""
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
@@ -163,6 +165,8 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             parts.append(ctx.deps.topology_catalog)
         if ctx.deps.changes_catalog:
             parts.append(ctx.deps.changes_catalog)
+        if ctx.deps.failure_catalog:
+            parts.append(ctx.deps.failure_catalog)
         if ctx.deps.knowledge_context:
             parts.append(
                 "## 知识库预检索（本系统权威，回答时必须优先遵循）\n"
@@ -601,6 +605,16 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         if not ctx.deps.changes_query:
             return "当前系统没有接入变更记录。"
         return ctx.deps.changes_query(service)
+
+    @agent.tool
+    @_memoized
+    def analyze_root_cause(ctx: RunContext[AgentDeps]) -> str:
+        """按服务依赖拓扑推断当前异常的**根因与影响面**（基于最新探测结果）。
+
+        当有多个服务异常、用户问「到底哪坏了/根因是什么/影响了什么」时调用。"""
+        if not ctx.deps.failure_query:
+            return "当前没有探测到异常服务，或未配置服务依赖拓扑。"
+        return ctx.deps.failure_query()
 
     @agent.tool
     @_memoized

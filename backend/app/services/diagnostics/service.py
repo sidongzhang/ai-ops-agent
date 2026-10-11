@@ -598,6 +598,34 @@ def diagnose_system(
             lines.append(f"- {ts}｜{row.kind}{target}：{row.title}（{row.actor or '未知'}）")
         return "最近变更（近 72 小时）：\n" + "\n".join(lines)
 
+    from app.services.topology import failure_context as _failure_context
+
+    def _live_failing() -> list[str]:
+        """与 agent 的 list_services 同源：优先经采集器实时探活，否则本地直接探测。"""
+        try:
+            remote = _remote_command(session, system)
+            if remote:
+                resp = remote("health_check", {}) or {}
+                items = resp.get("result") if resp.get("ok") else []
+            else:
+                from app.services.descriptors.health import collect_health
+
+                items = collect_health(
+                    system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
+                )
+            return [i.get("name") for i in (items or []) if isinstance(i, dict) and not i.get("ok")]
+        except Exception:  # noqa: BLE001
+            return []
+
+    live_failing = _live_failing()
+    failure_catalog = _failure_context(topology, live_failing)
+
+    def _failure_query() -> str:
+        return (
+            _failure_context(topology, live_failing)
+            or "当前没有探测到异常服务，或未配置服务依赖拓扑。"
+        )
+
     try:
         run = diagnose_with_details(
             descriptor,
@@ -621,6 +649,8 @@ def diagnose_system(
             topology_query=_topology_query,
             changes_catalog=changes_catalog,
             changes_query=_changes_query,
+            failure_catalog=failure_catalog,
+            failure_query=_failure_query,
             intent_text=intent_text,
             model_mode=model_mode,
             model_name=model_name,

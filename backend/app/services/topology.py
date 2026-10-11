@@ -62,3 +62,56 @@ def neighbors(graph: dict, name: str) -> str:
         f"- 它依赖（下游，这些故障会影响它）：{'、'.join(downstream) or '无'}\n"
         f"- 依赖它的（上游，它故障会影响它们）：{'、'.join(upstream) or '无'}"
     )
+
+
+def analyze(graph: dict, failing) -> dict:
+    """按依赖方向推断根因：异常服务里「不依赖任何其它异常服务」的即疑似根因。
+
+    返回 {failing, roots, chains:[{root, affected}]}。
+    """
+    edges = graph.get("edges") or []
+    fail = {str(f).strip() for f in (failing or []) if str(f).strip()}
+    deps: dict[str, set] = {}
+    consumers: dict[str, set] = {}
+    for edge in edges:
+        deps.setdefault(edge["from"], set()).add(edge["to"])
+        consumers.setdefault(edge["to"], set()).add(edge["from"])
+
+    roots = sorted(n for n in fail if not (deps.get(n, set()) & fail))
+
+    def affected_from(root: str) -> set[str]:
+        seen: set[str] = set()
+        stack = list(consumers.get(root, set()))
+        while stack:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            stack.extend(consumers.get(node, set()))
+        return seen
+
+    chains = []
+    for root in roots:
+        chains.append({"root": root, "affected": sorted(n for n in affected_from(root) if n in fail)})
+    return {"failing": sorted(fail), "roots": roots, "chains": chains, "has_edges": bool(edges)}
+
+
+def failure_context(graph: dict, failing) -> str:
+    """生成注入 prompt 的「异常根因推断」块；无异常返回空串。"""
+    analysis = analyze(graph, failing)
+    if not analysis["failing"]:
+        return ""
+    if not analysis["has_edges"]:
+        return (
+            "## 当前异常服务\n- " + "、".join(analysis["failing"])
+            + "\n（未配置服务依赖拓扑，无法判断依赖关系；如需可让运维补充拓扑）"
+        )
+    lines = ["## 异常根因推断（按服务依赖拓扑）"]
+    if analysis["roots"]:
+        for chain in analysis["chains"]:
+            if chain["affected"]:
+                lines.append(f"- 疑似根因：{chain['root']}；受影响：{'、'.join(chain['affected'])}")
+            else:
+                lines.append(f"- 异常服务：{chain['root']}（无下游异常，可能即根因）")
+    lines.append("结论中以「疑似根因」为核心，受影响服务作为影响面；不要平铺罗列。")
+    return "\n".join(lines)

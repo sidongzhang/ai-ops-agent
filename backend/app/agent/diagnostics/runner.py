@@ -82,6 +82,8 @@ def diagnose_with_details(
     topology_query=None,
     changes_catalog: str = "",
     changes_query=None,
+    failure_catalog: str = "",
+    failure_query=None,
     intent_text: str = "",
     conversation_context: str = "",
     model_mode: str = "auto",
@@ -132,6 +134,8 @@ def diagnose_with_details(
             topology_query=topology_query,
             changes_catalog=changes_catalog,
             changes_query=changes_query,
+            failure_catalog=failure_catalog,
+            failure_query=failure_query,
             intent_text=intent_text or question,
             progress_sink=on_progress,
         )
