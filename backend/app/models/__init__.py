@@ -1,5 +1,6 @@
 from .audit import AuditLog
 from .auth import Org, User
+from .changes import ChangeEvent
 from .collectors import Collector
 from .diagnostics import DiagnosisReport
 from .incidents import Incident
@@ -24,4 +25,5 @@ __all__ = [
     "Service",
     "SystemToken",
     "ActionWorkflow",
+    "ChangeEvent",
 ]

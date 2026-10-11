@@ -80,6 +80,8 @@ def diagnose_with_details(
     runbook_catalog: str = "",
     topology_catalog: str = "",
     topology_query=None,
+    changes_catalog: str = "",
+    changes_query=None,
     intent_text: str = "",
     conversation_context: str = "",
     model_mode: str = "auto",
@@ -128,6 +130,8 @@ def diagnose_with_details(
             runbook_catalog=runbook_catalog,
             topology_catalog=topology_catalog,
             topology_query=topology_query,
+            changes_catalog=changes_catalog,
+            changes_query=changes_query,
             intent_text=intent_text or question,
             progress_sink=on_progress,
         )

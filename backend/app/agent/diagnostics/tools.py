@@ -107,6 +107,8 @@ class AgentDeps:
     runbook_catalog: str = ""
     topology_catalog: str = ""
     topology_query: Callable[[str], str] | None = None
+    changes_catalog: str = ""
+    changes_query: Callable[[str], str] | None = None
     # 用户本轮「原始问题」（不含拼接的业务上下文），用于行动意图闸门。
     intent_text: str = ""
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
@@ -159,6 +161,8 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             parts.append(ctx.deps.runbook_catalog)
         if ctx.deps.topology_catalog:
             parts.append(ctx.deps.topology_catalog)
+        if ctx.deps.changes_catalog:
+            parts.append(ctx.deps.changes_catalog)
         if ctx.deps.knowledge_context:
             parts.append(
                 "## 知识库预检索（本系统权威，回答时必须优先遵循）\n"
@@ -587,6 +591,16 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         if not ctx.deps.topology_query:
             return "当前系统没有配置服务依赖拓扑。"
         return ctx.deps.topology_query(service)
+
+    @agent.tool
+    @_memoized
+    def recent_changes(ctx: RunContext[AgentDeps], service: str = "") -> str:
+        """查询系统最近 72 小时的变更（发布/配置/重启等），用于判断「是不是刚发版导致的」。
+
+        参数 service：只看某服务的变更；留空看全部。"""
+        if not ctx.deps.changes_query:
+            return "当前系统没有接入变更记录。"
+        return ctx.deps.changes_query(service)
 
     @agent.tool
     @_memoized

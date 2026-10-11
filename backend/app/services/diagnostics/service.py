@@ -572,6 +572,32 @@ def diagnose_system(
         name = str(service or "").strip()
         return _topology_neighbors(topology, name) if name else _describe_topology(topology)
 
+    from app.services.changes import list_changes as _list_changes
+    from app.services.changes import recent_changes_text as _changes_text
+
+    changes_catalog = _changes_text(session, system.id, org_id, hours=24)
+
+    def _changes_query(service: str = "") -> str:
+        # 工具可能被线程池并发调用，用独立 Session，别复用诊断主 Session
+        from app.core.database import engine
+
+        try:
+            with Session(engine) as scoped:
+                rows = _list_changes(scoped, system.id, org_id, hours=72, limit=20)
+        except Exception:  # noqa: BLE001
+            return "查询变更记录失败。"
+        name = str(service or "").strip()
+        if name:
+            rows = [row for row in rows if row.service == name or not row.service]
+        if not rows:
+            return "最近 72 小时内没有变更记录。" + (f"（服务：{name}）" if name else "")
+        lines = []
+        for row in rows[:15]:
+            ts = row.occurred_at.strftime("%Y-%m-%d %H:%M UTC") if row.occurred_at else "-"
+            target = f" @{row.service}" if row.service else ""
+            lines.append(f"- {ts}｜{row.kind}{target}：{row.title}（{row.actor or '未知'}）")
+        return "最近变更（近 72 小时）：\n" + "\n".join(lines)
+
     try:
         run = diagnose_with_details(
             descriptor,
@@ -593,6 +619,8 @@ def diagnose_system(
             runbook_catalog=runbook_catalog,
             topology_catalog=topology_catalog,
             topology_query=_topology_query,
+            changes_catalog=changes_catalog,
+            changes_query=_changes_query,
             intent_text=intent_text,
             model_mode=model_mode,
             model_name=model_name,
