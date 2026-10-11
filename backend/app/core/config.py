@@ -102,6 +102,14 @@ class Settings(BaseSettings):
     # text-embedding-v2/OpenAI text-embedding-3-small=1536）。修改后需重建知识库索引。
     embedding_dim: int = 1536
 
+    # 检索重排（strong rerank）：api=用 rerank API（快，需配 base_url）；llm=用大模型重排（较慢）；
+    # auto=有 API 用 API、否则 LLM；off=关闭。默认 api（未配置 API 时自动跳过，不引入延迟）。
+    rerank_mode: str = "auto"
+    rerank_base_url: str = ""       # 通用 rerank 接口（Cohere/Jina/SiliconFlow 风格）
+    rerank_model: str = ""
+    rerank_api_key: str = ""
+    rerank_timeout_seconds: float = 8.0
+
     # Langfuse 可观测性（留空则跳过追踪）
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""

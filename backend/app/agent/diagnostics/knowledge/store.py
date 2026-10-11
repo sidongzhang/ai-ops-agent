@@ -13,6 +13,7 @@ import hashlib
 import logging
 import re
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from sqlalchemy import text
 
 from app.agent.llm import embedding_endpoint
 from app.core.config import settings
+from .rerank import rerank_documents
 
 log = logging.getLogger(__name__)
 
@@ -30,16 +32,22 @@ CHUNK_OVERLAP = 60
 TOP_K = 6
 MAX_CHARS = 3000
 MIN_SCORE = 0.3          # 语义命中最低相似度（与旧版一致）
+RERANK_POOL = 16         # 重排前的候选池大小
+EMBED_BATCH = 16         # 单次 embedding 请求的最大文本数（避免大请求超时）
+SYNC_FAIL_COOLDOWN = 120.0  # 索引同步失败后的冷却秒数（避免每次检索都卡住重试）
 
-# 进程内指纹缓存：避免每次检索都 stat 磁盘
+# 进程内缓存：指纹 / 同步失败冷却
 _fingerprint_cache: dict[str, str] = {}
+_sync_blocked_until: dict[str, float] = {}
 _lock = threading.Lock()
 
 
 # ── Embedding API ──────────────────────────────────────────────
 
 def _embed(texts: list[str]) -> list[list[float]] | None:
-    """调 OpenAI 兼容 embedding 接口，失败返回 None。"""
+    """调 OpenAI 兼容 embedding 接口（分批，避免大请求超时），失败返回 None。"""
+    if not texts:
+        return []
     endpoint = embedding_endpoint()
     api_key = endpoint.api_key
     base_url = endpoint.base_url.rstrip("/")
@@ -50,27 +58,29 @@ def _embed(texts: list[str]) -> list[list[float]] | None:
     )
     if not api_key:
         return None
+    out: list[list[float]] = []
     try:
-        resp = httpx.post(
-            embeddings_url,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": endpoint.model, "input": texts},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        embeddings = [item["embedding"] for item in data["data"]]
-        dim = int(settings.embedding_dim or 0)
-        if dim and any(len(v) != dim for v in embeddings):
-            log.warning(
-                f"[rag] embedding 维度与 EMBEDDING_DIM={dim} 不一致，"
-                "请同步修改 EMBEDDING_DIM 并重建索引"
+        for start in range(0, len(texts), EMBED_BATCH):
+            batch = texts[start:start + EMBED_BATCH]
+            resp = httpx.post(
+                embeddings_url,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": endpoint.model, "input": batch},
+                timeout=30,
             )
-            return None
-        return embeddings
-    except Exception as exc:
+            resp.raise_for_status()
+            out.extend(item["embedding"] for item in resp.json()["data"])
+    except Exception as exc:  # noqa: BLE001
         log.warning(f"[rag] embedding API 失败: {exc}")
         return None
+    dim = int(settings.embedding_dim or 0)
+    if dim and any(len(v) != dim for v in out):
+        log.warning(
+            f"[rag] embedding 维度与 EMBEDDING_DIM={dim} 不一致，"
+            "请同步修改 EMBEDDING_DIM 并重建索引"
+        )
+        return None
+    return out
 
 
 def _vec_literal(vec: list[float]) -> str:
@@ -126,6 +136,8 @@ def _sync_index(system_id: str) -> bool:
     with _lock:
         if _fingerprint_cache.get(system_id) == fingerprint:
             return True
+        if _sync_blocked_until.get(system_id, 0.0) > time.monotonic():
+            return False        # 上次同步失败，冷却中 → 快速走关键词降级，避免每次卡住
 
     files = [f for f in sorted(docs_dir.glob("*.md")) + sorted(docs_dir.glob("*.txt"))
              if f.name != "vectors.json"]
@@ -138,7 +150,10 @@ def _sync_index(system_id: str) -> bool:
 
     embeddings = _embed([c[1] for c in chunks])
     if embeddings is None:
-        return False        # embedding 不可用：保留旧索引，检索端走关键词降级
+        # embedding 不可用：保留旧索引，检索端走关键词降级；并冷却一段时间，避免反复重试
+        with _lock:
+            _sync_blocked_until[system_id] = time.monotonic() + SYNC_FAIL_COOLDOWN
+        return False
 
     try:
         _write_chunks(system_id, fingerprint, chunks, embeddings)
@@ -226,13 +241,28 @@ def get_relevant_context_with_memories(query: str, system_id: str, max_chars: in
 
 
 def search_knowledge_hits(query: str, system_id: str, max_chars: int = MAX_CHARS) -> list[dict]:
-    """检索知识库，返回 [{name, snippet, score}]，按相关度排序、同文档去重。"""
+    """检索知识库 → 去重 → 重排 → 按字符预算裁剪。返回 [{name, snippet, score}]。"""
+    hits: list[dict] = []
     if _sync_index(system_id):
-        hits = _vector_hits(query, system_id, max_chars)
-        if hits:
-            return _dedupe_hits(hits)
-    hits = _keyword_hits(query, system_id, max_chars)
-    return _dedupe_hits(hits)
+        hits = _vector_hits(query, system_id)
+    if not hits:
+        hits = _keyword_hits(query, system_id)
+    hits = _dedupe_hits(hits)
+    hits = rerank_documents(query, hits)
+    return _apply_budget(hits, max_chars)
+
+
+def _apply_budget(hits: list[dict], max_chars: int) -> list[dict]:
+    """按累计字符预算裁剪（至少保留 1 条）。"""
+    out: list[dict] = []
+    total = 0
+    for hit in hits:
+        text = hit.get("snippet") or ""
+        if out and total + len(text) > max_chars:
+            break
+        out.append(hit)
+        total += len(text)
+    return out
 
 
 def search_with_memories(query: str, system_id: str, max_chars: int = MAX_CHARS) -> list[dict]:
@@ -283,8 +313,8 @@ def _dedupe_hits(hits: list[dict]) -> list[dict]:
     return result
 
 
-def _vector_hits(query: str, system_id: str, max_chars: int) -> list[dict]:
-    """pgvector 语义检索（余弦距离 = 1 - 相似度）。失败返回空触发关键词降级。"""
+def _vector_hits(query: str, system_id: str) -> list[dict]:
+    """pgvector 语义检索（余弦距离 = 1 - 相似度）。返回候选池，预算留待重排后统一裁。"""
     from app.core.database import engine
 
     try:
@@ -304,26 +334,24 @@ def _vector_hits(query: str, system_id: str, max_chars: int) -> list[dict]:
                     ORDER BY embedding <=> CAST(:qv AS vector)
                     LIMIT :k
                 """),
-                {"qv": _vec_literal(qv[0]), "sid": sid, "k": TOP_K * 2},
+                {"qv": _vec_literal(qv[0]), "sid": sid, "k": RERANK_POOL},
             ).all()
         hits: list[dict] = []
-        total = 0
         for source, content, distance in rows:
             score = round(1.0 - float(distance), 4)
             if score < MIN_SCORE:
                 break
-            if total + len(content) > max_chars:
-                break
             hits.append({"name": source, "snippet": content, "score": score})
-            total += len(content)
+            if len(hits) >= RERANK_POOL:
+                break
         return hits
     except Exception as exc:
         log.warning(f"[rag] pgvector 检索失败: {exc}")
         return []
 
 
-def _keyword_hits(query: str, system_id: str, max_chars: int) -> list[dict]:
-    """降级：关键词匹配磁盘文档，不依赖 embedding API 与向量库。"""
+def _keyword_hits(query: str, system_id: str) -> list[dict]:
+    """降级：关键词匹配磁盘文档，不依赖 embedding API 与向量库。返回候选池。"""
     docs_dir = _docs_dir(system_id)
     if not docs_dir.exists():
         return []
@@ -342,14 +370,10 @@ def _keyword_hits(query: str, system_id: str, max_chars: int) -> list[dict]:
                 scored.append((score, file_path.name, para))
 
     scored.sort(key=lambda item: item[0], reverse=True)
-    hits: list[dict] = []
-    total = 0
-    for score, name, chunk in scored[:8]:
-        if total + len(chunk) > max_chars:
-            break
-        hits.append({"name": name, "snippet": chunk, "score": float(score)})
-        total += len(chunk)
-    return hits
+    return [
+        {"name": name, "snippet": chunk, "score": float(score)}
+        for score, name, chunk in scored[:RERANK_POOL]
+    ]
 
 
 def append_runbook_entry(system_id: str, entry: str) -> None:
