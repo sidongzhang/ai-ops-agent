@@ -1,0 +1,14 @@
+{
+  "ablation": "full",
+  "_comment": "真实评测（--run）的质量门禁。首次跑出真实基线后按需收紧；任一指标越界即判回归。",
+  "min": {
+    "task_success_rate": 70,
+    "rca_accuracy": 0.7,
+    "tool_selection_f1": 0.6,
+    "evidence_coverage_rate": 60
+  },
+  "max": {
+    "hallucination_rate": 15,
+    "errors": 0
+  }
+}

@@ -1,0 +1,39 @@
+name: eval-gate
+
+# 评测门禁（冒烟）：不依赖 Docker / LLM，验证「数据集 → 消融 → 工具轨迹 → 打分 → 报告 → 门禁」整条链路，
+# 并在指标低于阈值时失败，避免改动提示词/工具/评测脚手架后无声回归。
+# 真实质量门禁（需 Docker + LLM）建议单独跑：bash scripts/eval-gate.sh --full
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest
+
+      - name: Run eval gate (smoke)
+        env:
+          PY: python
+        run: bash scripts/eval-gate.sh
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: evals/results/
+          retention-days: 7

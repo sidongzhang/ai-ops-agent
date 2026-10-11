@@ -1,0 +1,14 @@
+{
+  "ablation": "full",
+  "_comment": "冒烟门禁：不依赖 Docker/LLM，用 mock Agent(--dry-run) 保证「数据集→消融→工具轨迹→打分→报告→门禁」整条链路可用；指标下滑通常意味着脚手架回归。",
+  "min": {
+    "task_success_rate": 80,
+    "rca_accuracy": 0.8,
+    "tool_selection_f1": 0.7,
+    "evidence_coverage_rate": 90
+  },
+  "max": {
+    "errors": 0,
+    "hallucination_rate": 25
+  }
+}

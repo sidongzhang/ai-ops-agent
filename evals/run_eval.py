@@ -29,6 +29,7 @@ if str(EVALS_DIR) not in sys.path:
 
 import dataset as dataset_mod  # noqa: E402
 import faults  # noqa: E402
+import gate  # noqa: E402
 import harness  # noqa: E402
 import reporting  # noqa: E402
 
@@ -73,6 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rag-mode", choices=["keyword", "auto"], default="",
                         help="RAG 检索模式：keyword=强制关键词（离线、确定性），auto=允许 embedding API")
     parser.add_argument("--verbose", "-v", action="store_true", help="打印每条用例的进度与结果摘要")
+    parser.add_argument("--gate", action="store_true", help="把结果与阈值对比；未达标则非零退出（CI 门禁）")
+    parser.add_argument("--thresholds", default="evals/thresholds.json", help="门禁阈值文件（配合 --gate）")
     return parser
 
 
@@ -326,6 +329,22 @@ def cmd_eval(args, cases: list[dict]) -> int:
         print(f"   注意：{overall['errors']} 条用例运行异常，已记录在报告里（未中断整批）。", file=sys.stderr)
     if options.dry_run:
         print("   ⚠️ dry-run 数字来自 mock Agent，是合成数据，只证明链路可用。", file=sys.stderr)
+
+    if args.gate:
+        try:
+            thresholds = gate.load_thresholds(args.thresholds)
+        except Exception as exc:  # noqa: BLE001
+            print(f"❌ 读取阈值文件失败：{exc}", file=sys.stderr)
+            return 3
+        rows = gate.evaluate(summary, thresholds)
+        group = thresholds.get("ablation") or summary["meta"]["primary_group"]
+        print()
+        print(f"🚦 门禁（阈值 {args.thresholds} · 消融组 {group}）：")
+        print(gate.format_rows(rows))
+        if not gate.passed(rows):
+            print("❌ 门禁未通过：存在指标回归（低于阈值/缺失）。", file=sys.stderr)
+            return 5
+        print("✅ 门禁通过")
     return 0
 
 
