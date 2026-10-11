@@ -559,6 +559,19 @@ def diagnose_system(
     def _load_runbook(name: str) -> str:
         return _load_runbook_body(system.id, name) or ""
 
+    from app.services.topology import build_graph as _build_topology
+    from app.services.topology import describe as _describe_topology
+    from app.services.topology import neighbors as _topology_neighbors
+
+    topology = _build_topology(system, list_enabled_services_for_system(session, system.id))
+    topology_catalog = _describe_topology(topology)
+
+    def _topology_query(service: str = "") -> str:
+        if not topology.get("edges"):
+            return "当前系统没有配置服务依赖拓扑。"
+        name = str(service or "").strip()
+        return _topology_neighbors(topology, name) if name else _describe_topology(topology)
+
     try:
         run = diagnose_with_details(
             descriptor,
@@ -578,6 +591,8 @@ def diagnose_system(
             load_runbook=_load_runbook,
             data_catalog=data_catalog,
             runbook_catalog=runbook_catalog,
+            topology_catalog=topology_catalog,
+            topology_query=_topology_query,
             intent_text=intent_text,
             model_mode=model_mode,
             model_name=model_name,

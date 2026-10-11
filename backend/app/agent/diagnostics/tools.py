@@ -105,6 +105,8 @@ class AgentDeps:
     load_runbook: Callable[[str], str] | None = None
     data_catalog: str = ""
     runbook_catalog: str = ""
+    topology_catalog: str = ""
+    topology_query: Callable[[str], str] | None = None
     # 用户本轮「原始问题」（不含拼接的业务上下文），用于行动意图闸门。
     intent_text: str = ""
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
@@ -155,6 +157,8 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             )
         if ctx.deps.runbook_catalog:
             parts.append(ctx.deps.runbook_catalog)
+        if ctx.deps.topology_catalog:
+            parts.append(ctx.deps.topology_catalog)
         if ctx.deps.knowledge_context:
             parts.append(
                 "## 知识库预检索（本系统权威，回答时必须优先遵循）\n"
@@ -572,6 +576,17 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             return "当前系统没有可用的规程。"
         body = ctx.deps.load_runbook(name)
         return body or f"未找到规程「{name}」，请从「可用规程」里选择一个名称。"
+
+    @agent.tool
+    @_memoized
+    def get_service_topology(ctx: RunContext[AgentDeps], service: str = "") -> str:
+        """查询服务依赖拓扑：某服务依赖谁、谁依赖它（影响面）。
+
+        用户问「某服务挂了会影响什么」「根因可能在哪个环节」「上下游是什么」时调用。
+        参数 service：服务名；留空则返回整张拓扑。"""
+        if not ctx.deps.topology_query:
+            return "当前系统没有配置服务依赖拓扑。"
+        return ctx.deps.topology_query(service)
 
     @agent.tool
     @_memoized
