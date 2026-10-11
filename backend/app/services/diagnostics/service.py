@@ -495,6 +495,10 @@ def complete_diagnosis_report(
                 _finalize_report(report_id, org_id, system_id, status="failed", error=str(exc))
             except Exception:  # noqa: BLE001
                 log.exception("[diagnose] 写入失败状态也失败 report_id=%s", report_id)
+            # 自改进：失败案例进候选队列（人工审核后才入库，失败静默）
+            from app.services.improvements import capture_failure
+
+            capture_failure(report_id, str(exc))
             return
     try:
         _finalize_report(report_id, org_id, system_id, status="success", result=result)

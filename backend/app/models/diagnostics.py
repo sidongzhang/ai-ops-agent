@@ -32,4 +32,8 @@ class DiagnosisReport(SQLModel, table=True):
     knowledge_refs: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     business_context: dict = Field(default_factory=dict, sa_column=Column(JSON))
     error_message: str = ""
+    # 用户反馈：""（未评）/ "up" / "down"。差评会生成自改进候选。
+    feedback: str = Field(default="", index=True, max_length=16)
+    feedback_note: str = Field(default="", max_length=2000)
+    feedback_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=utcnow, index=True)

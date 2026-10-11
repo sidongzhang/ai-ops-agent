@@ -11,6 +11,7 @@ const ApprovalsPage = () => import('../pages/ApprovalsPage.vue')
 const AuditPage = () => import('../pages/AuditPage.vue')
 const EfficiencyPage = () => import('../pages/EfficiencyPage.vue')
 const MonitoringCenterPage = () => import('../pages/MonitoringCenterPage.vue')
+const ImprovementsPage = () => import('../pages/ImprovementsPage.vue')
 
 const routes = [
   { path: '/', redirect: '/systems' },
@@ -24,6 +25,7 @@ const routes = [
   { path: '/audit', component: AuditPage },
   { path: '/efficiency', component: EfficiencyPage },
   { path: '/monitoring', component: MonitoringCenterPage },
+  { path: '/improvements', component: ImprovementsPage },
   { path: '/docs', component: DocsPage },
 ]
 

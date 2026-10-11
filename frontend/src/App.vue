@@ -40,6 +40,7 @@ const navSections = [
     label: '分析',
     items: [
       { to: '/efficiency', label: '效率分析', title: '效率分析', icon: 'efficiency' },
+      { to: '/improvements', label: '自改进', title: '自改进（沉淀经验）', icon: 'improve' },
       { to: '/audit', label: '审计记录', title: '审计记录', icon: 'audit' },
     ],
   },
@@ -55,6 +56,7 @@ function iconPath(icon) {
     approvals: { box: '<rect x="4" y="3" width="16" height="18" rx="2" /><path d="M9 7h6M9 11h6M9 15h4" />' },
     efficiency: { box: '<path d="M4 19V9M10 19V5M16 19v-7M22 19V2" /><path d="M2 19h22" />' },
     audit: { box: '<path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />' },
+    improve: { box: '<path d="M12 3v3M12 18v3M3 12h3M18 12h3" /><circle cx="12" cy="12" r="4" /><path d="M18.5 5.5l-2 2" />' },
   }
   return icons[icon]?.box || ''
 }

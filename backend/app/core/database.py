@@ -27,6 +27,9 @@ _SQLITE_REQUIRED_COLUMNS = {
     },
     "diagnosis_reports": {
         "knowledge_refs": "JSON DEFAULT '[]'",
+        "feedback": "VARCHAR DEFAULT ''",
+        "feedback_note": "VARCHAR DEFAULT ''",
+        "feedback_at": "DATETIME",
     },
     "system_messages": {
         "incident_id": "INTEGER",

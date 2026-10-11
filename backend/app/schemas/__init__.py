@@ -27,6 +27,14 @@ from .diagnostics import (
     ReadonlyDatabaseConfig,
 )
 from .health import HealthItem, SystemHealth
+from .improvements import (
+    FeedbackOut,
+    FeedbackRequest,
+    ImprovementCandidateOut,
+    ImprovementRejectRequest,
+    ImprovementReviewRequest,
+    ImprovementStatsOut,
+)
 from .messages import SystemMessageOut
 from .openapi import OpenAlertIn, OpenHealthIn, OpenMessageIn, OpenMessagePageOut
 from .systems import (
@@ -56,6 +64,8 @@ __all__ = [
     "RestartPolicyUpdate", "RestartPolicyOut", "RestartCapabilityOut", "RestartServiceOut",
     "RestartExecuteIn", "RestartExecuteOut",
     "HealthItem", "SystemHealth",
+    "FeedbackRequest", "FeedbackOut", "ImprovementCandidateOut",
+    "ImprovementReviewRequest", "ImprovementRejectRequest", "ImprovementStatsOut",
     "CollectorCreate", "CollectorCreated", "CollectorOut",
     "CollectorConfig", "CollectorReport", "CollectorBundleRequest",
     "SystemMessageOut",

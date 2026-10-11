@@ -70,21 +70,28 @@ def save_memory(
     org_id: int,
     system_id: int,
     question: str,
-    answer: str,
+    answer: str = "",
     report_id: int | None = None,
     workflow_id: int | None = None,
     source: str = "model",
     confidence: float | None = None,
     validity: str = VALIDITY_UNCONFIRMED,
+    symptom: str | None = None,
+    root_cause: str | None = None,
+    remedy: str | None = None,
 ) -> int | None:
-    """写入一条结构化记忆。失败静默（记忆绝不能阻断诊断/工作流）。"""
+    """写入一条结构化记忆。失败静默（记忆绝不能阻断诊断/工作流）。
+
+    symptom/root_cause/remedy 显式给出时优先（人工审核采纳的候选走这条路）；
+    否则从 question/answer 里抽取。
+    """
     from app.core.database import engine
     from sqlmodel import Session
 
     try:
-        symptom = (question or "").strip()[:500]
-        root_cause = _extract_conclusion(answer)
-        remedy = _extract_remedy(answer)
+        symptom = (symptom if symptom is not None else question or "").strip()[:500]
+        root_cause = root_cause if root_cause is not None else _extract_conclusion(answer)
+        remedy = remedy if remedy is not None else _extract_remedy(answer)
         if not symptom or not root_cause:
             return None
         confidence = confidence if confidence is not None else (
