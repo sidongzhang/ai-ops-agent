@@ -9,25 +9,28 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 同一分支快速连续推送时，取消上一轮未完成的运行，避免刷屏与浪费额度
+concurrency:
+  group: eval-gate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # 依赖用 uv + 仓库里已提交的 backend/uv.lock 安装（可复现），
+      # 不再依赖并不存在的 backend/requirements.txt。
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt
-          pip install pytest
+      - name: Sync dependencies (backend/.venv, incl. dev)
+        run: uv sync --directory backend --frozen
 
       - name: Run eval gate (smoke)
-        env:
-          PY: python
         run: bash scripts/eval-gate.sh
 
       - name: Upload eval report
