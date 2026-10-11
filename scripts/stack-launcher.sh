@@ -237,6 +237,17 @@ start_apps() {
     ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $P_BACKEND --reload" "$red_env"
   wait_http "http://127.0.0.1:$P_BACKEND/healthz" "后端 API" 90
 
+  # ALGP 采集器：出站 WebSocket 回连平台，承载远端探测与归档/日志/只读库命令。
+  # 密钥在 $RUN_DIR/collector-key-algp.txt（平台生成）；缺失则跳过。
+  local collector_key_file="$RUN_DIR/collector-key-algp.txt"
+  if [ -f "$collector_key_file" ]; then
+    start_service collector-algp "$ROOT" \
+      "backend/.venv/bin/python collector/run.py" \
+      "export PLATFORM_URL='http://127.0.0.1:$P_BACKEND' COLLECTOR_KEY='$(cat "$collector_key_file")' COLLECTOR_INTERVAL=30;"
+  else
+    warn "跳过采集器：缺 $collector_key_file"
+  fi
+
   start_service aiops-frontend "$ROOT/frontend" \
     "npm run dev -- --host 127.0.0.1 --port $P_FRONTEND"
   wait_port "$P_FRONTEND" "前端 Vite" 60
@@ -443,6 +454,7 @@ stop_apps() {
   pkill -f "$ROOT/backend/.venv/bin/celery" >/dev/null 2>&1 || true
   pkill -f "$ROOT/frontend/node_modules/.bin/vite" >/dev/null 2>&1 || true
   pkill -f "algp-web/target/algp.jar" >/dev/null 2>&1 || true
+  pkill -f "collector/run.py" >/dev/null 2>&1 || true
   pkill -f "$SVOM_DIR/node_modules/@vue/cli-service" >/dev/null 2>&1 || true
   sleep 2
   kill_ports KILL
