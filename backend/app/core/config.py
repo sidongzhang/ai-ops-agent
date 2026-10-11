@@ -130,6 +130,15 @@ class Settings(BaseSettings):
     health_check_interval: int = 60        # 巡检周期（秒）
     alert_cooldown_seconds: int = 3600     # 同一系统两次告警最小间隔（秒）
 
+    # 趋势巡检（早期预警）：采样指标 → 线性外推 → 未到阈值就提醒
+    trend_patrol_enabled: bool = True
+    trend_patrol_interval: int = 900       # 趋势采样周期（秒）
+    trend_horizon_hours: float = 48.0      # 预测提前量：按当前增速预计多久触顶才提醒
+    trend_retention_days: int = 7          # 指标样本保留天数
+    trend_warn_ratio: float = 0.8          # 当前值达到阈值的该比例即预警（容量逼近）
+    mysql_max_connections: int = 151       # MySQL max_connections（用于连接数预警）
+    kafka_lag_warn: int = 5000             # Kafka 积压预警阈值（条）
+
     repo_root: str = _REPO_ROOT
 
     # 归档附件回传：下载链接对外基址；附件落盘目录（空=repo_root/.dev-stack/artifacts）

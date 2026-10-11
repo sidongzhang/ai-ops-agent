@@ -835,6 +835,7 @@ onMounted(loadMessages)
           <div class="message-head-main">
             <div class="message-title-row">
               <span class="message-title">{{ item.title }}</span>
+              <a-tag v-if="item.message_type === 'warning'" color="blue" class="flat-tag">趋势预警</a-tag>
               <a-tag :color="statusColor[item.status] || 'default'" class="flat-tag">
                 {{ statusText[item.status] || item.status }}
               </a-tag>

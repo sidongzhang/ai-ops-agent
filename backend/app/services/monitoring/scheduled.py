@@ -82,6 +82,11 @@ def run_scheduled_health_checks() -> dict:
 
                 check_container_ooms(session, system, descriptor)
 
+                # 趋势巡检：指标采样 + 早期预警（阈值告警的提前量）
+                from app.services.monitoring.trend import run_trend_patrol
+
+                run_trend_patrol(session, system)
+
                 system.last_health = {"services": results}
                 system.last_report_at = utcnow()
                 session.add(system)

@@ -11,6 +11,8 @@ const health = ref({})
 const activeFilter = ref('all')
 const lastRefreshed = ref(null)
 const incidentSummary = ref(null)
+const warnings = ref({})
+const patrolling = ref(null)
 
 const healthyCount = computed(() => Object.values(health.value).filter((item) => item?.healthy).length)
 const alertCount = computed(() => Object.values(health.value).filter((item) => item && !item.healthy).length)
@@ -70,11 +72,37 @@ async function load() {
       }
     }))
     health.value = Object.fromEntries(entries)
+    const warnEntries = await Promise.all(data.map(async (system) => {
+      try {
+        const response = await api.get(`/systems/${system.id}/early-warnings`)
+        return [system.id, response.data || []]
+      } catch {
+        return [system.id, []]
+      }
+    }))
+    warnings.value = Object.fromEntries(warnEntries)
     lastRefreshed.value = new Date().toISOString()
   } catch (error) {
     message.error(error?.response?.data?.detail || '巡检数据加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function runPatrol(system) {
+  patrolling.value = system.id
+  try {
+    const { data } = await api.post(`/systems/${system.id}/patrol`)
+    const trend = data?.trend || {}
+    const parts = [`探活 ${data?.services ?? 0} 项`]
+    if (trend.warnings) parts.push(`预警 ${trend.warnings} 项`)
+    if (data?.failed?.length) parts.push(`异常 ${data.failed.length} 项`)
+    message.success(`已巡检：${parts.join('，')}`)
+    await load()
+  } catch (error) {
+    message.error(error?.response?.data?.detail || '巡检失败')
+  } finally {
+    patrolling.value = null
   }
 }
 
@@ -176,6 +204,11 @@ onMounted(load)
           </a-tag>
         </div>
 
+        <div v-if="warnings[system.id]?.length" class="warning-banner">
+          <span class="warning-label">趋势预警</span>
+          <span class="warning-text">{{ warnings[system.id][0].reason || warnings[system.id][0].summary }}</span>
+        </div>
+
         <div class="system-meta">
           <span>巡检</span>
           <span>{{ system.monitoring?.enabled ? `每 ${intervalText(system.monitoring.interval_seconds)}` : '已暂停' }}</span>
@@ -191,6 +224,12 @@ onMounted(load)
         </div>
 
         <div class="system-card-footer">
+          <a-button
+            type="link"
+            size="small"
+            :loading="patrolling === system.id"
+            @click="runPatrol(system)"
+          >立即巡检</a-button>
           <a-button type="link" size="small" @click="router.push(`/systems/${system.id}`)">进入系统</a-button>
           <a-button type="link" size="small" @click="router.push('/messages')">查看消息</a-button>
         </div>
@@ -257,6 +296,10 @@ onMounted(load)
 .service-detail { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-subtle); }
 .service-empty { color:var(--text-subtle); font-size:13px; text-align:center; padding:24px 0; }
 .system-card-footer { display:flex; justify-content:flex-end; gap:4px; margin-top:12px; padding-top:10px; border-top:1px solid color-mix(in srgb, var(--border-color) 60%, transparent); }
+.warning-banner { margin-top:8px; padding:6px 8px; border-radius:6px; display:flex; gap:6px; align-items:baseline;
+  background: color-mix(in srgb, #1677ff 12%, transparent); border:1px solid color-mix(in srgb, #1677ff 35%, transparent); }
+.warning-label { flex-shrink:0; font-size:11px; font-weight:600; color:#1677ff; }
+.warning-text { font-size:12px; color:var(--text-muted, #8a8f98); line-height:1.4; }
 .empty-state { text-align:center; padding:88px 0; }
 .empty-state.compact { padding:48px 0; }
 .empty-icon {

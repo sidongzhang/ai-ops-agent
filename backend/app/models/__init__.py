@@ -7,6 +7,7 @@ from .improvements import ImprovementCandidate
 from .incidents import Incident
 from .knowledge import KnowledgeMemory
 from .messages import SystemMessage
+from .monitoring import MetricSample
 from .notifications import NotificationDelivery
 from .systems import MonitoredSystem, Service
 from .tokens import SystemToken
@@ -23,6 +24,7 @@ __all__ = [
     "MonitoredSystem",
     "Collector",
     "SystemMessage",
+    "MetricSample",
     "NotificationDelivery",
     "Service",
     "SystemToken",
