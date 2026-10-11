@@ -74,6 +74,7 @@ class AgentDeps:
     archive_list: Callable[[str], str] | None = None
     archive_read: Callable[[str, str], str] | None = None
     archive_fetch: Callable[[str, str], str] | None = None
+    run_code: Callable[..., str] | None = None
     data_catalog: str = ""
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
     tool_cache: dict = field(default_factory=dict)
@@ -482,6 +483,24 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         if not ctx.deps.archive_fetch:
             return "当前系统未启用归档文件回传，无法发送文件。"
         return ctx.deps.archive_fetch(tcat_id, file_name)
+
+    @agent.tool
+    @_memoized
+    def run_python_analysis(ctx: RunContext[AgentDeps], code: str, inputs: list | None = None) -> str:
+        """在工作沙箱里跑一段 Python 做数据分析，并生成可下载的报告/图表等文件。
+
+        用途：需要解析/统计/变换文件内容、做计算、或生成报告/图表文件给用户时。
+        环境为**标准库**（没有 numpy/matplotlib），请用 csv、json、statistics 等，
+        需要图就手写 SVG 或输出 CSV/Markdown。用 print() 输出结论；脚本写出的文件
+        会作为「可下载产物」返回链接。
+        参数：
+          code：完整的 Python 脚本。
+          inputs：可选，要放进工作目录的归档文件，形如
+                  [{"tcat_id": "tn260717_120003_gbm", "file_name": "location_x.json"}]（最多 5 个）。
+        返回：代码输出 + 生成文件的下载链接。"""
+        if not ctx.deps.run_code:
+            return "当前系统未启用代码沙箱。"
+        return ctx.deps.run_code(code, inputs)
 
     @agent.tool
     @_memoized

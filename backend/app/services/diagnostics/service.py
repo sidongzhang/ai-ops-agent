@@ -86,14 +86,14 @@ def _archive_access(session: Session, system, org_id: int):
     from app.core.security import decrypt_sensitive_fields
 
     if system.local:
-        return None, None, None
+        return None, None, None, None
     infra = decrypt_sensitive_fields(system.infra or {})
     base_path = str((infra.get("archive") or {}).get("base_path") or "").strip()
     if not base_path:
-        return None, None, None
+        return None, None, None, None
     collector = select_online_collector(session, system.id)
     if not collector or not manager.is_connected(collector.id):
-        return None, None, None
+        return None, None, None, None
 
     def _send(command: str, args: dict) -> dict:
         try:
@@ -126,26 +126,78 @@ def _archive_access(session: Session, system, org_id: int):
             return f"{head}\nFITS 头：\n{data.get('header') or '(空)'}"
         return f"{head}\n内容：\n{data.get('text') or '(空)'}"
 
-    def fetch_file(tcat_id: str, file_name: str) -> str:
+    def raw_fetch(tcat_id: str, file_name: str):
         resp = _send("archive_fetch", {"base_path": base_path, "tcat_id": tcat_id, "file_name": file_name})
         data = resp.get("result") if resp.get("ok") else None
         if not isinstance(data, dict):
-            return f"取回归档文件失败：{resp.get('result')}"
+            return None
         import base64
-
-        from app.core.config import settings as app_settings
-        from app.services.diagnostics.artifacts import save_artifact
 
         try:
             raw = base64.b64decode(data.get("content") or "")
-        except Exception as exc:  # noqa: BLE001
-            return f"取回归档文件失败：{exc}"
-        token = save_artifact(data.get("name") or file_name, raw)
+        except Exception:  # noqa: BLE001
+            return None
+        return (data.get("name") or file_name), raw
+
+    def fetch_file(tcat_id: str, file_name: str) -> str:
+        from app.core.config import settings as app_settings
+        from app.services.diagnostics.artifacts import save_artifact
+
+        got = raw_fetch(tcat_id, file_name)
+        if not got:
+            return "取回归档文件失败（不可用或超过大小限制）。"
+        name, raw = got
+        token = save_artifact(name, raw)
         base_url = (app_settings.public_base_url or "").rstrip("/")
         url = f"{base_url}/systems/{system.id}/diagnosis-artifacts/{token}"
-        return f"已取回文件 {data.get('name')}（{data.get('size')} 字节）。下载链接：{url}"
+        return f"已取回文件 {name}（{len(raw)} 字节）。下载链接：{url}"
 
-    return list_files, read_file, fetch_file
+    return list_files, read_file, fetch_file, raw_fetch
+
+
+def _code_sandbox(system, raw_fetch):
+    """构建 agent 的 Python 沙箱工具：可放入归档文件、跑代码、把产物存成下载链接。"""
+    if not raw_fetch:
+        return None
+
+    def run_code(code: str, inputs: list | None = None) -> str:
+        from app.core.config import settings as app_settings
+        from app.services.diagnostics.artifacts import save_artifact
+        from app.services.diagnostics.sandbox import run_python
+
+        staged: dict[str, bytes] = {}
+        notes: list[str] = []
+        for item in (inputs or [])[:5]:
+            if not isinstance(item, dict):
+                continue
+            got = raw_fetch(str(item.get("tcat_id") or ""), str(item.get("file_name") or ""))
+            if not got:
+                notes.append(f"未能取回 {item.get('file_name')}（不存在或超过大小限制）")
+                continue
+            name, raw = got
+            staged[name] = raw
+            notes.append(f"{name}（{len(raw)} 字节）")
+        if notes:
+            notes.insert(0, "已放入工作目录的输入文件：" + "；".join(notes) + "。")
+
+        result = run_python(code, staged)
+        parts = list(notes)
+        if result.get("stdout"):
+            parts.append("代码输出：\n" + result["stdout"].strip())
+        if result.get("stderr"):
+            parts.append("stderr：\n" + result["stderr"].strip()[:1500])
+        links = []
+        base_url = (app_settings.public_base_url or "").rstrip("/")
+        for name, data in (result.get("outputs") or {}).items():
+            token = save_artifact(name, data)
+            links.append(f"- {name}（{len(data)} 字节）：{base_url}/systems/{system.id}/diagnosis-artifacts/{token}")
+        if links:
+            parts.append("生成的产物（可直接给用户下载）：\n" + "\n".join(links))
+        if not result.get("ok") and not result.get("stdout"):
+            parts.append("（脚本执行失败，请检查代码或改用更小/更简单的输入）")
+        return "\n\n".join(parts) or "（无输出）"
+
+    return run_code
 
 
 def _business_data_query(session: Session, system, org_id: int, actor_id: str):
@@ -494,7 +546,8 @@ def diagnose_system(
                 f"上一轮结论: {prev_answer}"
             )
     dataset_query, data_catalog = _business_dataset_query(session, system, org_id, actor_id)
-    archive_list, archive_read, archive_fetch = _archive_access(session, system, org_id)
+    archive_list, archive_read, archive_fetch, archive_raw = _archive_access(session, system, org_id)
+    run_code = _code_sandbox(system, archive_raw)
     try:
         run = diagnose_with_details(
             descriptor,
@@ -510,6 +563,7 @@ def diagnose_system(
             archive_list=archive_list,
             archive_read=archive_read,
             archive_fetch=archive_fetch,
+            run_code=run_code,
             data_catalog=data_catalog,
             model_mode=model_mode,
             model_name=model_name,
