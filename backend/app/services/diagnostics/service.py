@@ -656,6 +656,15 @@ def diagnose_system(
             )
         raise
 
+    from app.agent.diagnostics.evidence_guard import apply_evidence_guard
+    from app.core.config import settings as app_settings
+
+    answer_text, guard_meta = apply_evidence_guard(
+        run.answer,
+        run.tool_calls,
+        enabled=app_settings.diagnosis_evidence_guard,
+    )
+
     evidence_sources = _evidence_sources(template["steps"] if template else "", run.tool_calls)
     evidence_items = build_evidence_from_tool_calls(run.tool_calls)
     evidence_steps = build_evidence_steps(run.tool_calls)
@@ -678,12 +687,13 @@ def diagnose_system(
             "model_name": model_name,
         },
         output={
-            "answer": run.answer,
+            "answer": answer_text,
             "model": run.model,
             "duration_ms": run.duration_ms,
             "total_tokens": run.total_tokens,
             "evidence_sources": evidence_sources,
             "tool_calls": run.tool_calls,
+            "evidence_guard": guard_meta,
         },
         commit=False,
     )
@@ -699,7 +709,7 @@ def diagnose_system(
             user_id=user_id,
             report_type="diagnose",
             question=question,
-            answer=run.answer,
+            answer=answer_text,
             template_name=template["name"] if template else "",
             template_description=template["description"] if template else "自由诊断",
             model=run.model,
@@ -715,7 +725,7 @@ def diagnose_system(
     return _build_diagnose_response(
         report_id=report.id,
         system_id=system.id,
-        answer=run.answer,
+        answer=answer_text,
         template_name=template["name"] if template else "",
         template_description=template["description"] if template else "自由诊断",
         model=run.model,
