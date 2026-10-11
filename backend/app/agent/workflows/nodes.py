@@ -68,7 +68,11 @@ async def analyze_node(state: WorkflowState) -> dict:
 
 
 async def execute_node(state: WorkflowState) -> dict:
-    from ...services.workflows.execution import execute_workflow_action, verify_action_recovery_async
+    from ...services.workflows.execution import (
+        execute_workflow_action,
+        verification_summary,
+        verify_action_recovery_async,
+    )
 
     thread_id = state["thread_id"]
     action = state.get("proposed_action", {})
@@ -76,8 +80,9 @@ async def execute_node(state: WorkflowState) -> dict:
     try:
         execution_result = await execute_workflow_action(state, action)
         recovered, verification = await verify_action_recovery_async(state, action)
-        combined_result = f"{execution_result}\n\n恢复回查：{verification}"
-        final_status = "done" if recovered else "error"
+        combined_result = f"{execution_result}\n\n{verification_summary(recovered, verification)}"
+        # 执行成功但未恢复 ≠ 执行失败：用独立状态，避免 UI 误报"执行失败"
+        final_status = "done" if recovered else "unrecovered"
         update_workflow_db(thread_id, final_status, combined_result, executed=True)
         # 结构化记忆验证闭环：回查结果直接回填记忆有效性（recovered→confirmed / 失败→failed 防污染）
         from app.core.config import settings as app_settings

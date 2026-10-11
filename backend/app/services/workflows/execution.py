@@ -29,6 +29,17 @@ async def execute_workflow_action(state: dict, action: dict) -> str:
     return _format_manual_result(action)
 
 
+def verification_summary(recovered: bool, verification: str) -> str:
+    """把"执行后回查"整理成人话：区分「已恢复」与「执行完成但未恢复」，后者给下一步建议。"""
+    detail = (verification or "").strip() or "（无回查详情）"
+    if recovered:
+        return f"【执行验证】✅ 服务已恢复：{detail}"
+    return (
+        f"【执行验证】⚠️ 执行已完成，但服务仍未恢复：{detail}\n"
+        "建议：转人工排查；或让 AI 重新诊断——根因可能不在这一个服务（可结合依赖拓扑看影响链）。"
+    )
+
+
 def verify_action_recovery(state: dict, action: dict) -> tuple[bool, str]:
     action_type = action.get("type", "manual")
     if action_type not in ("restart_container", "restart_systemd"):

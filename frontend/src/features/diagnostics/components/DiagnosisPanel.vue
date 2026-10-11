@@ -94,6 +94,7 @@ const STATUS_LABELS = {
   pending: '待审批',
   approved: '执行中',
   done: '已执行',
+  unrecovered: '已执行·未恢复',
   rejected: '已拒绝',
   error: '执行失败',
 }
@@ -506,6 +507,7 @@ function modelOptionLabel(option) {
 .status-tag--pending  { background: rgba(250,173,20,.15); color: #d48806; }
 .status-tag--approved { background: rgba(22,119,255,.12); color: #1677ff; }
 .status-tag--done     { background: rgba(82,196,26,.15);  color: #389e0d; }
+.status-tag--unrecovered { background: rgba(250,173,20,.15); color: #d48806; }
 .status-tag--rejected { background: rgba(0,0,0,.06);       color: #999; }
 .status-tag--error    { background: rgba(255,77,79,.12);   color: #cf1322; }
 
