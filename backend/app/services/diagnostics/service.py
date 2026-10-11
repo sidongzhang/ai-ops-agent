@@ -487,6 +487,7 @@ def complete_diagnosis_report(
                 model_name=model_name,
                 on_progress=_progress_recorder(report_id, org_id, system_id),
                 follow_up_report_id=follow_up_report_id,
+                intent_text=report.question or question,
             )
         except Exception as exc:  # noqa: BLE001
             log.exception("[diagnose] 诊断执行失败 report_id=%s", report_id)
@@ -529,6 +530,7 @@ def diagnose_system(
     model_name: str = "",
     follow_up_report_id: int | None = None,
     on_progress=None,
+    intent_text: str = "",
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
     started_at = time.monotonic()
@@ -576,6 +578,7 @@ def diagnose_system(
             load_runbook=_load_runbook,
             data_catalog=data_catalog,
             runbook_catalog=runbook_catalog,
+            intent_text=intent_text,
             model_mode=model_mode,
             model_name=model_name,
             on_progress=on_progress,

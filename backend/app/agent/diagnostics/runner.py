@@ -78,6 +78,7 @@ def diagnose_with_details(
     load_runbook=None,
     data_catalog: str = "",
     runbook_catalog: str = "",
+    intent_text: str = "",
     conversation_context: str = "",
     model_mode: str = "auto",
     model_name: str = "",
@@ -123,6 +124,7 @@ def diagnose_with_details(
             load_runbook=load_runbook,
             data_catalog=data_catalog,
             runbook_catalog=runbook_catalog,
+            intent_text=intent_text or question,
             progress_sink=on_progress,
         )
         try:
