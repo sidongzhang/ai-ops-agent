@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from pydantic_ai import Agent, UsageLimits
+from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.messages import (
     ToolCallPart,
     ToolReturnPart,
@@ -15,6 +16,7 @@ from pydantic_ai.messages import (
 from app.agent.llm import default_endpoint, endpoint_for_mode, make_chat_model
 from app.core.config import settings
 from .knowledge.store import append_runbook_entry
+from .history import compact_messages
 from .models import default_model, pick_model
 from .tool_events import iter_tool_events, safe_emit
 from .tools import AgentDeps, register_tools
@@ -126,6 +128,7 @@ def diagnose_with_details(
                 model=model,
                 retries=3,
                 usage_limits=_usage_limits(),
+                capabilities=[ProcessHistory(compact_messages)],
                 **_stream_kwargs(on_progress),
             )
         except Exception as exc:
