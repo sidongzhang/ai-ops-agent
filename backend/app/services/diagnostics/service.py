@@ -468,6 +468,7 @@ def complete_diagnosis_report(
     model_mode: str = "auto",
     model_name: str = "",
     follow_up_report_id: int | None = None,
+    images: list[tuple[str, bytes]] | None = None,
 ) -> None:
     from app.core.database import engine
 
@@ -488,6 +489,7 @@ def complete_diagnosis_report(
                 on_progress=_progress_recorder(report_id, org_id, system_id),
                 follow_up_report_id=follow_up_report_id,
                 intent_text=report.question or question,
+                images=images,
             )
         except Exception as exc:  # noqa: BLE001
             log.exception("[diagnose] 诊断执行失败 report_id=%s", report_id)
@@ -535,6 +537,7 @@ def diagnose_system(
     follow_up_report_id: int | None = None,
     on_progress=None,
     intent_text: str = "",
+    images: list[tuple[str, bytes]] | None = None,
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
     started_at = time.monotonic()
@@ -664,6 +667,7 @@ def diagnose_system(
             model_mode=model_mode,
             model_name=model_name,
             on_progress=on_progress,
+            images=images,
         )
     except Exception as exc:
         if _is_kafka_lag_question(question):

@@ -30,6 +30,8 @@ class DiagnoseRequest(BaseModel):
     model_name: str = Field(default="", max_length=128)
     # 会话式追问：携带上一轮诊断报告 id，Agent 基于上轮结论回答当前问题（不重复取证）
     follow_up_report_id: int | None = None
+    # 多模态：随问题上传的截图（data URL，最多 3 张）。Agent 读图后结合探活给结论。
+    images: list[str] = Field(default_factory=list)
 
 
 class DiagnoseResponse(BaseModel):

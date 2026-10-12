@@ -74,6 +74,7 @@ function buildAgentMessageFromReport(report) {
     evidence: report.evidence || [],
     toolCalls: report.tool_calls || [],
     knowledgeRefs: report.knowledge_refs || [],
+    imageMeta: (report.business_context || {}).images || [],
     createdAt: report.created_at,
   }
 }
@@ -140,6 +141,48 @@ export function useDiagnosisChat(systemId) {
   const lastQuestion = ref('')
   const modelChoice = ref(localStorage.getItem('diagnosis:model-choice') || 'auto')
   const modelOptions = ref(DEFAULT_MODEL_OPTIONS)
+  // 多模态：随问题上传的截图（data URL），最多 MAX_IMAGES 张
+  const images = ref([])
+  const MAX_IMAGES = 3
+  const MAX_IMAGE_BYTES = 2 * 1024 * 1024
+  const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+
+  function removeImage(index) {
+    images.value.splice(index, 1)
+  }
+
+  function clearImages() {
+    images.value = []
+  }
+
+  async function addImageFiles(fileList) {
+    const files = Array.from(fileList || [])
+    for (const file of files) {
+      if (images.value.length >= MAX_IMAGES) {
+        message.warning(`最多上传 ${MAX_IMAGES} 张图片`)
+        break
+      }
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        message.warning(`不支持的图片类型：${file.type || '未知'}（仅支持 PNG/JPEG/WebP/GIF）`)
+        continue
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        message.warning(`图片「${file.name}」超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB`)
+        continue
+      }
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result || ''))
+          reader.onerror = () => reject(new Error('读取失败'))
+          reader.readAsDataURL(file)
+        })
+        images.value.push({ name: file.name || '截图', dataUrl })
+      } catch {
+        message.warning(`图片「${file.name}」读取失败`)
+      }
+    }
+  }
 
   async function loadModelOptions() {
     try {
@@ -239,11 +282,14 @@ export function useDiagnosisChat(systemId) {
 
   async function ask() {
     const q = question.value.trim()
-    if (!q) return
+    const attached = images.value.map((item) => item.dataUrl)
+    const attachedMeta = images.value.map((item) => ({ name: item.name, dataUrl: item.dataUrl }))
+    if (!q && !attached.length) return
     localStorage.setItem('diagnosis:model-choice', modelChoice.value)
     lastQuestion.value = q
-    messages.value.push({ role: 'user', text: q })
+    messages.value.push({ role: 'user', text: q, images: attachedMeta })
     question.value = ''
+    clearImages()
     diagnosing.value = true
     const pendingIndex = messages.value.length
     messages.value.push({
@@ -254,6 +300,7 @@ export function useDiagnosisChat(systemId) {
     await scrollBottom()
     try {
       const body = { question: q, model_mode: modelChoice.value }
+      if (attached.length) body.images = attached
       // 会话式追问：开启追问且有上一轮报告时，携带 follow_up_report_id
       if (followUp.value && lastReportId.value) {
         body.follow_up_report_id = lastReportId.value
@@ -368,6 +415,11 @@ export function useDiagnosisChat(systemId) {
     historyLoading,
     messages,
     question,
+    images,
+    addImageFiles,
+    removeImage,
+    clearImages,
+    maxImages: MAX_IMAGES,
     modelChoice,
     modelOptions,
     renderMd,

@@ -44,6 +44,18 @@ text_fallback_agent = LazyAgent(
 )
 
 
+def _build_prompt(question: str, images: list[tuple[str, bytes]] | None = None):
+    """构造发给模型的输入：有截图时把图片作为**视觉证据**一并发出。"""
+    if not images:
+        return question
+    from pydantic_ai import BinaryContent
+
+    return [
+        *(BinaryContent(data=data, media_type=media) for media, data in images),
+        question,
+    ]
+
+
 @dataclass
 class DiagnosisRun:
     answer: str
@@ -96,6 +108,7 @@ def diagnose_with_details(
     intent_text: str = "",
     conversation_context: str = "",
     mcp_catalog: str = "",
+    images: list[tuple[str, bytes]] | None = None,
     model_mode: str = "auto",
     model_name: str = "",
     on_progress: Callable[[dict], None] | None = None,
@@ -149,10 +162,12 @@ def diagnose_with_details(
             mcp_catalog=mcp_catalog,
             intent_text=intent_text or question,
             progress_sink=on_progress,
+            image_count=len(images or []),
         )
+        prompt = _build_prompt(question, images)
         try:
             result = diagnose_agent.run_sync(
-                question,
+                prompt,
                 deps=deps,
                 model=model,
                 retries=3,
@@ -183,7 +198,7 @@ def diagnose_with_details(
                 model_name = fallback_name
                 try:
                     result = diagnose_agent.run_sync(
-                        question,
+                        prompt,
                         deps=deps,
                         model=model,
                         retries=3,

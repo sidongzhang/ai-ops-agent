@@ -16,6 +16,11 @@ from ..schemas import (
     KnowledgeExportRequest,
     KnowledgeDocOut,
 )
+from ..services.diagnostics.attachments import (
+    AttachmentError,
+    describe_images,
+    parse_image_data_urls,
+)
 from ..services.diagnostics.service import (
     complete_diagnosis_report,
     list_diagnostic_templates,
@@ -42,12 +47,17 @@ def diagnose_system(
     user: User = Depends(get_current_user),
 ):
     try:
+        images = parse_image_data_urls(body.images)
+    except AttachmentError as exc:
+        raise HTTPException(400, str(exc))
+    try:
         started = start_diagnosis(
             session,
             system_id,
             org_id,
             body.question,
             actor_id=str(user.id),
+            business_context={"images": describe_images(images)} if images else None,
         )
         if started.id is None:
             raise HTTPException(500, "诊断任务创建失败")
@@ -56,6 +66,8 @@ def diagnose_system(
             "model_mode": body.model_mode,
             "model_name": body.model_name,
         }
+        if images:
+            complete_kwargs["images"] = images
         if body.follow_up_report_id:
             complete_kwargs["follow_up_report_id"] = body.follow_up_report_id
         background_tasks.add_task(

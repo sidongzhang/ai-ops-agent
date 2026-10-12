@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useDiagnosisChat } from '../useDiagnosisChat'
 import { parseAnswer } from '../parseAnswer'
 import DiagnosisEvidenceChain from './DiagnosisEvidenceChain.vue'
@@ -30,9 +30,38 @@ const {
   lastQuestion,
   liveStepIcon,
   followUp,
+  images,
+  addImageFiles,
+  removeImage,
+  maxImages,
 } = useDiagnosisChat(props.systemId)
 
 import { message } from 'ant-design-vue'
+
+const imageInput = ref(null)
+
+function triggerPickImage() {
+  imageInput.value?.click()
+}
+
+function onPickImage(event) {
+  addImageFiles(event.target.files)
+  event.target.value = ''
+}
+
+// 支持直接粘贴截图（Ctrl/Cmd+V）
+function onPasteImage(event) {
+  const items = Array.from(event.clipboardData?.items || [])
+  const files = items.filter((item) => item.type?.startsWith('image/')).map((item) => item.getAsFile())
+  if (files.length) {
+    event.preventDefault()
+    addImageFiles(files)
+  }
+}
+
+function previewImage(url) {
+  if (url) window.open(url, '_blank')
+}
 
 const followUpAvailable = computed(() =>
   messages.value.some((m) => m.role === 'agent' && m.status === 'success' && m.reportId)
@@ -195,7 +224,22 @@ function modelOptionLabel(option) {
         <!-- 普通对话消息 -->
         <div v-if="message.role === 'user' || message.role === 'agent'"
           :class="['msg-row', message.role === 'user' ? 'msg-row--user' : 'msg-row--agent']">
-          <span v-if="message.role === 'user'" class="bubble bubble--user">{{ message.text }}</span>
+          <div v-if="message.role === 'user'" class="user-bubble-wrap">
+            <div v-if="message.images?.length" class="user-images">
+              <img
+                v-for="(img, imgIndex) in message.images"
+                :key="imgIndex"
+                :src="img.dataUrl"
+                :alt="img.name"
+                class="user-image-thumb"
+                @click="previewImage(img.dataUrl)"
+              />
+            </div>
+            <span class="bubble bubble--user">{{ message.text }}</span>
+            <div v-if="message.imageMeta?.length" class="user-images-note">
+              含 {{ message.imageMeta.length }} 张截图（已作为视觉证据）
+            </div>
+          </div>
           <div v-else class="agent-response">
             <div :class="['agent-answer', message.status === 'running' ? 'agent-answer--running' : '']">
               <template v-if="message.status === 'running'">
@@ -330,6 +374,27 @@ function modelOptionLabel(option) {
     </div>
 
     <div class="chat-input-row">
+      <div v-if="images.length" class="image-tray">
+        <div v-for="(img, index) in images" :key="index" class="image-chip">
+          <img :src="img.dataUrl" :alt="img.name" />
+          <button type="button" class="image-chip__remove" title="移除" @click="removeImage(index)">×</button>
+        </div>
+        <span class="image-tray__hint">{{ images.length }}/{{ maxImages }} 张截图</span>
+      </div>
+      <input
+        ref="imageInput"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        multiple
+        hidden
+        @change="onPickImage"
+      />
+      <a-button
+        class="image-pick-btn"
+        :disabled="diagnosing || fixing || images.length >= maxImages"
+        title="上传截图（也可直接粘贴）"
+        @click="triggerPickImage"
+      >📷 截图</a-button>
       <label v-if="followUpAvailable" class="followup-switch">
         <input type="checkbox" v-model="followUp" />
         追问（基于上一轮结论）
@@ -355,11 +420,12 @@ function modelOptionLabel(option) {
       </a-select>
       <a-input-search
         v-model:value="question"
-        placeholder="例如：Redis 内存多少？Kafka 有积压吗？今天任务数据到了没？"
+        placeholder="例如：Redis 内存多少？或直接粘贴一张告警/大盘截图再问我"
         enter-button="发 送"
         :loading="diagnosing"
         :disabled="fixing"
         @search="ask"
+        @paste="onPasteImage"
         class="chat-input"
       />
     </div>
@@ -603,7 +669,34 @@ function modelOptionLabel(option) {
 .chat-input-row {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
 }
+.image-tray {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--border-color) 12%, transparent);
+}
+.image-tray__hint { font-size: 11px; color: var(--text-muted, #8a8f98); }
+.image-chip { position: relative; width: 46px; height: 46px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); }
+.image-chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.image-chip__remove {
+  position: absolute; top: -1px; right: -1px; width: 16px; height: 16px; line-height: 14px;
+  border: none; border-radius: 50%; background: rgba(0, 0, 0, .65); color: #fff; font-size: 12px; cursor: pointer; padding: 0;
+}
+.image-pick-btn { flex: 0 0 auto; }
+.user-bubble-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.user-images { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.user-image-thumb {
+  width: 76px; height: 76px; object-fit: cover; border-radius: 8px;
+  border: 1px solid var(--border-color); cursor: zoom-in;
+}
+.user-images-note { font-size: 11px; color: var(--text-muted, #8a8f98); }
 .model-select {
   width: 220px;
   flex: 0 0 220px;
