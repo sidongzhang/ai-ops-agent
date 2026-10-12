@@ -80,3 +80,5 @@ class OpenDiagnosisIn(BaseModel):
     business_context: dict[str, Any] = Field(default_factory=dict)
     # 会话式追问：带上上一轮诊断报告 id，平台会把「上一轮问题+结论」注入本轮上下文。
     follow_up_report_id: int | None = None
+    # 多模态：随问题上传的截图（data URL，最多 3 张）。
+    images: list[str] = Field(default_factory=list)

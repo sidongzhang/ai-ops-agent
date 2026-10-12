@@ -35,6 +35,11 @@ from app.services.openapi import (
 )
 from app.services.log_analysis import submit_uploaded_log_analysis
 from app.services.diagnostics.service import complete_diagnosis_report, start_diagnosis
+from app.services.diagnostics.attachments import (
+    AttachmentError,
+    describe_images,
+    parse_image_data_urls,
+)
 from app.services.diagnostics.reports import get_diagnosis_report, list_diagnosis_reports
 
 router = APIRouter(prefix="/openapi/v1", tags=["openapi"])
@@ -183,6 +188,10 @@ def create_external_diagnosis(
     session: Session = Depends(get_session),
 ):
     require_scope(identity, "diagnosis:run")
+    try:
+        images = parse_image_data_urls(body.images)
+    except AttachmentError as exc:
+        raise HTTPException(400, str(exc))
     message = None
     if body.request_id:
         try:
@@ -190,6 +199,9 @@ def create_external_diagnosis(
         except LookupError as exc:
             raise HTTPException(404, str(exc))
     actor_id = f"openapi:{identity.token.id}:{body.actor_id or 'unknown'}"
+    business_context = dict(body.business_context or {})
+    if images:
+        business_context["images"] = describe_images(images)
     started = start_diagnosis(
         session,
         identity.system.id,
@@ -197,7 +209,7 @@ def create_external_diagnosis(
         body.question.strip(),
         actor_id=actor_id,
         external_request_id=body.request_id,
-        business_context=body.business_context,
+        business_context=business_context or None,
     )
     if started.id is None:
         raise HTTPException(500, "诊断任务创建失败")
@@ -213,6 +225,7 @@ def create_external_diagnosis(
         actor_id=actor_id,
         model_mode=body.model_mode,
         follow_up_report_id=body.follow_up_report_id,
+        images=images,
     )
     return started
 
