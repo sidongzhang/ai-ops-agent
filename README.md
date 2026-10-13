@@ -89,6 +89,11 @@ docker exec ai-ops-agent-ollama-1 ollama pull qwen2.5:3b   # 7B 需 ≥10GB 可�
 ```
 
 注意事项：
+- **上下文必须够大（最容易踩、且最隐蔽）**：我们的系统提示 + 工具 schema ≈ **8~10k tokens**。
+  Ollama 的默认上下文由编排文件里的 `OLLAMA_CONTEXT_LENGTH` 决定（曾设为 1024），
+  设小了会**静默截断提示**——模型看不到工具说明，于是 0 次工具调用、答非所问，
+  而报告仍然是 `success`（实测 `prompt_eval` 只有 514 tokens；改成 16384 后变成 8194）。
+  注意 **OpenAI 兼容接口不透传 `num_ctx`**，只能通过 `OLLAMA_CONTEXT_LENGTH` 或自定义模型设置；
 - **容器内拉取可能因 DNS 失败**（`lookup ...cloudflarestorage.com: no such host`）——ollama 会续传，
   直接重试即可（实测重试一次即成功）；
 - **内存要够**：实测本机 colima VM 只有 **6 GiB** 时，7B（Q4 权重 4.7G）叠加我们 ~8k token
@@ -97,6 +102,10 @@ docker exec ai-ops-agent-ollama-1 ollama pull qwen2.5:3b   # 7B 需 ≥10GB 可�
 - **开了就绪检查**：选「本地模型」时先探测端点与模型是否就绪，没就绪立刻 409 并给出
   `ollama pull ...` 的修复命令；`/diagnose/model-options` 也会带 `available`/`reason`；
 - **本地端点有 120s 读超时**（`LLM_LOCAL_TIMEOUT_SECONDS`）：卡死时变成可读失败，不会无限挂起；
+- **注意 embedding 与聊天模型抢 CPU**：若 `EMBEDDING_BASE_URL` 也指向同一个 Ollama
+  （默认 `nomic-embed-text`），跑本地聊天模型时 embedding 调用会因 CPU 争抢而超时，
+  表现为 RAG 知识检索**静默降级**（日志 `[rag] embedding API 失败: timed out`），
+  每次超时还白等 30s。要么把 embedding 指到独立服务，要么用 API 模型跑诊断；
 - **选了 local 就不会静默回退到远程 API**（用户选本地的动机常是数据不出网），本地失败会显式报错；
 - 本地模型在无 GPU 的容器里是 CPU 推理，明显慢于 API，适合"数据不出网"优先于速度的场景。
 

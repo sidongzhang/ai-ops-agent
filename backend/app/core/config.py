@@ -60,7 +60,9 @@ class Settings(BaseSettings):
     llm_local_api_key: str = "ollama"
     llm_local_model: str = "qwen2.5:0.5b"
     # 本地模型（CPU 推理）偶发"卡死"：给读超时，卡住时变成可读失败而不是无限挂起。
-    llm_local_timeout_seconds: float = 120.0
+    # 注意：本地模型 prefill 我们的长系统提示（~9k tokens）在纯 CPU 上可能就要几分钟，
+    # 所以这里默认给 300s；更慢的机器用 LLM_LOCAL_TIMEOUT_SECONDS 调大。
+    llm_local_timeout_seconds: float = 300.0
     # 高级模型可单独指定；未指定则复用当前 LLM_MODE 对应配置。
     advanced_llm_mode: str = ""
     advanced_llm_api_base_url: str = ""
