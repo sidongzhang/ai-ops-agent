@@ -1,4 +1,5 @@
 """Diagnosis entrypoint."""
+import json
 import logging
 import re
 import time
@@ -369,7 +370,8 @@ def _usage_json(usage) -> str:
             },
             ensure_ascii=False,
         )
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - 记账序列化失败必须留痕，不能静默成"无用量"
+        log.warning("[diagnose] 用量序列化失败（将按不完整处理）: %s", exc)
         return ""
 
 

@@ -394,6 +394,16 @@ def start_diagnosis(
     business_context: dict | None = None,
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
+    # 会话预算：提交前**原子预留**（并发安全）。未知用量按保守预留计入，绝不当免费。
+    from app.services.diagnostics.usage import BudgetExceeded, reserve_budget
+
+    user_id = _user_id_from_actor(actor_id) or 0
+    budget = reserve_budget(org_id=org_id, user_id=user_id, system_id=system.id)
+    if not budget["allowed"]:
+        raise BudgetExceeded(
+            "会话预算不足（滚动窗口内累计用量已达上限），请稍后再试或调整预算",
+            budget,
+        )
     report = save_diagnosis_report(
         session,
         org_id=org_id,
@@ -424,52 +434,76 @@ def _finalize_report(
     result: DiagnoseResponse | None = None,
     error: str = "",
     cancel_phase: str = "",
-) -> None:
-    """Write the terminal state with a brand new Session.
+) -> bool:
+    """**原子条件**写终态：`UPDATE … WHERE status='running'`，返回是否本次写入成功。
 
-    The diagnosis Session can end up in a poisoned state (parallel tool calls,
-    lock contention). Reusing it here is how a report gets stuck at `running`
-    forever, so the terminal write always gets a clean Session of its own.
-
-    终态**先到先赢**：只有 status 仍为 running 时才写（成功不会被取消覆盖，反之亦然）。
+    旧实现是"读 → 判断 status == running → 写"，两个写者（比如运行方落 success 与
+    关停路径落 cancelled 同时发生）可能都读到 running 然后互相覆盖。现在把条件放进
+    UPDATE 的 WHERE 里，由数据库保证**只有一个**写者成功（先到先赢）。
     """
+    from sqlalchemy import func, update
+
     from app.core.database import engine
 
+    values: dict = {"status": status}
+    if status == "success" and result is not None:
+        values.update(
+            {
+                "answer": result.answer,
+                "template_name": result.template_name,
+                "template_description": result.template_description,
+                "model": result.model,
+                "duration_ms": result.duration_ms,
+                "total_tokens": result.total_tokens,
+                "evidence_sources": result.evidence_sources,
+                "evidence_steps": result.evidence_steps,
+                "tool_calls": result.tool_calls,
+                "evidence": [item.model_dump() for item in result.evidence],
+                "knowledge_refs": [item.model_dump() for item in result.knowledge_refs],
+            }
+        )
+    elif status == "cancelled":
+        values.update(
+            {
+                "cancelled_at": datetime.now(timezone.utc),
+                "cancel_phase": cancel_phase or "",
+                # 仅在 answer 为空时写占位文案（不覆盖已有的部分内容）
+                "answer": func.coalesce(func.nullif(DiagnosisReport.answer, ""), "（诊断已被用户中断）"),
+            }
+        )
+        if result is not None:
+            values.update(
+                {
+                    "model": result.model,
+                    "duration_ms": result.duration_ms,
+                    "total_tokens": result.total_tokens,
+                    "tool_calls": result.tool_calls,
+                }
+            )
+    else:
+        values.update(
+            {
+                "error_message": error,
+                "answer": func.coalesce(
+                    func.nullif(DiagnosisReport.answer, ""), f"诊断失败：{error}"
+                ),
+            }
+        )
+
     with Session(engine) as session:
-        pending = session.get(DiagnosisReport, report_id)
-        if not pending or pending.org_id != org_id or pending.system_id != system_id:
-            return
-        if pending.status != "running":
-            return
-        if status == "success" and result is not None:
-            pending.status = "success"
-            pending.answer = result.answer
-            pending.template_name = result.template_name
-            pending.template_description = result.template_description
-            pending.model = result.model
-            pending.duration_ms = result.duration_ms
-            pending.total_tokens = result.total_tokens
-            pending.evidence_sources = result.evidence_sources
-            pending.evidence_steps = result.evidence_steps
-            pending.tool_calls = result.tool_calls
-            pending.evidence = [item.model_dump() for item in result.evidence]
-            pending.knowledge_refs = [item.model_dump() for item in result.knowledge_refs]
-        elif status == "cancelled":
-            pending.status = "cancelled"
-            pending.cancelled_at = datetime.now(timezone.utc)
-            pending.cancel_phase = cancel_phase or ""
-            if result is not None:
-                pending.model = result.model
-                pending.duration_ms = result.duration_ms
-                pending.total_tokens = result.total_tokens
-                pending.tool_calls = result.tool_calls
-            pending.answer = pending.answer or "（诊断已被用户中断）"
-        else:
-            pending.status = "failed"
-            pending.error_message = error
-            pending.answer = pending.answer or f"诊断失败：{error}"
-        session.add(pending)
+        stmt = (
+            update(DiagnosisReport)
+            .where(
+                DiagnosisReport.id == report_id,
+                DiagnosisReport.org_id == org_id,
+                DiagnosisReport.system_id == system_id,
+                DiagnosisReport.status == "running",   # ← 原子条件：先到先赢
+            )
+            .values(**values)
+        )
+        rowcount = session.execute(stmt).rowcount
         session.commit()
+    return bool(rowcount)
 
 
 def complete_diagnosis_report(
@@ -534,6 +568,17 @@ def complete_diagnosis_report(
                 capture_failure(report_id, str(exc))
                 return
 
+        # ── 记账：必须在覆盖 run_state 的"框架累计"之前算增量 ──────────────
+        _record_usage_and_settle(
+            report_id=report_id,
+            org_id=org_id,
+            system_id=system_id,
+            actor_id=actor_id,
+            result=result,
+            cancelled=bool(getattr(result, "cancelled", False)),
+            cancel_phase=cancel_bus.current_phase(report_id),
+        )
+
         # 中断：原生 RunCancelled 已转成可恢复结果 → 落 cancelled + 保存完整消息历史，且**不写记忆**
         if getattr(result, "cancelled", False):
             try:
@@ -553,7 +598,7 @@ def complete_diagnosis_report(
                 conversation_id=getattr(result, "conversation_id", "") or "",
                 run_id=getattr(result, "run_id", "") or "",
                 usage_json=getattr(result, "usage_json", "") or "",
-                resumable=True,
+                resumable=bool(getattr(result, "messages_json", "")),
             )
             return
 
@@ -568,7 +613,7 @@ def complete_diagnosis_report(
             conversation_id=getattr(result, "conversation_id", "") or "",
             run_id=getattr(result, "run_id", "") or "",
             usage_json=getattr(result, "usage_json", "") or "",
-            resumable=True,
+            resumable=bool(getattr(result, "messages_json", "")),
         )
     finally:
         # 结束时注销注册表并放行 poller（done 事件），避免线程与内存泄漏
@@ -589,6 +634,55 @@ def complete_diagnosis_report(
             answer=result.answer,
             report_id=report_id,
         )
+
+
+def _record_usage_and_settle(
+    *,
+    report_id: int,
+    org_id: int,
+    system_id: int,
+    actor_id: str,
+    result,
+    cancelled: bool,
+    cancel_phase: str,
+) -> None:
+    """增量记账 + 结算会话预算（未知用量按保守预留，不当免费）。
+
+    必须在覆盖 `diagnosis_run_state.framework_cumulative_json` **之前**调用，
+    否则 after==before、增量会被算成 0（重复/漏记的根源）。
+    """
+    from app.core.database import engine
+    from app.models.run_state import DiagnosisRunState
+    from app.services.diagnostics.usage import record_run_usage, settle_budget
+
+    try:
+        prev_cumulative = ""
+        prev_conversation = ""
+        with Session(engine) as session:
+            state = session.get(DiagnosisRunState, report_id)
+            if state is not None:
+                prev_cumulative = state.framework_cumulative_json or ""
+                prev_conversation = state.conversation_id or ""
+        summary = record_run_usage(
+            report_id=report_id,
+            org_id=org_id,
+            system_id=system_id,
+            conversation_id=getattr(result, "conversation_id", "") or prev_conversation,
+            run_kind="initial",
+            usage_json=getattr(result, "usage_json", "") or "",
+            cancelled=cancelled,
+            cancel_phase=cancel_phase,
+            before_json=prev_cumulative,
+        )
+        settle_budget(
+            org_id=org_id,
+            user_id=_user_id_from_actor(actor_id) or 0,
+            system_id=system_id,
+            tokens=summary.get("settle_tokens", 0),
+            cost_usd=summary.get("cost_delta", 0.0),
+        )
+    except Exception:  # noqa: BLE001 - 记账失败不能影响诊断收尾
+        log.exception("[diagnose] 用量记账失败 report_id=%s", report_id)
 
 
 def diagnose_system(

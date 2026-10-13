@@ -140,6 +140,13 @@ class Settings(BaseSettings):
     diagnosis_cancel_poll_jitter: float = 0.3
     diagnosis_max_run_seconds: int = 900          # 单次运行上限（超时交 reaper）
     diagnosis_shutdown_grace_seconds: float = 15.0  # 关停等待落库的宽限（uvicorn graceful 需 ≥）
+    diagnosis_stale_heartbeat_seconds: int = 60   # 心跳过期判据（运行方每轮巡检续期，约 2s）
+    # 预算：未知用量不得按免费处理 → 用保守预留结算
+    diagnosis_session_token_budget: int = 300000
+    diagnosis_session_cost_budget_usd: float = 1.0
+    diagnosis_session_window_seconds: int = 600   # 滚动窗口（非按天归零）
+    diagnosis_budget_reserve_tokens: int = 30000  # 提交时原子预留，覆盖并发
+    diagnosis_budget_reserve_cost_usd: float = 0.1
     trend_horizon_hours: float = 48.0      # 预测提前量：按当前增速预计多久触顶才提醒
     trend_retention_days: int = 7          # 指标样本保留天数
     trend_warn_ratio: float = 0.8          # 当前值达到阈值的该比例即预警（容量逼近）

@@ -9,6 +9,7 @@ from .knowledge import KnowledgeMemory
 from .messages import SystemMessage
 from .monitoring import MetricSample
 from .run_state import DiagnosisRunState
+from .usage import DiagnosisBudgetLedger, DiagnosisUsageLedger
 from .notifications import NotificationDelivery
 from .systems import MonitoredSystem, Service
 from .tokens import SystemToken
@@ -27,6 +28,8 @@ __all__ = [
     "SystemMessage",
     "MetricSample",
     "DiagnosisRunState",
+    "DiagnosisUsageLedger",
+    "DiagnosisBudgetLedger",
     "NotificationDelivery",
     "Service",
     "SystemToken",

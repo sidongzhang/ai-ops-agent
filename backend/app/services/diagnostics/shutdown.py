@@ -82,4 +82,7 @@ def _force_terminal_on_shutdown(report_id: int) -> None:
             state.resumable = False
         session.add(state)
         session.commit()
+        from app.services.diagnostics.usage import release_for_report
+
+        release_for_report(report)
     log.warning("[shutdown] report=%s 已标记 cancelled 且不可恢复（关停时未落库）", report_id)

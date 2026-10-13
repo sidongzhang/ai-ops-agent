@@ -14,9 +14,12 @@
 """
 import json
 import logging
+import os
 import random
+import socket
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 
 from app.core.config import settings
@@ -24,6 +27,9 @@ from app.core.config import settings
 log = logging.getLogger(__name__)
 
 CANCEL_CHANNEL = "aiops:diagnosis:cancel"
+
+# 本实例标识：写入报告行，便于"谁在跑"的可观测与排障
+INSTANCE_ID = f"{socket.gethostname()[:24]}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
 
 # 执行相位（用于判定"用量是否完整"：取消发生在模型请求在途 → 该请求用量不可得）
 PHASE_IDLE = "idle"
@@ -64,6 +70,7 @@ def register(report_id: int, token) -> CancelRegistration:
     with _registry_lock:
         _registry[report_id] = reg
     ensure_subscriber()
+    touch_heartbeat(report_id)          # 注册即打一次心跳（reaper 才能区分"活着的"与"失联的"）
     if is_cancel_requested(report_id):
         _cancel_token(reg)
     return reg
@@ -140,22 +147,16 @@ def cancel_all_and_wait(grace_seconds: float | None = None) -> dict:
 
 # ── DB 标志（真相来源）──────────────────────────────────────────────────
 def _session():
-    if _session_factory is not None:
-        return _session_factory()
-    from sqlmodel import Session
+    """统一走 session 模块（单测可注入临时 SQLite，避免碰开发库）。"""
+    from app.services.diagnostics import session as _session_module
 
-    from app.core.database import engine
-
-    return Session(engine)
-
-
-# 测试注入点：允许单测用临时 SQLite 引擎，避免碰开发库
-_session_factory = None
+    return _session_module.session()
 
 
 def set_session_factory(factory) -> None:
-    global _session_factory
-    _session_factory = factory
+    from app.services.diagnostics import session as _session_module
+
+    _session_module.set_session_factory(factory)
 
 
 def is_cancel_requested(report_id: int) -> bool:
@@ -188,6 +189,29 @@ def is_terminal(report_id: int) -> bool:
         return status not in (None, "running")
     except Exception:  # noqa: BLE001
         return False
+
+
+def touch_heartbeat(report_id: int) -> None:
+    """续期心跳（reaper 据此判定"是否还有活着的 worker 在推进"）。
+
+    只更新仍为 running 的行；失败静默（心跳失败不该影响诊断）。
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import text
+
+    try:
+        with _session() as session:
+            session.execute(
+                text(
+                    "UPDATE diagnosis_reports SET runner_id = :rid, runner_heartbeat_at = :ts "
+                    "WHERE id = :id AND status = 'running'"
+                ),
+                {"id": report_id, "rid": INSTANCE_ID, "ts": datetime.now(timezone.utc)},
+            )
+            session.commit()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("[cancel] 心跳续期失败 report=%s: %s", report_id, exc)
 
 
 def set_cancel_requested(report_id: int) -> bool:
@@ -280,6 +304,7 @@ def start_poller(report_id: int, reg: CancelRegistration) -> threading.Thread:
             try:
                 if is_terminal(report_id):
                     break
+                touch_heartbeat(report_id)      # 每轮续期：reaper 据此知道本 worker 还活着
                 if is_cancel_requested(report_id):
                     _cancel_token(reg)
                     break

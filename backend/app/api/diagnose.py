@@ -55,6 +55,8 @@ def diagnose_system(
     if cancel_bus.is_shutting_down():
         # 关停中：拒绝新诊断（避免"刚提交就被杀"的坏体验）
         raise HTTPException(503, "服务正在关停，请稍后重试", headers={"Retry-After": "5"})
+    from ..services.diagnostics.usage import BudgetExceeded
+
     try:
         started = start_diagnosis(
             session,
@@ -84,6 +86,8 @@ def diagnose_system(
             **complete_kwargs,
         )
         return started
+    except BudgetExceeded as exc:
+        raise HTTPException(429, str(exc), headers={"Retry-After": "30"})
     except LookupError as exc:
         raise HTTPException(404, str(exc))
 

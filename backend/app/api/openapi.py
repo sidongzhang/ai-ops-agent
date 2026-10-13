@@ -206,15 +206,20 @@ def create_external_diagnosis(
     business_context = dict(body.business_context or {})
     if images:
         business_context["images"] = describe_images(images)
-    started = start_diagnosis(
-        session,
-        identity.system.id,
-        identity.system.org_id,
-        body.question.strip(),
-        actor_id=actor_id,
-        external_request_id=body.request_id,
-        business_context=business_context or None,
-    )
+    from app.services.diagnostics.usage import BudgetExceeded
+
+    try:
+        started = start_diagnosis(
+            session,
+            identity.system.id,
+            identity.system.org_id,
+            body.question.strip(),
+            actor_id=actor_id,
+            external_request_id=body.request_id,
+            business_context=business_context or None,
+        )
+    except BudgetExceeded as exc:
+        raise HTTPException(429, str(exc), headers={"Retry-After": "30"})
     if started.id is None:
         raise HTTPException(500, "诊断任务创建失败")
     identity.token.last_used_at = datetime.now(timezone.utc)
