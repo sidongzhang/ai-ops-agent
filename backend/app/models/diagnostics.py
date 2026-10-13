@@ -41,6 +41,8 @@ class DiagnosisReport(SQLModel, table=True):
     # 运行心跳：reaper 据此判断"是否还有活着的 worker 在推进"，**不再只看创建时间**
     runner_id: str = Field(default="", max_length=64)
     runner_heartbeat_at: Optional[datetime] = Field(default=None)
+    # 继续（resume）：指向被继续的源报告；**唯一**约束保证"重复点击只启动一次"
+    resumed_from_report_id: Optional[int] = Field(default=None, index=True)
     # 用量完整性：有 usage ≠ 用量完整（取消落在模型请求在途时该请求用量不可得）
     usage_complete: bool = Field(default=True)
     usage_gap_reason: str = Field(default="", max_length=64)

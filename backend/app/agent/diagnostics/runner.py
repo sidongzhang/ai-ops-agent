@@ -122,6 +122,9 @@ def diagnose_with_details(
     on_progress: Callable[[dict], None] | None = None,
     cancel_token=None,
     on_phase: Callable[[str], None] | None = None,
+    message_history=None,
+    prior_usage=None,
+    prompt_override: str | None = None,
 ) -> DiagnosisRun:
     model = pick_model(question, model_mode=model_mode, model_name=model_name)
     model_name = model.model_name if hasattr(model, "model_name") else str(model)
@@ -175,7 +178,7 @@ def diagnose_with_details(
             image_count=len(images or []),
             cancel_token=cancel_token,
         )
-        prompt = _build_prompt(question, images)
+        prompt = prompt_override or _build_prompt(question, images)
         if on_phase is not None:
             on_phase("model_request")
         try:
@@ -187,6 +190,8 @@ def diagnose_with_details(
                 usage_limits=_usage_limits(),
                 capabilities=[ProcessHistory(compact_messages)],
                 cancellation_token=cancel_token,
+                message_history=message_history,
+                usage=prior_usage,
                 **_stream_kwargs(on_progress, on_phase),
             )
         except RunCancelled as exc:
@@ -221,6 +226,8 @@ def diagnose_with_details(
                         retries=3,
                         usage_limits=_usage_limits(),
                         cancellation_token=cancel_token,
+                        message_history=message_history,
+                        usage=prior_usage,
                         **_stream_kwargs(on_progress, on_phase),
                     )
                 except RunCancelled as cancel_exc:

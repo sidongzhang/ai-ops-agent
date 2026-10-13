@@ -72,6 +72,13 @@ class OpenMessagePageOut(PageOut[SystemMessageOut]):
     pass
 
 
+class OpenResumeIn(BaseModel):
+    """外部继续诊断的可选项。"""
+
+    force_refresh: bool = False
+    model_mode: Literal["auto", "default", "local", "api", "advanced"] = "auto"
+
+
 class OpenDiagnosisIn(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
     request_id: str = Field(default="", max_length=255)

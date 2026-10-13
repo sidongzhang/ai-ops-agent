@@ -34,6 +34,14 @@ class DiagnoseRequest(BaseModel):
     images: list[str] = Field(default_factory=list)
 
 
+class ResumeRequest(BaseModel):
+    """继续诊断的可选项（幂等：同一源报告只会真正执行一次）。"""
+
+    force_refresh: bool = False
+    model_mode: Literal["auto", "default", "local", "api", "advanced"] = "auto"
+    model_name: str = Field(default="", max_length=128)
+
+
 class DiagnoseResponse(BaseModel):
     id: int | None = None
     system_id: int
@@ -86,6 +94,17 @@ class DiagnosisReportOut(BaseModel):
     cancel_phase: str = ""
     # 是否还有可恢复历史（硬杀/关停宽限期耗尽 → False，不得宣称"可继续"）
     resumable: bool = False
+    # 派生态：当前是否**可以**继续（cancelled/failed 且有可恢复历史）
+    can_resume: bool = False
+    # 续跑链：本报告是从哪条报告继续来的
+    resumed_from_report_id: int | None = None
+    # 用量完整性（false = 含取不到的用量）+ 估算费用（价格表推算，非账单）
+    usage_complete: bool = True
+    usage_gap_reason: str = ""
+    cost_usd_estimated: float | None = None
+    # 会话累计（= 用量账本 SUM(delta)，与"本次 total_tokens"区分开，避免重复计数）
+    conversation_tokens: int = 0
+    conversation_cost_usd: float | None = None
     created_at: datetime
 
 

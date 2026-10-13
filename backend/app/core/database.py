@@ -39,6 +39,7 @@ _SQLITE_REQUIRED_COLUMNS = {
         "cancel_requested_at": "DATETIME",
         "cancelled_at": "DATETIME",
         "cancel_phase": "VARCHAR DEFAULT ''",
+        "resumed_from_report_id": "INTEGER",
     },
     "system_messages": {
         "incident_id": "INTEGER",

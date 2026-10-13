@@ -35,6 +35,7 @@ def save_diagnosis_report(
     knowledge_refs: list[dict] | None = None,
     business_context: dict | None = None,
     error_message: str = "",
+    resumed_from_report_id: int | None = None,
     commit: bool = True,
 ) -> DiagnosisReport:
     report = DiagnosisReport(
@@ -58,6 +59,7 @@ def save_diagnosis_report(
         knowledge_refs=knowledge_refs or [],
         business_context=business_context or {},
         error_message=error_message,
+        resumed_from_report_id=resumed_from_report_id,
     )
     session.add(report)
     if commit:

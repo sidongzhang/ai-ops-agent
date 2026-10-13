@@ -20,10 +20,14 @@ def save_run_state(
     run_id: str = "",
     usage_json: str = "",
     resumable: bool = True,
-) -> None:
-    """落库（upsert）。失败静默：状态保存绝不能拖垮诊断主流程。"""
+) -> bool:
+    """落库（upsert）。**返回是否真的存下来了**。
+
+    失败必须如实返回 False（调用方据此把 `resumable` 标成不可恢复）：
+    "历史保存失败却宣称可继续"会把用户带进一个必然失败的 resume。
+    """
     if not messages_json:
-        return
+        return False
     try:
         from app.core.database import engine
 
@@ -50,8 +54,47 @@ def save_run_state(
                 report.answer = "（诊断已被中断；已保留可恢复历史，可继续）"
                 session.add(report)
             session.commit()
+        return True
     except Exception as exc:  # noqa: BLE001
-        log.warning("[run_state] 保存失败 report=%s: %s", report_id, exc)
+        log.warning("[run_state] 保存失败 report=%s（该报告将标为不可恢复）: %s", report_id, exc)
+        _mark_unresumable_quiet(report_id)
+        return False
+
+
+def _mark_unresumable_quiet(report_id: int) -> None:
+    """尽力把 resumable 标成 false（保存失败时不能留一个"看起来能继续"的状态）。"""
+    try:
+        from app.core.database import engine
+
+        with Session(engine) as session:
+            row = session.get(DiagnosisRunState, report_id)
+            if row is None:
+                row = DiagnosisRunState(report_id=report_id, messages_json="", resumable=False)
+            else:
+                row.resumable = False
+            session.add(row)
+            session.commit()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[run_state] 标记不可恢复也失败 report=%s: %s", report_id, exc)
+
+
+def resumable_of(report_id: int, session: Session | None = None) -> bool:
+    """读取时计算"是否真的可继续"：历史存在**且能反序列化**才算。
+
+    不信任历史里的 `resumable` 标记本身——保存失败/写坏 JSON 都必须反映成 false，
+    否则就等于对用户宣称"可继续"，而 resume 必然失败。
+    """
+    state = load_run_state(report_id, session=session)
+    if state is None or not state.resumable or not state.messages_json:
+        return False
+    try:
+        from pydantic_ai.messages import ModelMessagesTypeAdapter
+
+        parsed = ModelMessagesTypeAdapter.validate_json(state.messages_json)
+        return bool(parsed)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("[run_state] report=%s 历史反序列化失败（视为不可恢复）: %s", report_id, exc)
+        return False
 
 
 def load_run_state(report_id: int, session: Session | None = None) -> DiagnosisRunState | None:

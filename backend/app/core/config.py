@@ -147,6 +147,13 @@ class Settings(BaseSettings):
     diagnosis_session_window_seconds: int = 600   # 滚动窗口（非按天归零）
     diagnosis_budget_reserve_tokens: int = 30000  # 提交时原子预留，覆盖并发
     diagnosis_budget_reserve_cost_usd: float = 0.1
+    # 证据时效（秒）：resume 时据此判断"哪些证据该重新取证"
+    evidence_stale_ttl: dict = {
+        "health": 180,
+        "metrics": 300,
+        "business": 900,
+        "static": 3600,
+    }
     trend_horizon_hours: float = 48.0      # 预测提前量：按当前增速预计多久触顶才提醒
     trend_retention_days: int = 7          # 指标样本保留天数
     trend_warn_ratio: float = 0.8          # 当前值达到阈值的该比例即预警（容量逼近）

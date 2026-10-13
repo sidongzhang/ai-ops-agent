@@ -11,6 +11,7 @@ from ..schemas import (
     DiagnosticTemplateSettingsUpdate,
     DiagnoseRequest,
     DiagnoseResponse,
+    ResumeRequest,
     DiagnosisHistoryClearOut,
     DiagnosisReportOut,
     KnowledgeExportRequest,
@@ -157,6 +158,58 @@ def cancel_diagnosis(
     }
 
 
+@router.post("/{system_id}/diagnosis-reports/{report_id}/resume", response_model=DiagnoseResponse)
+def resume_diagnosis(
+    system_id: int,
+    report_id: int,
+    background_tasks: BackgroundTasks,
+    body: ResumeRequest | None = None,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
+):
+    """继续一个被中断的诊断（**幂等**：同一源报告只会真正启动一次）。
+
+    - 源报告不可恢复（无历史/历史损坏/已成功）→ 409；
+    - 已被继续过 → 直接返回那条（不重复执行、不重复花钱）；
+    - 预算不足 → 429。
+    """
+    from ..services.diagnostics.resume import ResumeNotPossible
+    from ..services.diagnostics.service import start_resume
+    from ..services.diagnostics.usage import BudgetExceeded
+
+    opts = body or ResumeRequest()
+    try:
+        started, payload = start_resume(
+            session,
+            report_id,
+            system_id,
+            org_id,
+            actor_id=str(user.id) if user else "",
+            force_refresh=opts.force_refresh,
+        )
+    except ResumeNotPossible as exc:
+        raise HTTPException(409, str(exc))
+    except BudgetExceeded as exc:
+        raise HTTPException(429, str(exc), headers={"Retry-After": "30"})
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+    if payload is not None and started.id is not None:
+        background_tasks.add_task(
+            complete_diagnosis_report,
+            started.id,
+            system_id,
+            org_id,
+            "",
+            actor_id=str(user.id) if user else "",
+            model_mode=opts.model_mode,
+            model_name=opts.model_name,
+            resume_payload=payload,
+        )
+    return started
+
+
 @router.get("/{system_id}/diagnose/model-options")
 def get_diagnose_model_options(
     system_id: int,
@@ -192,17 +245,41 @@ def get_diagnosis_history_item(
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
 ):
-    from ..services.diagnostics.run_state import load_run_state
+    from ..services.diagnostics.resume import RESUMABLE_STATUSES
+    from ..services.diagnostics.run_state import resumable_of
 
     try:
         report = get_diagnosis_report(session, system_id, org_id, report_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
-    # resumable 来自运行状态表：false 表示"没拿到可恢复历史"（硬杀/关停超时），不得宣称可继续
-    state = load_run_state(report_id, session=session)
+    # resumable：读时计算（历史存在且能反序列化）；can_resume：还要状态允许
+    resumable = resumable_of(report_id, session=session)
+    # 会话累计：按 conversation_id 从用量账本 SUM(delta) 得到（与"本次消耗"区分）
+    conversation_tokens, conversation_cost = _conversation_usage(session, report, system_id, org_id)
     return report.model_copy(
-        update={"resumable": bool(state and state.resumable and state.messages_json)}
+        update={
+            "resumable": resumable,
+            "can_resume": bool(resumable and report.status in RESUMABLE_STATUSES),
+            "conversation_tokens": conversation_tokens,
+            "conversation_cost_usd": conversation_cost,
+        }
     )
+
+
+def _conversation_usage(session: Session, report, system_id: int, org_id: int) -> tuple[int, float]:
+    """按 conversation_id 汇总会话累计；续跑报告自身没有状态时回溯源报告的会话标识。"""
+    from ..models.run_state import DiagnosisRunState
+    from ..services.diagnostics.usage import session_usage
+
+    state = session.get(DiagnosisRunState, report.id)
+    conversation_id = (state.conversation_id if state else "") or ""
+    if not conversation_id and report.resumed_from_report_id:
+        src = session.get(DiagnosisRunState, report.resumed_from_report_id)
+        conversation_id = (src.conversation_id if src else "") or ""
+    if not conversation_id:
+        return int(report.total_tokens or 0), float(report.cost_usd_estimated or 0)
+    totals = session_usage(org_id, system_id, conversation_id=conversation_id, session=session)
+    return int(totals.get("tokens") or 0), float(totals.get("cost_usd") or 0)
 
 
 @router.post(

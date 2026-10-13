@@ -23,6 +23,7 @@ from app.schemas.openapi import (
     OpenMessagePageOut,
     OpenMessageStatusIn,
     OpenProductionReportIn,
+    OpenResumeIn,
 )
 from app.services.openapi import (
     get_open_message_by_request_id,
@@ -269,6 +270,55 @@ def cancel_external_diagnosis(
         "newly_set": newly,
         "local_token_hit": cancelled_locally,
     }
+
+
+@router.post("/diagnoses/{report_id}/resume", response_model=DiagnoseResponse, status_code=status.HTTP_202_ACCEPTED)
+def resume_external_diagnosis(
+    report_id: int,
+    background_tasks: BackgroundTasks,
+    body: OpenResumeIn | None = None,
+    identity: OpenApiIdentity = Depends(require_openapi_identity),
+    session: Session = Depends(get_session),
+):
+    """外部链路继续被中断的诊断（幂等）。ALGP/SVOM 用。"""
+    require_scope(identity, "diagnosis:run")
+    from app.services.diagnostics.resume import ResumeNotPossible
+    from app.services.diagnostics.service import start_resume
+    from app.services.diagnostics.usage import BudgetExceeded
+
+    opts = body or OpenResumeIn()
+    actor_id = f"openapi:{identity.token.id}:resume"
+    try:
+        started, payload = start_resume(
+            session,
+            report_id,
+            identity.system.id,
+            identity.system.org_id,
+            actor_id=actor_id,
+            force_refresh=opts.force_refresh,
+        )
+    except ResumeNotPossible as exc:
+        raise HTTPException(409, str(exc))
+    except BudgetExceeded as exc:
+        raise HTTPException(429, str(exc), headers={"Retry-After": "30"})
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+    if payload is not None and started.id is not None:
+        identity.token.last_used_at = datetime.now(timezone.utc)
+        session.add(identity.token)
+        session.commit()
+        background_tasks.add_task(
+            complete_diagnosis_report,
+            started.id,
+            identity.system.id,
+            identity.system.org_id,
+            "",
+            actor_id=actor_id,
+            model_mode=opts.model_mode,
+            resume_payload=payload,
+        )
+    return started
 
 
 @router.get("/diagnoses", response_model=list[DiagnosisReportOut])

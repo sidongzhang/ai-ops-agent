@@ -425,6 +425,106 @@ def start_diagnosis(
     )
 
 
+def start_resume(
+    session: Session,
+    source_report_id: int,
+    system_id: int,
+    org_id: int,
+    *,
+    actor_id: str = "",
+    force_refresh: bool = False,
+) -> tuple[DiagnoseResponse, dict | None]:
+    """继续一个被中断的诊断（**幂等**）。
+
+    返回 (响应, 续跑载荷)。载荷为 None 表示"已经有人继续过"，本次不启动新执行。
+    """
+    from app.services.diagnostics.resume import (
+        ResumeNotPossible,
+        find_existing_resume,
+        prepare_resume,
+    )
+    from app.services.diagnostics.usage import BudgetExceeded, release_budget, reserve_budget
+
+    system = require_system(session, system_id, org_id)
+    source = session.get(DiagnosisReport, source_report_id)
+    if not source or source.org_id != org_id or source.system_id != system.id:
+        raise LookupError("诊断报告不存在")
+
+    # 幂等：同一源报告只允许被继续一次
+    existing = find_existing_resume(session, source.id)
+    if existing is not None:
+        return (
+            _build_diagnose_response(
+                report_id=existing.id,
+                system_id=system.id,
+                status=existing.status,
+                answer=existing.answer or "该诊断已继续过，正在执行或已完成",
+            ),
+            None,
+        )
+
+    payload = prepare_resume(session, source, force_refresh=force_refresh)
+    user_id = _user_id_from_actor(actor_id) or 0
+    budget = reserve_budget(org_id=org_id, user_id=user_id, system_id=system.id)
+    if not budget["allowed"]:
+        raise BudgetExceeded("会话预算不足（滚动窗口内累计用量已达上限）", budget)
+
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        report = save_diagnosis_report(
+            session,
+            org_id=org_id,
+            system_id=system.id,
+            user_id=user_id or None,
+            report_type="diagnose",
+            question=source.question or "（继续上次诊断）",
+            status="running",
+            answer="",
+            business_context={"resume": {"from_report_id": source.id, "force_refresh": force_refresh},
+                              "images": (source.business_context or {}).get("images", [])},
+            resumed_from_report_id=source.id,      # 唯一约束：并发/重复点击只有一个赢
+            commit=True,
+        )
+    except IntegrityError:
+        # 并发点击：另一个请求刚插入成功 → 回滚预算、返回已存在的那条
+        session.rollback()
+        release_budget(org_id=org_id, user_id=user_id, system_id=system.id)
+        existing = find_existing_resume(session, source.id)
+        if existing is None:
+            raise
+        return (
+            _build_diagnose_response(
+                report_id=existing.id, system_id=system.id, status=existing.status,
+                answer=existing.answer or "该诊断已继续过，正在执行或已完成",
+            ),
+            None,
+        )
+
+    record_audit_event(
+        session,
+        org_id=org_id,
+        system_id=system.id,
+        actor_type="user",
+        actor_id=actor_id,
+        event_type="diagnosis.resume_started",
+        target_type="diagnosis",
+        target_id=str(report.id),
+        input={"from_report_id": source.id, "force_refresh": force_refresh,
+               "stale_evidence": len(payload.get("stale") or [])},
+        commit=True,
+    )
+    return (
+        _build_diagnose_response(
+            report_id=report.id,
+            system_id=system.id,
+            status="running",
+            answer="正在继续上次被中断的诊断…",
+        ),
+        payload,
+    )
+
+
 def _finalize_report(
     report_id: int,
     org_id: int,
@@ -434,8 +534,12 @@ def _finalize_report(
     result: DiagnoseResponse | None = None,
     error: str = "",
     cancel_phase: str = "",
+    total_tokens_override: int | None = None,
 ) -> bool:
     """**原子条件**写终态：`UPDATE … WHERE status='running'`，返回是否本次写入成功。
+
+    口径：`total_tokens` 表示**本次运行自身**的消耗（resume 时框架给的是含前次的累计值，
+    不能直接落库，否则报告视图会把上一段诊断重复算进来）。会话累计由用量账本 SUM(delta) 提供。
 
     旧实现是"读 → 判断 status == running → 写"，两个写者（比如运行方落 success 与
     关停路径落 cancelled 同时发生）可能都读到 running 然后互相覆盖。现在把条件放进
@@ -454,7 +558,9 @@ def _finalize_report(
                 "template_description": result.template_description,
                 "model": result.model,
                 "duration_ms": result.duration_ms,
-                "total_tokens": result.total_tokens,
+                "total_tokens": (
+                    result.total_tokens if total_tokens_override is None else total_tokens_override
+                ),
                 "evidence_sources": result.evidence_sources,
                 "evidence_steps": result.evidence_steps,
                 "tool_calls": result.tool_calls,
@@ -476,7 +582,9 @@ def _finalize_report(
                 {
                     "model": result.model,
                     "duration_ms": result.duration_ms,
-                    "total_tokens": result.total_tokens,
+                    "total_tokens": (
+                        result.total_tokens if total_tokens_override is None else total_tokens_override
+                    ),
                     "tool_calls": result.tool_calls,
                 }
             )
@@ -517,6 +625,7 @@ def complete_diagnosis_report(
     model_name: str = "",
     follow_up_report_id: int | None = None,
     images: list[tuple[str, bytes]] | None = None,
+    resume_payload: dict | None = None,
 ) -> None:
     from app.core.database import engine
     from app.services.diagnostics import cancel_bus
@@ -555,6 +664,9 @@ def complete_diagnosis_report(
                     images=images,
                     cancel_token=token,
                     on_phase=lambda phase: cancel_bus.set_phase(report_id, phase),
+                    message_history=_resume_history(resume_payload),
+                    prior_usage=_resume_prior_usage(resume_payload),
+                    prompt_override=(resume_payload or {}).get("note"),
                 )
             except Exception as exc:  # noqa: BLE001
                 log.exception("[diagnose] 诊断执行失败 report_id=%s", report_id)
@@ -569,7 +681,7 @@ def complete_diagnosis_report(
                 return
 
         # ── 记账：必须在覆盖 run_state 的"框架累计"之前算增量 ──────────────
-        _record_usage_and_settle(
+        usage_summary = _record_usage_and_settle(
             report_id=report_id,
             org_id=org_id,
             system_id=system_id,
@@ -577,6 +689,8 @@ def complete_diagnosis_report(
             result=result,
             cancelled=bool(getattr(result, "cancelled", False)),
             cancel_phase=cancel_bus.current_phase(report_id),
+            run_kind="resume" if resume_payload else "initial",
+            baseline_json=(resume_payload or {}).get("baseline_json") or "",
         )
 
         # 中断：原生 RunCancelled 已转成可恢复结果 → 落 cancelled + 保存完整消息历史，且**不写记忆**
@@ -589,6 +703,7 @@ def complete_diagnosis_report(
                     status="cancelled",
                     result=result,
                     cancel_phase=cancel_bus.current_phase(report_id),
+                    total_tokens_override=usage_summary.get("tokens_delta"),
                 )
             except Exception:  # noqa: BLE001
                 log.exception("[diagnose] 写入取消状态失败 report_id=%s", report_id)
@@ -603,7 +718,10 @@ def complete_diagnosis_report(
             return
 
         try:
-            _finalize_report(report_id, org_id, system_id, status="success", result=result)
+            _finalize_report(
+                report_id, org_id, system_id, status="success", result=result,
+                total_tokens_override=usage_summary.get("tokens_delta"),
+            )
         except Exception:  # noqa: BLE001
             log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
         # 可恢复历史：正常完成也保存（后续可按 conversation 继续，且是"追加提问"的原生基础）
@@ -636,6 +754,18 @@ def complete_diagnosis_report(
         )
 
 
+def _resume_history(payload: dict | None):
+    if not payload:
+        return None
+    from app.services.diagnostics.resume import load_history_for_run
+
+    return load_history_for_run(payload)
+
+
+def _resume_prior_usage(payload: dict | None):
+    return (payload or {}).get("prior_usage")
+
+
 def _record_usage_and_settle(
     *,
     report_id: int,
@@ -645,7 +775,9 @@ def _record_usage_and_settle(
     result,
     cancelled: bool,
     cancel_phase: str,
-) -> None:
+    run_kind: str = "initial",
+    baseline_json: str = "",
+) -> dict:
     """增量记账 + 结算会话预算（未知用量按保守预留，不当免费）。
 
     必须在覆盖 `diagnosis_run_state.framework_cumulative_json` **之前**调用，
@@ -656,19 +788,29 @@ def _record_usage_and_settle(
     from app.services.diagnostics.usage import record_run_usage, settle_budget
 
     try:
-        prev_cumulative = ""
+        prev_cumulative = baseline_json or ""
         prev_conversation = ""
         with Session(engine) as session:
             state = session.get(DiagnosisRunState, report_id)
             if state is not None:
-                prev_cumulative = state.framework_cumulative_json or ""
+                if not prev_cumulative:
+                    prev_cumulative = state.framework_cumulative_json or ""
                 prev_conversation = state.conversation_id or ""
+            elif baseline_json:
+                # 续跑：新报告还没有 run_state，会话标识沿用源报告的
+                from app.models.diagnostics import DiagnosisReport as _R
+
+                _report = session.get(_R, report_id)
+                if _report is not None and _report.resumed_from_report_id:
+                    src_state = session.get(DiagnosisRunState, _report.resumed_from_report_id)
+                    if src_state is not None:
+                        prev_conversation = src_state.conversation_id or ""
         summary = record_run_usage(
             report_id=report_id,
             org_id=org_id,
             system_id=system_id,
             conversation_id=getattr(result, "conversation_id", "") or prev_conversation,
-            run_kind="initial",
+            run_kind=run_kind,
             usage_json=getattr(result, "usage_json", "") or "",
             cancelled=cancelled,
             cancel_phase=cancel_phase,
@@ -681,8 +823,10 @@ def _record_usage_and_settle(
             tokens=summary.get("settle_tokens", 0),
             cost_usd=summary.get("cost_delta", 0.0),
         )
+        return summary
     except Exception:  # noqa: BLE001 - 记账失败不能影响诊断收尾
         log.exception("[diagnose] 用量记账失败 report_id=%s", report_id)
+        return {}
 
 
 def diagnose_system(
@@ -701,6 +845,9 @@ def diagnose_system(
     images: list[tuple[str, bytes]] | None = None,
     cancel_token=None,
     on_phase=None,
+    message_history=None,
+    prior_usage=None,
+    prompt_override: str | None = None,
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
     started_at = time.monotonic()
@@ -833,6 +980,9 @@ def diagnose_system(
             images=images,
             cancel_token=cancel_token,
             on_phase=on_phase,
+            message_history=message_history,
+            prior_usage=prior_usage,
+            prompt_override=prompt_override,
         )
     except Exception as exc:
         if _is_kafka_lag_question(question):
