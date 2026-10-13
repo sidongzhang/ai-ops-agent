@@ -125,6 +125,7 @@ class LocalModelPreflightTests(unittest.TestCase):
         （实测：7B 放不下内存时，没有超时的诊断会挂 >8 分钟 0 输出，用户以为平台坏了。）
         """
         from app.agent.llm import endpoint_for_mode, make_chat_model
+        from app.core.config import settings
 
         model = make_chat_model(endpoint_for_mode("local"))
         client = getattr(getattr(model, "_provider", None), "_client", None)
@@ -132,7 +133,10 @@ class LocalModelPreflightTests(unittest.TestCase):
         self.assertIsNotNone(timeout, "本地模型应使用带超时的 OpenAI 客户端")
         read = getattr(timeout, "read", None)
         self.assertIsNotNone(read, "本地客户端应设置 read 超时")
-        self.assertLessEqual(float(read), 600.0, "本地模型读超时必须有界（防卡死）")
+        # 与配置一致，且必须"有界"（不可能是无限等待）
+        self.assertEqual(float(read), float(settings.llm_local_timeout_seconds))
+        self.assertGreater(float(read), 0.0)
+        self.assertLess(float(read), 24 * 3600, "本地模型读超时必须是个有限值（防卡死）")
 
     def test_local_model_timeout_is_configurable(self) -> None:
         from app.agent.llm import endpoint_for_mode, make_chat_model
