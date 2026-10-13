@@ -76,6 +76,16 @@ function buildAgentMessageFromReport(report) {
     knowledgeRefs: report.knowledge_refs || [],
     imageMeta: (report.business_context || {}).images || [],
     createdAt: report.created_at,
+    // 用量/成本：本次 vs 会话累计（cost 是价格表估算，界面标 ≈）
+    totalTokens: report.total_tokens || 0,
+    conversationTokens: report.conversation_tokens || 0,
+    costUsd: report.cost_usd_estimated,
+    conversationCostUsd: report.conversation_cost_usd,
+    usageComplete: report.usage_complete !== false,
+    usageGapReason: report.usage_gap_reason || '',
+    cancelPhase: report.cancel_phase || '',
+    canResume: !!report.can_resume,
+    resumedFrom: report.resumed_from_report_id || null,
   }
 }
 
@@ -97,7 +107,7 @@ async function waitForDiagnosisReport(systemId, reportId, onRunningUpdate) {
   while (Date.now() - startedAt < DIAGNOSIS_POLL_TIMEOUT_MS) {
     await sleep(DIAGNOSIS_POLL_INTERVAL_MS)
     const { data } = await api.get(`/systems/${systemId}/diagnosis-reports/${reportId}`)
-    if (data.status === 'success' || data.status === 'failed') {
+    if (data.status === 'success' || data.status === 'failed' || data.status === 'cancelled') {
       return data
     }
     // 运行中：把后端逐事件落库的证据链透给 UI，实时渲染工具链
@@ -133,6 +143,8 @@ export function useDiagnosisChat(systemId) {
   const messages = ref([])
   const historyLoading = ref(false)
   const diagnosing = ref(false)
+  const stopping = ref(false)
+  const activeReportId = ref(null)
   const fixing = ref(false)
   const chatBox = ref(null)
   const lastReportId = ref(null)
@@ -306,6 +318,7 @@ export function useDiagnosisChat(systemId) {
         body.follow_up_report_id = lastReportId.value
       }
       const { data } = await api.post(`/systems/${systemId}/diagnose`, body)
+      activeReportId.value = data.id || null
       if (data.status === 'running' && data.id) {
         const report = await waitForDiagnosisReport(systemId, data.id, (partial) => {
           const steps = partial.evidence || []
@@ -322,6 +335,8 @@ export function useDiagnosisChat(systemId) {
         messages.value[pendingIndex] = buildAgentMessageFromReport(report)
         if (report.status === 'failed') {
           message.error(report.error_message || '诊断失败')
+        } else if (report.status === 'cancelled') {
+          message.info('诊断已停止' + (report.can_resume ? '，可点击「继续」接着跑' : ''))
         }
       } else {
         messages.value[pendingIndex] = buildAgentMessageFromDiagnose(data)
@@ -337,6 +352,64 @@ export function useDiagnosisChat(systemId) {
       }
     } finally {
       diagnosing.value = false
+      stopping.value = false
+      activeReportId.value = null
+      await scrollBottom()
+    }
+  }
+
+  /** 停止当前正在跑的诊断（幂等；后端保证重复点击只有一次生效）。 */
+  async function cancelDiagnosis() {
+    const rid = activeReportId.value
+    if (!rid || stopping.value) return
+    stopping.value = true
+    try {
+      await api.post(`/systems/${systemId}/diagnosis-reports/${rid}/cancel`)
+      message.info('已发送停止请求，正在收尾…')
+    } catch (error) {
+      stopping.value = false
+      message.error(extractErrorMessage(error, '停止失败'))
+    }
+  }
+
+  /** 继续被中断的诊断（幂等：同一源报告只会真正启动一次）。 */
+  async function resumeDiagnosis(msgIndex, forceRefresh = false) {
+    const msg = messages.value[msgIndex]
+    const srcId = msg?.reportId
+    if (!srcId) return
+    diagnosing.value = true
+    const holder = { role: 'agent', status: 'running', text: '正在继续上次被中断的诊断…' }
+    messages.value[msgIndex] = holder
+    await scrollBottom()
+    try {
+      const { data } = await api.post(
+        `/systems/${systemId}/diagnosis-reports/${srcId}/resume`,
+        { force_refresh: forceRefresh },
+      )
+      activeReportId.value = data.id
+      if (data.status === 'running' && data.id) {
+        const report = await waitForDiagnosisReport(systemId, data.id, (partial) => {
+          const steps = partial.evidence || []
+          if (steps.length) {
+            const done = steps.filter((s) => s.status !== 'started').length
+            messages.value[msgIndex] = { ...holder, text: `继续执行中，已完成 ${done}/${steps.length} 步取证…`, liveSteps: steps }
+          }
+        })
+        messages.value[msgIndex] = buildAgentMessageFromReport(report)
+        if (report.status === 'failed') message.error(report.error_message || '继续执行失败')
+      } else {
+        // 已经有人继续过：直接渲染那条报告
+        messages.value[msgIndex] = buildAgentMessageFromReport(data)
+      }
+      if (data.id) lastReportId.value = data.id
+    } catch (error) {
+      messages.value[msgIndex] = {
+        role: 'agent', status: 'failed', text: `⚠️ 继续失败：${extractErrorMessage(error, '继续失败')}`,
+      }
+    } finally {
+      diagnosing.value = false
+      stopping.value = false
+      activeReportId.value = null
       await scrollBottom()
     }
   }
@@ -405,6 +478,9 @@ export function useDiagnosisChat(systemId) {
 
   return {
     ask,
+    cancelDiagnosis,
+    resumeDiagnosis,
+    stopping,
     requestFix,
     decide,
     chatBox,

@@ -12,6 +12,9 @@ const props = defineProps({
 
 const {
   ask,
+  cancelDiagnosis,
+  resumeDiagnosis,
+  stopping,
   requestFix,
   decide,
   chatBox,
@@ -57,6 +60,14 @@ function onPasteImage(event) {
     event.preventDefault()
     addImageFiles(files)
   }
+}
+
+// 成本展示：0 且有用量 → 说明框架没给出成本（不能显示成"免费"）
+function costText(cost, tokens) {
+  if (cost == null) return ''
+  if (!tokens) return ''
+  if (cost > 0) return `≈¥${(cost * 7.2).toFixed(4)}`
+  return '≈成本未知'
 }
 
 function previewImage(url) {
@@ -245,6 +256,14 @@ function modelOptionLabel(option) {
               <template v-if="message.status === 'running'">
                 <a-spin size="small" class="bubble__spin" />
                 <span v-html="renderMd(message.text)" />
+                <a-button
+                  class="stop-btn"
+                  size="small"
+                  danger
+                  :loading="stopping"
+                  :disabled="stopping"
+                  @click="cancelDiagnosis"
+                >{{ stopping ? '正在停止…' : '停止' }}</a-button>
                 <ul v-if="message.liveSteps?.length" class="bubble__live-steps">
                   <li
                     v-for="step in message.liveSteps"
@@ -301,6 +320,30 @@ function modelOptionLabel(option) {
               :report-id="message.reportId"
               :report-type="message.reportType"
             />
+
+            <!-- 已停止：给「继续 / 强制刷新继续」；不可恢复时明确说明（不谎称可继续） -->
+            <div v-if="message.status === 'cancelled'" class="cancelled-bar">
+              <span class="cancelled-note">
+                已停止<template v-if="message.cancelPhase === 'model_request'">（当时正在等模型回复）</template>
+              </span>
+              <template v-if="message.canResume">
+                <a-button size="small" type="primary" :loading="diagnosing" @click="resumeDiagnosis(index)">继续</a-button>
+                <a-button size="small" :loading="diagnosing" @click="resumeDiagnosis(index, true)">强制刷新继续</a-button>
+              </template>
+              <span v-else class="cancelled-note">未取得可恢复历史，无法继续</span>
+            </div>
+
+            <!-- 用量/成本：本次 vs 会话累计；cost 为价格表估算（界面标 ≈，含估算时标注） -->
+            <div v-if="message.status !== 'running' && message.totalTokens" class="usage-line">
+              本次 {{ message.totalTokens }} tokens
+              <template v-if="costText(message.costUsd, message.totalTokens)"> · {{ costText(message.costUsd, message.totalTokens) }}</template>
+              <template v-if="message.conversationTokens && message.conversationTokens !== message.totalTokens">
+                ｜本会话累计 {{ message.conversationTokens }} tokens
+                <template v-if="costText(message.conversationCostUsd, message.conversationTokens)"> {{ costText(message.conversationCostUsd, message.conversationTokens) }}</template>
+              </template>
+              <span v-if="message.usageComplete === false" class="usage-warn" :title="message.usageGapReason">（含估算部分）</span>
+              <span class="usage-note">费用为估算值</span>
+            </div>
           </div>
         </div>
 
@@ -690,6 +733,14 @@ function modelOptionLabel(option) {
   border: none; border-radius: 50%; background: rgba(0, 0, 0, .65); color: #fff; font-size: 12px; cursor: pointer; padding: 0;
 }
 .image-pick-btn { flex: 0 0 auto; }
+.stop-btn { margin-left: 10px; }
+.cancelled-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+  padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, #faad14 12%, transparent);
+  border: 1px solid color-mix(in srgb, #faad14 35%, transparent); }
+.cancelled-note { font-size: 12px; color: var(--text-muted, #8a8f98); }
+.usage-line { margin-top: 6px; font-size: 11px; color: var(--text-muted, #8a8f98); }
+.usage-warn { color: #faad14; margin-left: 4px; }
+.usage-note { margin-left: 6px; opacity: .75; }
 .user-bubble-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .user-images { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .user-image-thumb {

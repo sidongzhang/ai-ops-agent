@@ -695,6 +695,16 @@ def complete_diagnosis_report(
 
         # 中断：原生 RunCancelled 已转成可恢复结果 → 落 cancelled + 保存完整消息历史，且**不写记忆**
         if getattr(result, "cancelled", False):
+            # 顺序很重要：**先落历史，再落终态**。客户端看到 status=cancelled 就会停止轮询，
+            # 若历史还没落库，就会把"可继续"误显示为"未取得可恢复历史"。
+            save_run_state(
+                report_id,
+                messages_json=getattr(result, "messages_json", "") or "",
+                conversation_id=getattr(result, "conversation_id", "") or "",
+                run_id=getattr(result, "run_id", "") or "",
+                usage_json=getattr(result, "usage_json", "") or "",
+                resumable=bool(getattr(result, "messages_json", "")),
+            )
             try:
                 _finalize_report(
                     report_id,
@@ -707,24 +717,9 @@ def complete_diagnosis_report(
                 )
             except Exception:  # noqa: BLE001
                 log.exception("[diagnose] 写入取消状态失败 report_id=%s", report_id)
-            save_run_state(
-                report_id,
-                messages_json=getattr(result, "messages_json", "") or "",
-                conversation_id=getattr(result, "conversation_id", "") or "",
-                run_id=getattr(result, "run_id", "") or "",
-                usage_json=getattr(result, "usage_json", "") or "",
-                resumable=bool(getattr(result, "messages_json", "")),
-            )
             return
 
-        try:
-            _finalize_report(
-                report_id, org_id, system_id, status="success", result=result,
-                total_tokens_override=usage_summary.get("tokens_delta"),
-            )
-        except Exception:  # noqa: BLE001
-            log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
-        # 可恢复历史：正常完成也保存（后续可按 conversation 继续，且是"追加提问"的原生基础）
+        # 可恢复历史：先落库，再落终态（保证"看到终态时，可恢复性已确定"）
         save_run_state(
             report_id,
             messages_json=getattr(result, "messages_json", "") or "",
@@ -733,6 +728,13 @@ def complete_diagnosis_report(
             usage_json=getattr(result, "usage_json", "") or "",
             resumable=bool(getattr(result, "messages_json", "")),
         )
+        try:
+            _finalize_report(
+                report_id, org_id, system_id, status="success", result=result,
+                total_tokens_override=usage_summary.get("tokens_delta"),
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
     finally:
         # 结束时注销注册表并放行 poller（done 事件），避免线程与内存泄漏
         cancel_bus.unregister(report_id)
