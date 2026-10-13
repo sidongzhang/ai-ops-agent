@@ -55,7 +55,12 @@ TOOL_NAMES: tuple[str, ...] = (
     "search_knowledge_base",
 )
 
-TOP_LEVEL_FIELDS = ("id", "fault_type", "difficulty", "system_id", "question", "ground_truth", "inject", "setup", "teardown")
+TOP_LEVEL_FIELDS = ("id", "fault_type", "difficulty", "system_id", "question", "ground_truth",
+                    "inject", "setup", "teardown")
+#: 可选顶层字段（缺省即可）
+#: knowledge_only：知识库型用例——答案应来自知识库（可能已预注入系统提示），**不要求**调工具；
+#: 打分时会跳过工具指标，避免把"没调工具"判成失败、也不污染 Tool-F1。
+OPTIONAL_TOP_LEVEL_FIELDS = ("knowledge_only",)
 GROUND_TRUTH_FIELDS = ("root_cause", "evidence_keys", "required_tools", "forbidden_conclusion")
 INJECT_FIELDS = ("action", "target", "command")
 
@@ -131,6 +136,8 @@ def validate_cases(cases: Sequence[dict]) -> list[str]:
         for field in TOP_LEVEL_FIELDS:
             if field not in case:
                 errors.append(f"{where}: 缺少字段 {field}")
+        if "knowledge_only" in case and not isinstance(case["knowledge_only"], bool):
+            errors.append(f"{where}: knowledge_only 必须是布尔值")
 
         if not isinstance(case_id, str) or not case_id.strip():
             errors.append(f"{where}: id 必须是非空字符串")

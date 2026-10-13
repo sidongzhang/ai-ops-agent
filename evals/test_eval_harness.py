@@ -155,6 +155,37 @@ def test_metrics_missing_required_tool():
     assert "未命中必需工具" in "、".join(metrics.failure_reasons(row))
 
 
+def test_knowledge_only_case_needs_no_tool_but_needs_evidence():
+    """知识库型用例：答案来自知识库（可能已预注入提示），**不该**因没调工具判失败。
+
+    但证据词仍然必须命中——否则"RAG 检索坏掉"（命中不到文档内容）就漏过去了，
+    这正是我们要防的回归（曾出现索引里全是标题碎片、检索到了却答不出）。
+    """
+    case = _case()
+    case["knowledge_only"] = True
+    case["ground_truth"] = {**case["ground_truth"], "required_tools": []}
+
+    good = metrics.score_case(case, _record("**结论**：maxmemory 打满导致 evicted_keys 增长", []))
+    assert good["task_success"] == 1, "没调工具但有证据 → 应判成功"
+    assert good["tool_f1"] is None, "工具指标应为空（不计入聚合，避免污染 Tool-F1）"
+
+    bad = metrics.score_case(case, _record("**结论**：一切正常，未发现异常", []))
+    assert bad["task_success"] == 0, "没有命中任何证据词 → 必须判失败"
+
+
+def test_metrics_aggregate_skips_knowledge_only_rows_for_tools():
+    case = _case()
+    case["knowledge_only"] = True
+    case["ground_truth"] = {**case["ground_truth"], "required_tools": []}
+    rows = [
+        metrics.score_case(case, _record("maxmemory 打满导致 evicted_keys 增长", [])),
+        metrics.score_case(_case(), _record("maxmemory 打满导致 evicted_keys 增长",
+                                            [_call("run_redis_command", {"command": "INFO memory"})])),
+    ]
+    agg = metrics.aggregate(rows)
+    assert agg["tool_selection_f1"] == 1.0, "知识库型用例应被排除，F1 只由真实用例决定"
+
+
 def test_metrics_forbidden_conclusion_hits():
     case = _case()
     record = _record(

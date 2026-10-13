@@ -223,6 +223,26 @@ def build_system_prompt(deps: AgentDeps) -> str:
     return "\n\n".join(stable + volatile)
 
 
+def _sub_deps(ctx: RunContext[AgentDeps], task: str) -> AgentDeps:
+    """构造**子代理**的 deps。要点：必须把知识库上下文传下去。
+
+    知识库内容是通过系统提示注入的（与模型无关），但子代理是**另一份 deps**：
+    早期实现漏了 `knowledge_context`，于是"委派取证"这条路上真正干活的子代理手里没有文档，
+    只能靠工具现查。实测 #273（本地 3B 把活儿委派给 investigate）：最终答案完全没有文档内容。
+    """
+    return AgentDeps(
+        descriptor=ctx.deps.descriptor,
+        question=task,
+        remote_command=ctx.deps.remote_command,
+        business_data_query=ctx.deps.business_data_query,
+        business_dataset_query=ctx.deps.business_dataset_query,
+        knowledge_context=ctx.deps.knowledge_context,
+        clock_hint=ctx.deps.clock_hint,
+        tool_cache=ctx.deps.tool_cache,  # 共享缓存：子代理查过的主代理侧不再重复
+        cancel_token=ctx.deps.cancel_token,  # 同一个 token 取消主代理 + 所有子代理
+    )
+
+
 def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
     @agent.system_prompt
     def system_prompt(ctx: RunContext[AgentDeps]) -> str:
@@ -458,15 +478,7 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         from .investigator import get_evidence_agent
         from .models import default_model
 
-        sub_deps = AgentDeps(
-            descriptor=ctx.deps.descriptor,
-            question=task,
-            remote_command=ctx.deps.remote_command,
-            business_data_query=ctx.deps.business_data_query,
-            business_dataset_query=ctx.deps.business_dataset_query,
-            tool_cache=ctx.deps.tool_cache,  # 共享缓存：子代理查过的主代理侧不再重复
-            cancel_token=ctx.deps.cancel_token,  # 同一个 token 取消主代理 + 所有子代理
-        )
+        sub_deps = _sub_deps(ctx, task)
         # 子代理工具调用冒泡：同一份规范化载荷同时写进主 deps 的 nested_tool_calls
         # （审计链/评分/轨迹可见）与主代理的 progress_sink（证据链与前端实时工具链）。
         main_nested = ctx.deps.nested_tool_calls

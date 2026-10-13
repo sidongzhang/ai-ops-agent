@@ -29,12 +29,17 @@ log = logging.getLogger(__name__)
 DOCS_ROOT = Path(__file__).parent / "docs"
 CHUNK_SIZE = 400
 CHUNK_OVERLAP = 60
+CHUNK_MIN_CHARS = 120    # 过短的片段（标题碎片）会被合并进相邻块，不单独进索引
+RETRIEVAL_MIN_CHARS = 60  # 检索时过滤过短块（兜底：旧索引里的碎片块）
+CHUNKER_VERSION = "2026-10-13-section-aware-v1"  # 参与指纹：改分块逻辑必须能触发重建
 TOP_K = 6
 MAX_CHARS = 3000
 MIN_SCORE = 0.3          # 语义命中最低相似度（与旧版一致）
 RERANK_POOL = 16         # 重排前的候选池大小
 EMBED_BATCH = 16         # 单次 embedding 请求的最大文本数（避免大请求超时）
 SYNC_FAIL_COOLDOWN = 120.0  # 索引同步失败后的冷却秒数（避免每次检索都卡住重试）
+
+_HEADING_RE = re.compile(r"^#{1,6}\s+\S")
 
 # 进程内缓存：指纹 / 同步失败冷却
 _fingerprint_cache: dict[str, str] = {}
@@ -91,23 +96,88 @@ def _vec_literal(vec: list[float]) -> str:
 # ── 文本分块 ──────────────────────────────────────────────────
 
 def _chunk(text: str) -> list[str]:
-    paras = [p.strip() for p in re.split(r"\n{2,}", text) if p.strip()]
-    chunks = []
-    for para in paras:
+    """按 markdown **分节**切块，并把过短片段合并。
+
+    为什么不用"按空行切"：markdown 的**标题行本身就自成一段**，按空行切会让标题变成
+    独立小块。实测 system 3 的索引 351 块里 **172 块不足 20 字**（"约束与规则："之类），
+    而短文本的向量相似度又容易偏高 → 把真正的正文块挤出 top-k，
+    表现为「检索到了却答不出」（报告 #273：注入 180 字全是标题碎片）。
+
+    现在的做法：
+      1) 以标题为界分组，**标题与其后的正文绑在同一组**；
+      2) 组超长（> CHUNK_SIZE）时按段切开，并给每片**带上标题**（保留语义上下文）；
+      3) 仍短于 CHUNK_MIN_CHARS 的相邻片**合并**，不留碎片块。
+    """
+    groups: list[str] = []
+    buf: list[str] = []
+
+    def flush() -> None:
+        body = "\n".join(buf).strip()
+        if body:
+            groups.append(body)
+
+    for line in text.splitlines():
+        if _HEADING_RE.match(line.strip()):
+            flush()
+            buf = [line]
+        else:
+            buf.append(line)
+    flush()
+
+    chunks: list[str] = []
+    for group in groups:
+        chunks.extend(_split_group(group))
+    return _merge_short(chunks)
+
+
+def _split_group(group: str) -> list[str]:
+    """把一组（标题 + 正文）切成不超过 CHUNK_SIZE 的片段，每片都带上标题。"""
+    lines = group.splitlines()
+    has_heading = bool(lines) and bool(_HEADING_RE.match(lines[0].strip()))
+    heading = lines[0].strip() if has_heading else ""
+    body = "\n".join(lines[1:] if has_heading else lines).strip()
+    if not body:
+        return [group.strip()]          # 只有标题（后面可能紧跟别的组）→ 交给合并处理
+    if len(group) <= CHUNK_SIZE:
+        return [group.strip()]
+    pieces: list[str] = []
+    for para in [p.strip() for p in re.split(r"\n{2,}", body) if p.strip()]:
         if len(para) <= CHUNK_SIZE:
-            chunks.append(para)
+            pieces.append(para)
         else:
             start = 0
             while start < len(para):
-                chunks.append(para[start: start + CHUNK_SIZE])
+                pieces.append(para[start: start + CHUNK_SIZE])
                 start += CHUNK_SIZE - CHUNK_OVERLAP
-    return chunks
+    if heading:
+        return [f"{heading}\n{piece}" for piece in pieces]
+    return pieces
+
+
+def _merge_short(chunks: list[str]) -> list[str]:
+    """把过短片段与相邻片段合并（避免标题碎片单独成块）。"""
+    merged: list[str] = []
+    pending = ""
+    for chunk in chunks:
+        candidate = f"{pending}\n{chunk}".strip() if pending else chunk
+        if len(candidate) < CHUNK_MIN_CHARS:
+            pending = candidate
+            continue
+        merged.append(candidate)
+        pending = ""
+    if pending:
+        if merged:
+            merged[-1] = f"{merged[-1]}\n{pending}".strip()
+        else:
+            merged.append(pending)
+    return merged
 
 
 # ── 指纹（文档变更检测）──────────────────────────────────────
 
 def _fingerprint(docs_dir: Path) -> str:
     h = hashlib.md5()
+    h.update(CHUNKER_VERSION.encode())   # 分块逻辑变了也要触发重建（否则旧碎片索引会一直用下去）
     for f in sorted(docs_dir.glob("*.md")) + sorted(docs_dir.glob("*.txt")):
         h.update(str(f.stat().st_mtime).encode())
     return h.hexdigest()
@@ -331,10 +401,17 @@ def _vector_hits(query: str, system_id: str) -> list[dict]:
                            embedding <=> CAST(:qv AS vector) AS distance
                     FROM knowledge_chunks
                     WHERE system_id = :sid
+                      AND length(content) >= :min_chars
                     ORDER BY embedding <=> CAST(:qv AS vector)
                     LIMIT :k
                 """),
-                {"qv": _vec_literal(qv[0]), "sid": sid, "k": RERANK_POOL},
+                {
+                    "qv": _vec_literal(qv[0]),
+                    "sid": sid,
+                    "k": RERANK_POOL,
+                    # 兜底过滤：旧索引里可能还留着"标题碎片"块（分块修复后重建即消失）
+                    "min_chars": RETRIEVAL_MIN_CHARS,
+                },
             ).all()
         hits: list[dict] = []
         for source, content, distance in rows:
@@ -364,7 +441,10 @@ def _keyword_hits(query: str, system_id: str) -> list[dict]:
         if file_path.name == "vectors.json":
             continue
         content = file_path.read_text(encoding="utf-8")
-        for para in [p.strip() for p in re.split(r"\n{2,}", content) if p.strip()]:
+        # 与向量检索用同一套分块（分节 + 合并碎片），避免降级路径又吐出标题碎片
+        for para in _chunk(content):
+            if len(para) < RETRIEVAL_MIN_CHARS:
+                continue
             score = sum(1 for kw in keywords if kw in para.lower())
             if score:
                 scored.append((score, file_path.name, para))

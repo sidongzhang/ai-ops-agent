@@ -201,6 +201,17 @@ def score_case(case: dict, record: dict) -> dict:
     hit_count = sum(1 for item in hits if item["weight"] >= 1.0)
     forbidden_hits = hallucination_hits(answer, forbidden)
     tool_scores = tool_selection_scores(required_tools, actual_tools)
+    if case.get("knowledge_only"):
+        # 知识库型用例：答案应来自知识库（我们本来就会把检索结果**预注入**系统提示），
+        # 因此**不要求**模型再调一次工具；同时把工具指标置空并排除出聚合，
+        # 否则会以"没调工具"为由把正确回答判失败、并把 Tool-F1 拉低。
+        tool_scores = {
+            **tool_scores,
+            "tool_precision": None,
+            "tool_recall": None,
+            "tool_f1": None,
+            "required_tool_hit": True,
+        }
 
     # task_success：命中 required_tools（≥1）且答案含 ≥1 个 evidence_key 且无 forbidden_conclusion
     success = int(
@@ -262,9 +273,9 @@ def aggregate(rows: Sequence[dict]) -> dict:
         "errors": len(errors),
         "task_success_rate": _pct(row.get("task_success", 0) for row in rows),
         "rca_accuracy": round(_mean(row.get("rca_accuracy", 0.0) for row in rows), 3),
-        "tool_selection_f1": round(_mean(row.get("tool_f1", 0.0) for row in rows), 3),
-        "tool_selection_precision": round(_mean(row.get("tool_precision", 0.0) for row in rows), 3),
-        "tool_selection_recall": round(_mean(row.get("tool_recall", 0.0) for row in rows), 3),
+        "tool_selection_f1": round(_mean([row.get("tool_f1") for row in rows if row.get("tool_f1") is not None]), 3),
+        "tool_selection_precision": round(_mean([row.get("tool_precision") for row in rows if row.get("tool_precision") is not None]), 3),
+        "tool_selection_recall": round(_mean([row.get("tool_recall") for row in rows if row.get("tool_recall") is not None]), 3),
         "tool_param_validity": _pct(row.get("tool_param_validity", 0.0) for row in rows),
         "evidence_coverage_rate": _pct(row.get("evidence_coverage", 0.0) for row in rows),
         "avg_tool_calls": round(_mean(row.get("tool_call_count", 0) for row in rows), 2),

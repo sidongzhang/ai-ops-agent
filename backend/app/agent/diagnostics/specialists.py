@@ -42,6 +42,9 @@ async def run_specialists(deps: AgentDeps, task: str, roles=None, *, model=None)
             remote_command=deps.remote_command,
             business_data_query=deps.business_data_query,
             business_dataset_query=deps.business_dataset_query,
+            # 专家子代理也要拿到知识库（否则"并行派专家"这条路同样看不到文档）
+            knowledge_context=deps.knowledge_context,
+            clock_hint=deps.clock_hint,
             tool_cache=deps.tool_cache,
             cancel_token=deps.cancel_token,
         )

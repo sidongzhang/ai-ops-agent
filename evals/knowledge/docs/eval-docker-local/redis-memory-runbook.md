@@ -31,3 +31,8 @@
 ## 5. 回滚与验证
 
 `redis-cli CONFIG SET maxmemory 0` 后重跑写入，确认 `evicted_keys` 不再增长、`rejected_writes` 不再增长，缓存命中率回升。
+
+
+---
+
+本 Runbook 版本号：**RB-REDIS-2026-01**（判定口径与阈值以本版本为准）。
