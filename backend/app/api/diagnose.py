@@ -134,6 +134,7 @@ def cancel_diagnosis(
 
     cancel_bus.publish_cancel(report_id)          # 跨进程（可丢，有轮询兜底）
     cancelled_locally = cancel_bus.request_local_cancel(report_id)  # 同进程快路径
+    from ..services.diagnostics.cancel_bus import INSTANCE_ID as _worker_id
 
     record_audit_event(
         session,
@@ -155,6 +156,9 @@ def cancel_diagnosis(
         "noop": False,
         "newly_set": newly,
         "local_token_hit": cancelled_locally,
+        # 处理本次取消的进程；与报告的 runner_id 不同 → 证明确实是**跨进程**取消生效
+        "handled_by": _worker_id,
+        "runner_id": report.runner_id or "",
     }
 
 

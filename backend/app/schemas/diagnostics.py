@@ -98,6 +98,8 @@ class DiagnosisReportOut(BaseModel):
     can_resume: bool = False
     # 续跑链：本报告是从哪条报告继续来的
     resumed_from_report_id: int | None = None
+    # 执行方进程标识（排障/证明"取消是否跨进程生效"用）
+    runner_id: str = ""
     # 用量完整性（false = 含取不到的用量）+ 估算费用（价格表推算，非账单）
     usage_complete: bool = True
     usage_gap_reason: str = ""
