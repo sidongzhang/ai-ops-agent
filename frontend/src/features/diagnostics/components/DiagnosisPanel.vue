@@ -169,7 +169,10 @@ function restartModeLabel(message) {
 
 function modelOptionLabel(option) {
   if (!option?.model) return option?.label || option?.value
-  return `${option.label} · ${option.model}`
+  const base = `${option.label} · ${option.model}`
+  // 后端会为「本地模型」带 available/reason（就绪检查）：未就绪时直接标出来，
+  // 避免用户选了之后才发现跑不起来（本地模型加载失败会长时间无响应）。
+  return option.available === false ? `${base}（未就绪）` : base
 }
 </script>
 
@@ -454,10 +457,12 @@ function modelOptionLabel(option) {
           :key="option.value"
           :value="option.value"
           :label="modelOptionLabel(option)"
+          :disabled="option.available === false"
+          :title="option.available === false ? (option.reason || '该模型当前不可用') : ''"
         >
           <div class="model-option">
             <span>{{ modelOptionLabel(option) }}</span>
-            <small>{{ option.description }}</small>
+            <small>{{ option.available === false ? (option.reason || '当前不可用') : option.description }}</small>
           </div>
         </a-select-option>
       </a-select>
