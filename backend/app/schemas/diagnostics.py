@@ -51,6 +51,12 @@ class DiagnoseResponse(BaseModel):
     knowledge_refs: list[KnowledgeRefOut] = Field(default_factory=list)
     business_context: dict = Field(default_factory=dict)
     error_message: str = ""
+    # 中断（原生取消）与可恢复历史：messages_json/usage_json 属进程内传递，不对外序列化
+    cancelled: bool = False
+    messages_json: str = Field(default="", exclude=True)
+    conversation_id: str = Field(default="", exclude=True)
+    run_id: str = Field(default="", exclude=True)
+    usage_json: str = Field(default="", exclude=True)
 
 
 class DiagnosisReportOut(BaseModel):
@@ -74,6 +80,12 @@ class DiagnosisReportOut(BaseModel):
     knowledge_refs: list[KnowledgeRefOut] = Field(default_factory=list)
     business_context: dict = Field(default_factory=dict)
     error_message: str = ""
+    # 中断：stopping 是派生态（cancel_requested_at 非空且 status == "running"）
+    cancel_requested_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    cancel_phase: str = ""
+    # 是否还有可恢复历史（硬杀/关停宽限期耗尽 → False，不得宣称"可继续"）
+    resumable: bool = False
     created_at: datetime
 
 

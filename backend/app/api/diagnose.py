@@ -50,6 +50,11 @@ def diagnose_system(
         images = parse_image_data_urls(body.images)
     except AttachmentError as exc:
         raise HTTPException(400, str(exc))
+    from ..services.diagnostics import cancel_bus
+
+    if cancel_bus.is_shutting_down():
+        # 关停中：拒绝新诊断（避免"刚提交就被杀"的坏体验）
+        raise HTTPException(503, "服务正在关停，请稍后重试", headers={"Retry-After": "5"})
     try:
         started = start_diagnosis(
             session,
@@ -81,6 +86,71 @@ def diagnose_system(
         return started
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+
+
+@router.post("/{system_id}/diagnosis-reports/{report_id}/cancel")
+def cancel_diagnosis(
+    system_id: int,
+    report_id: int,
+    session: Session = Depends(get_session),
+    org_id: int = Depends(get_current_org_id),
+    user: User = Depends(get_current_user),
+):
+    """中止正在跑的诊断（幂等）。
+
+    语义：
+      * 终态（success/failed/cancelled）→ **no-op**，返回最终状态（不把成功覆盖成取消）。
+      * running → 置 `cancel_requested_at`（条件更新，重复点击只有一次写入成功）+ 发布取消消息
+        （跨进程加速，可丢）+ 本进程直接取消 token（快路径）。
+      * `stopping` 是**派生态**：`cancel_requested_at` 非空且 `status == "running"`；
+        对外仍返回 `status: "running"`，不改写 status 字段，保证旧前端/外部链路轮询语义不变。
+    """
+    from app.models.diagnostics import DiagnosisReport
+    from app.services.audit import record_audit_event
+    from app.services.diagnostics import cancel_bus
+
+    report = session.get(DiagnosisReport, report_id)
+    if not report or report.org_id != org_id or report.system_id != system_id:
+        raise HTTPException(404, "诊断报告不存在")
+
+    if report.status != "running":
+        return {
+            "report_id": report_id,
+            "status": report.status,
+            "stopping": False,
+            "noop": True,
+            "newly_set": False,
+        }
+
+    try:
+        newly = cancel_bus.set_cancel_requested(report_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"取消标志写入失败，请重试：{exc}")
+
+    cancel_bus.publish_cancel(report_id)          # 跨进程（可丢，有轮询兜底）
+    cancelled_locally = cancel_bus.request_local_cancel(report_id)  # 同进程快路径
+
+    record_audit_event(
+        session,
+        org_id=org_id,
+        system_id=system_id,
+        actor_type="user",
+        actor_id=str(user.id) if user else "",
+        event_type="diagnosis.cancel_requested",
+        target_type="diagnosis",
+        target_id=str(report_id),
+        input={"newly_set": newly, "local_token_hit": cancelled_locally},
+        commit=True,
+    )
+    # 状态仍是 running：前端据此显示"正在停止"，等运行方落 cancelled
+    return {
+        "report_id": report_id,
+        "status": "running",
+        "stopping": True,
+        "noop": False,
+        "newly_set": newly,
+        "local_token_hit": cancelled_locally,
+    }
 
 
 @router.get("/{system_id}/diagnose/model-options")
@@ -118,10 +188,17 @@ def get_diagnosis_history_item(
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
 ):
+    from ..services.diagnostics.run_state import load_run_state
+
     try:
-        return get_diagnosis_report(session, system_id, org_id, report_id)
+        report = get_diagnosis_report(session, system_id, org_id, report_id)
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+    # resumable 来自运行状态表：false 表示"没拿到可恢复历史"（硬杀/关停超时），不得宣称可继续
+    state = load_run_state(report_id, session=session)
+    return report.model_copy(
+        update={"resumable": bool(state and state.resumable and state.messages_json)}
+    )
 
 
 @router.post(

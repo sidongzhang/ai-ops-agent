@@ -117,6 +117,8 @@ class AgentDeps:
     image_count: int = 0
     # 用户本轮「原始问题」（不含拼接的业务上下文），用于行动意图闸门。
     intent_text: str = ""
+    # 本轮的原生取消令牌（子代理透传同一个 token：一个 token 可管多个并发 run）
+    cancel_token: object | None = None
     # 同一诊断内的工具结果缓存，key = (工具名, 参数)，由 _memoized 装饰器读写。
     tool_cache: dict = field(default_factory=dict)
     # 取证子代理的工具调用会冒泡到这里（保证审计链完整：required_tools 匹配、
@@ -423,7 +425,7 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         return agent
 
     @agent.tool
-    def investigate(ctx: RunContext[AgentDeps], task: str) -> str:
+    async def investigate(ctx: RunContext[AgentDeps], task: str) -> str:
         """把一段多步取证委派给子代理执行：它独立调用工具收集证据，只返回紧凑的证据摘要。
 
         适用：需要连续调用 3 个以上工具、或要翻大量日志/指标才能下结论的场景。
@@ -440,6 +442,7 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             business_data_query=ctx.deps.business_data_query,
             business_dataset_query=ctx.deps.business_dataset_query,
             tool_cache=ctx.deps.tool_cache,  # 共享缓存：子代理查过的主代理侧不再重复
+            cancel_token=ctx.deps.cancel_token,  # 同一个 token 取消主代理 + 所有子代理
         )
         # 子代理工具调用冒泡：同一份规范化载荷同时写进主 deps 的 nested_tool_calls
         # （审计链/评分/轨迹可见）与主代理的 progress_sink（证据链与前端实时工具链）。
@@ -475,12 +478,14 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
                 safe_emit(main_sink, payload)
 
         try:
-            result = get_evidence_agent().run_sync(
+            # 2.55 起禁止在同步工具内调用 run_sync（防死锁），必须 async + await。
+            result = await get_evidence_agent().run(
                 task,
                 deps=sub_deps,
                 model=ctx.model or default_model(),
                 retries=2,
                 event_stream_handler=sub_handler,
+                cancellation_token=getattr(ctx.deps, "cancel_token", None),
             )
             summary = str(result.output).strip()
             used = sorted({c.get("tool", "") for c in main_nested})
@@ -493,7 +498,7 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
             )
 
     @agent.tool
-    def consult_specialists(ctx: RunContext[AgentDeps], task: str, specialists: list | None = None) -> str:
+    async def consult_specialists(ctx: RunContext[AgentDeps], task: str, specialists: list | None = None) -> str:
         """把一次复杂排查**并行**派给若干"专家子代理"（infra / metrics / logs / cache_mq），汇总各自证据。
 
         适用：需要**同时**看多类证据（健康 + 指标 + 日志 + 中间件）的复杂故障——比串行逐个查更快、
@@ -504,7 +509,9 @@ def register_tools(agent: Agent, *, evidence_only: bool = False) -> Agent:
         返回：各专家结论摘要（角色化）。"""
         from .specialists import ROLE_ORDER, run_specialists
 
-        findings = run_specialists(ctx.deps, task, specialists or list(ROLE_ORDER), model=ctx.model)
+        findings = await run_specialists(
+            ctx.deps, task, specialists or list(ROLE_ORDER), model=ctx.model
+        )
         return "\n\n".join(f"【{role} 专家】\n{text}" for role, text in findings.items())
 
     @agent.tool

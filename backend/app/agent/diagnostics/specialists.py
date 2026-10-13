@@ -9,7 +9,6 @@
 并行执行（ThreadPoolExecutor），各自上下文隔离，只回紧凑摘要；任一专家失败不影响其他。
 """
 import logging
-from concurrent.futures import ThreadPoolExecutor
 
 from .tools import AgentDeps
 
@@ -25,8 +24,10 @@ ROLE_FOCUS = {
 ROLE_ORDER = ("infra", "metrics", "logs", "cache_mq")
 
 
-def run_specialists(deps: AgentDeps, task: str, roles=None, *, model=None) -> dict[str, str]:
-    """并行运行专家子代理，返回 {role: 摘要}。model 缺省时回退默认模型。"""
+async def run_specialists(deps: AgentDeps, task: str, roles=None, *, model=None) -> dict[str, str]:
+    """并行运行专家子代理（async，须在异步工具内 await）。model 缺省时回退默认模型。"""
+    import asyncio
+
     from .investigator import get_evidence_agent
     from .models import default_model
 
@@ -34,7 +35,7 @@ def run_specialists(deps: AgentDeps, task: str, roles=None, *, model=None) -> di
     selected = [r for r in (roles or []) if r in ROLE_FOCUS] or list(ROLE_ORDER)
     run_model = model or default_model()
 
-    def _one(role: str) -> tuple[str, str]:
+    async def _one(role: str) -> tuple[str, str]:
         sub = AgentDeps(
             descriptor=deps.descriptor,
             question=task,
@@ -42,15 +43,22 @@ def run_specialists(deps: AgentDeps, task: str, roles=None, *, model=None) -> di
             business_data_query=deps.business_data_query,
             business_dataset_query=deps.business_dataset_query,
             tool_cache=deps.tool_cache,
+            cancel_token=deps.cancel_token,
         )
         prompt = f"角色：{role} 专家。{ROLE_FOCUS[role]}\n任务：{task}"
         try:
-            result = agent.run_sync(prompt, deps=sub, model=run_model, retries=1)
+            # 2.55 起禁止在同步上下文里嵌套 run_sync（防死锁），统一 async + await
+            result = await agent.run(
+                prompt, deps=sub, model=run_model, retries=1,
+                cancellation_token=deps.cancel_token,
+            )
             return role, str(result.output).strip()[:1500]
         except Exception as exc:  # noqa: BLE001 - 单个专家失败不影响整体
             log.debug("[specialists] %s 专家失败: %s", role, exc)
             return role, f"（该专家取证失败：{exc}）"
 
-    workers = max(1, min(len(selected), 4))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        return dict(pool.map(_one, selected))
+    async def _gather() -> dict[str, str]:
+        pairs = await asyncio.gather(*(_one(role) for role in selected))
+        return dict(pairs)
+
+    return await _gather()

@@ -23,6 +23,11 @@ def build_diagnose_response(
     evidence_steps: list[str] | None = None,
     knowledge_refs: list[dict] | None = None,
     error_message: str = "",
+    cancelled: bool = False,
+    messages_json: str = "",
+    conversation_id: str = "",
+    run_id: str = "",
+    usage_json: str = "",
 ) -> DiagnoseResponse:
     tool_calls = tool_calls or []
     evidence = evidence or build_evidence_from_tool_calls(tool_calls)
@@ -43,6 +48,11 @@ def build_diagnose_response(
         evidence=evidence,
         knowledge_refs=knowledge_refs or [],
         error_message=error_message,
+        cancelled=cancelled,
+        messages_json=messages_json,
+        conversation_id=conversation_id,
+        run_id=run_id,
+        usage_json=usage_json,
     )
 
 

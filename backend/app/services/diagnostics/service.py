@@ -2,6 +2,7 @@
 import json
 import logging
 import time
+from datetime import datetime, timezone
 
 from sqlmodel import Session
 
@@ -422,12 +423,15 @@ def _finalize_report(
     status: str,
     result: DiagnoseResponse | None = None,
     error: str = "",
+    cancel_phase: str = "",
 ) -> None:
     """Write the terminal state with a brand new Session.
 
     The diagnosis Session can end up in a poisoned state (parallel tool calls,
     lock contention). Reusing it here is how a report gets stuck at `running`
     forever, so the terminal write always gets a clean Session of its own.
+
+    终态**先到先赢**：只有 status 仍为 running 时才写（成功不会被取消覆盖，反之亦然）。
     """
     from app.core.database import engine
 
@@ -450,6 +454,16 @@ def _finalize_report(
             pending.tool_calls = result.tool_calls
             pending.evidence = [item.model_dump() for item in result.evidence]
             pending.knowledge_refs = [item.model_dump() for item in result.knowledge_refs]
+        elif status == "cancelled":
+            pending.status = "cancelled"
+            pending.cancelled_at = datetime.now(timezone.utc)
+            pending.cancel_phase = cancel_phase or ""
+            if result is not None:
+                pending.model = result.model
+                pending.duration_ms = result.duration_ms
+                pending.total_tokens = result.total_tokens
+                pending.tool_calls = result.tool_calls
+            pending.answer = pending.answer or "（诊断已被用户中断）"
         else:
             pending.status = "failed"
             pending.error_message = error
@@ -471,45 +485,94 @@ def complete_diagnosis_report(
     images: list[tuple[str, bytes]] | None = None,
 ) -> None:
     from app.core.database import engine
+    from app.services.diagnostics import cancel_bus
+    from app.services.diagnostics.run_state import save_run_state
 
-    with Session(engine) as session:
-        report = session.get(DiagnosisReport, report_id)
-        if not report or report.org_id != org_id or report.system_id != system_id:
-            return
-        # 在会话内取出「用户原始问题」：会话关闭后 report 是 detached 实例，
-        # 再读属性会抛 DetachedInstanceError（旧版正是在会话外读 report.question，
-        # 导致内部诊断的记忆写入一直静默失败）。
-        original_question = report.question or question
-        try:
-            result = diagnose_system(
-                session,
-                system_id,
-                org_id,
-                question,
-                actor_id=actor_id,
-                existing_report_id=report_id,
-                model_mode=model_mode,
-                model_name=model_name,
-                on_progress=_progress_recorder(report_id, org_id, system_id),
-                follow_up_report_id=follow_up_report_id,
-                intent_text=original_question,
-                images=images,
-            )
-        except Exception as exc:  # noqa: BLE001
-            log.exception("[diagnose] 诊断执行失败 report_id=%s", report_id)
-            try:
-                _finalize_report(report_id, org_id, system_id, status="failed", error=str(exc))
-            except Exception:  # noqa: BLE001
-                log.exception("[diagnose] 写入失败状态也失败 report_id=%s", report_id)
-            # 自改进：失败案例进候选队列（人工审核后才入库，失败静默）
-            from app.services.improvements import capture_failure
+    # 本轮的原生取消令牌：单次使用（一旦取消就保持取消，传入已取消的 token 会让 run 不启动，
+    # 正好堵住"取消早于启动"的竞态）。注册后立即自检 DB 标志，并启动兜底轮询。
+    from pydantic_ai import CancellationToken
 
-            capture_failure(report_id, str(exc))
-            return
+    token = CancellationToken()
+    registration = cancel_bus.register(report_id, token)
+    cancel_bus.start_poller(report_id, registration)
+
     try:
-        _finalize_report(report_id, org_id, system_id, status="success", result=result)
-    except Exception:  # noqa: BLE001
-        log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
+        with Session(engine) as session:
+            report = session.get(DiagnosisReport, report_id)
+            if not report or report.org_id != org_id or report.system_id != system_id:
+                return
+            # 在会话内取出「用户原始问题」：会话关闭后 report 是 detached 实例，
+            # 再读属性会抛 DetachedInstanceError（旧版正是在会话外读 report.question，
+            # 导致内部诊断的记忆写入一直静默失败）。
+            original_question = report.question or question
+            try:
+                result = diagnose_system(
+                    session,
+                    system_id,
+                    org_id,
+                    question,
+                    actor_id=actor_id,
+                    existing_report_id=report_id,
+                    model_mode=model_mode,
+                    model_name=model_name,
+                    on_progress=_progress_recorder(report_id, org_id, system_id),
+                    follow_up_report_id=follow_up_report_id,
+                    intent_text=original_question,
+                    images=images,
+                    cancel_token=token,
+                    on_phase=lambda phase: cancel_bus.set_phase(report_id, phase),
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.exception("[diagnose] 诊断执行失败 report_id=%s", report_id)
+                try:
+                    _finalize_report(report_id, org_id, system_id, status="failed", error=str(exc))
+                except Exception:  # noqa: BLE001
+                    log.exception("[diagnose] 写入失败状态也失败 report_id=%s", report_id)
+                # 自改进：失败案例进候选队列（人工审核后才入库，失败静默）
+                from app.services.improvements import capture_failure
+
+                capture_failure(report_id, str(exc))
+                return
+
+        # 中断：原生 RunCancelled 已转成可恢复结果 → 落 cancelled + 保存完整消息历史，且**不写记忆**
+        if getattr(result, "cancelled", False):
+            try:
+                _finalize_report(
+                    report_id,
+                    org_id,
+                    system_id,
+                    status="cancelled",
+                    result=result,
+                    cancel_phase=cancel_bus.current_phase(report_id),
+                )
+            except Exception:  # noqa: BLE001
+                log.exception("[diagnose] 写入取消状态失败 report_id=%s", report_id)
+            save_run_state(
+                report_id,
+                messages_json=getattr(result, "messages_json", "") or "",
+                conversation_id=getattr(result, "conversation_id", "") or "",
+                run_id=getattr(result, "run_id", "") or "",
+                usage_json=getattr(result, "usage_json", "") or "",
+                resumable=True,
+            )
+            return
+
+        try:
+            _finalize_report(report_id, org_id, system_id, status="success", result=result)
+        except Exception:  # noqa: BLE001
+            log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
+        # 可恢复历史：正常完成也保存（后续可按 conversation 继续，且是"追加提问"的原生基础）
+        save_run_state(
+            report_id,
+            messages_json=getattr(result, "messages_json", "") or "",
+            conversation_id=getattr(result, "conversation_id", "") or "",
+            run_id=getattr(result, "run_id", "") or "",
+            usage_json=getattr(result, "usage_json", "") or "",
+            resumable=True,
+        )
+    finally:
+        # 结束时注销注册表并放行 poller（done 事件），避免线程与内存泄漏
+        cancel_bus.unregister(report_id)
     # 结构化记忆：诊断成功后沉淀经验（污染受控：置信度 0.5、待回查验证）
     from app.core.config import settings as app_settings
 
@@ -542,6 +605,8 @@ def diagnose_system(
     on_progress=None,
     intent_text: str = "",
     images: list[tuple[str, bytes]] | None = None,
+    cancel_token=None,
+    on_phase=None,
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
     started_at = time.monotonic()
@@ -672,6 +737,8 @@ def diagnose_system(
             model_name=model_name,
             on_progress=on_progress,
             images=images,
+            cancel_token=cancel_token,
+            on_phase=on_phase,
         )
     except Exception as exc:
         if _is_kafka_lag_question(question):
@@ -829,4 +896,9 @@ def diagnose_system(
         evidence=evidence_items,
         evidence_steps=evidence_steps,
         knowledge_refs=knowledge_refs,
+        cancelled=getattr(run, "cancelled", False),
+        messages_json=getattr(run, "messages_json", "") or "",
+        conversation_id=getattr(run, "conversation_id", "") or "",
+        run_id=getattr(run, "run_id", "") or "",
+        usage_json=getattr(run, "usage_json", "") or "",
     )

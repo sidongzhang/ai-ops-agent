@@ -133,6 +133,13 @@ class Settings(BaseSettings):
     # 趋势巡检（早期预警）：采样指标 → 线性外推 → 未到阈值就提醒
     trend_patrol_enabled: bool = True
     trend_patrol_interval: int = 900       # 趋势采样周期（秒）
+
+    # 诊断中断（停止）
+    diagnosis_cancel_channel: str = "aiops:diagnosis:cancel"
+    diagnosis_cancel_poll_seconds: float = 2.0    # DB 兜底巡检周期（Redis 丢消息也能取消）
+    diagnosis_cancel_poll_jitter: float = 0.3
+    diagnosis_max_run_seconds: int = 900          # 单次运行上限（超时交 reaper）
+    diagnosis_shutdown_grace_seconds: float = 15.0  # 关停等待落库的宽限（uvicorn graceful 需 ≥）
     trend_horizon_hours: float = 48.0      # 预测提前量：按当前增速预计多久触顶才提醒
     trend_retention_days: int = 7          # 指标样本保留天数
     trend_warn_ratio: float = 0.8          # 当前值达到阈值的该比例即预警（容量逼近）

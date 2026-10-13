@@ -8,6 +8,7 @@ from typing import Callable
 
 from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.capabilities import ProcessHistory
+from pydantic_ai.exceptions import RunCancelled
 from pydantic_ai.messages import (
     ToolCallPart,
     ToolReturnPart,
@@ -63,6 +64,12 @@ class DiagnosisRun:
     duration_ms: int
     total_tokens: int = 0
     tool_calls: list[dict] = field(default_factory=list)
+    # 中断：框架原生取消（RunCancelled）时置 True，并带上可恢复的**完整消息历史**与用量
+    cancelled: bool = False
+    messages_json: str = ""
+    conversation_id: str = ""
+    run_id: str = ""
+    usage_json: str = ""
 
 
 def diagnose(
@@ -112,6 +119,8 @@ def diagnose_with_details(
     model_mode: str = "auto",
     model_name: str = "",
     on_progress: Callable[[dict], None] | None = None,
+    cancel_token=None,
+    on_phase: Callable[[str], None] | None = None,
 ) -> DiagnosisRun:
     model = pick_model(question, model_mode=model_mode, model_name=model_name)
     model_name = model.model_name if hasattr(model, "model_name") else str(model)
@@ -163,8 +172,11 @@ def diagnose_with_details(
             intent_text=intent_text or question,
             progress_sink=on_progress,
             image_count=len(images or []),
+            cancel_token=cancel_token,
         )
         prompt = _build_prompt(question, images)
+        if on_phase is not None:
+            on_phase("model_request")
         try:
             result = diagnose_agent.run_sync(
                 prompt,
@@ -173,8 +185,12 @@ def diagnose_with_details(
                 retries=3,
                 usage_limits=_usage_limits(),
                 capabilities=[ProcessHistory(compact_messages)],
-                **_stream_kwargs(on_progress),
+                cancellation_token=cancel_token,
+                **_stream_kwargs(on_progress, on_phase),
             )
+        except RunCancelled as exc:
+            # 框架原生取消：**必须最先捕获**，否则会落进下面的 except Exception 触发备用模型/降级。
+            return _cancelled_run(exc, model_name, started_at, deps)
         except Exception as exc:
             fallback = _fallback_api_model(model_mode)
             if not fallback:
@@ -203,8 +219,11 @@ def diagnose_with_details(
                         model=model,
                         retries=3,
                         usage_limits=_usage_limits(),
-                        **_stream_kwargs(on_progress),
+                        cancellation_token=cancel_token,
+                        **_stream_kwargs(on_progress, on_phase),
                     )
+                except RunCancelled as cancel_exc:
+                    return _cancelled_run(cancel_exc, model_name, started_at, deps)
                 except Exception as fallback_exc:
                     log.warning(
                         "[diagnose] tool agent failed, fallback to text-only model=%s error=%s",
@@ -266,6 +285,10 @@ def diagnose_with_details(
             duration_ms=round(elapsed * 1000),
             total_tokens=usage.total_tokens or 0,
             tool_calls=_extract_tool_calls(result.all_messages()) + nested,
+            messages_json=_json_str(result.all_messages_json()),
+            conversation_id=str(getattr(result, "conversation_id", "") or ""),
+            run_id=str(getattr(result, "run_id", "") or ""),
+            usage_json=_usage_json(usage),
         )
     except Exception:
         if generation:
@@ -276,11 +299,11 @@ def diagnose_with_details(
             langfuse.flush()
 
 
-def _stream_kwargs(on_progress: Callable[[dict], None] | None) -> dict:
+def _stream_kwargs(on_progress: Callable[[dict], None] | None, on_phase=None) -> dict:
     """Attach an event-stream handler so callers can watch the tool chain live."""
-    if on_progress is None:
+    if on_progress is None and on_phase is None:
         return {}
-    return {"event_stream_handler": _build_event_stream_handler(on_progress)}
+    return {"event_stream_handler": _build_event_stream_handler(on_progress, on_phase)}
 
 
 def _usage_limits() -> UsageLimits:
@@ -292,13 +315,97 @@ def _usage_limits() -> UsageLimits:
     )
 
 
-def _build_event_stream_handler(on_progress: Callable[[dict], None]):
-    """Translate pydantic-ai stream events into compact progress payloads."""
+def _build_event_stream_handler(on_progress, on_phase=None):
+    """Translate pydantic-ai stream events into compact progress payloads.
+
+    同时维护"执行相位"（模型请求 in-flight / 工具执行 / 空闲），用于取消时判定
+    用量完整性：取消若落在 `model_request`，那次请求的用量可能拿不到。
+    """
     async def handler(_ctx, events) -> None:
         async for payload in iter_tool_events(events):
+            if on_phase is not None:
+                kind = payload.get("kind")
+                if kind == "tool_start":
+                    safe_phase(on_phase, "tool_exec")
+                elif kind == "tool_end":
+                    safe_phase(on_phase, "model_request")
             safe_emit(on_progress, payload)
 
     return handler
+
+
+def safe_phase(on_phase, phase: str) -> None:
+    try:
+        on_phase(phase)
+    except Exception:  # noqa: BLE001 - 相位上报绝不能影响诊断
+        pass
+
+
+def _json_str(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8")
+    return str(value)
+
+
+def _usage_json(usage) -> str:
+    """框架用量 → JSON（cost 是价格表估算值，非账单）。缺失一律记 0，完整性由上游标记。"""
+    def _num(name: str):
+        value = getattr(usage, name, 0)
+        return value if isinstance(value, (int, float)) else 0
+
+    try:
+        return json.dumps(
+            {
+                "input_tokens": _num("input_tokens"),
+                "output_tokens": _num("output_tokens"),
+                "cache_read_tokens": _num("cache_read_tokens"),
+                "cache_write_tokens": _num("cache_write_tokens"),
+                "total_tokens": _num("total_tokens"),
+                "requests": _num("requests"),
+                "tool_calls": _num("tool_calls"),
+                "cost": str(getattr(usage, "cost", "") or ""),
+            },
+            ensure_ascii=False,
+        )
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _cancelled_run(exc, model_name: str, started_at: float, deps) -> DiagnosisRun:
+    """把框架的 RunCancelled 转成可恢复结果（不触发任何降级/重试）。"""
+    try:
+        messages_json = exc.all_messages_json()
+        if isinstance(messages_json, (bytes, bytearray)):
+            messages_json = messages_json.decode("utf-8")
+    except Exception:  # noqa: BLE001
+        messages_json = ""
+    usage = getattr(exc, "usage", None)
+    usage_json = _usage_json(usage)
+    nested = [
+        {"tool": c.get("tool", "unknown"), "input": c.get("input") or {},
+         "status": c.get("status", "success"), "duration_ms": c.get("duration_ms", 0),
+         "output": c.get("output", ""), "call_id": c.get("call_id", "")}
+        for c in (getattr(deps, "nested_tool_calls", None) or [])
+        if c.get("tool") and c.get("status") != "started"
+    ]
+    log.info(
+        "[diagnose] 已取消（原生 RunCancelled）model=%s tokens=%s",
+        model_name, getattr(usage, "total_tokens", 0),
+    )
+    return DiagnosisRun(
+        answer="",
+        model=model_name,
+        duration_ms=round((time.monotonic() - started_at) * 1000),
+        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+        tool_calls=nested,
+        cancelled=True,
+        messages_json=messages_json,
+        conversation_id=str(getattr(exc, "conversation_id", "") or ""),
+        run_id=str(getattr(exc, "run_id", "") or ""),
+        usage_json=usage_json,
+    )
 
 
 _CONCLUSION_MARKER = re.compile(r"^[\s>*#\-]*(?:\*\*)?\s*结论\s*(?:\*\*)?\s*[:：]", re.MULTILINE)

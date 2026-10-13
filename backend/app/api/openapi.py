@@ -188,6 +188,10 @@ def create_external_diagnosis(
     session: Session = Depends(get_session),
 ):
     require_scope(identity, "diagnosis:run")
+    from app.services.diagnostics import cancel_bus
+
+    if cancel_bus.is_shutting_down():
+        raise HTTPException(503, "服务正在关停，请稍后重试", headers={"Retry-After": "5"})
     try:
         images = parse_image_data_urls(body.images)
     except AttachmentError as exc:
@@ -228,6 +232,38 @@ def create_external_diagnosis(
         images=images,
     )
     return started
+
+
+@router.post("/diagnoses/{report_id}/cancel")
+def cancel_external_diagnosis(
+    report_id: int,
+    identity: OpenApiIdentity = Depends(require_openapi_identity),
+    session: Session = Depends(get_session),
+):
+    """外部链路（ALGP/SVOM 等）中止自己发起的诊断。语义与内部端点一致：幂等、终态 no-op。"""
+    require_scope(identity, "diagnosis:run")
+    from app.models.diagnostics import DiagnosisReport
+    from app.services.diagnostics import cancel_bus
+
+    report = session.get(DiagnosisReport, report_id)
+    if not report or report.org_id != identity.system.org_id or report.system_id != identity.system.id:
+        raise HTTPException(404, "诊断报告不存在")
+    if report.status != "running":
+        return {"report_id": report_id, "status": report.status, "stopping": False, "noop": True}
+    try:
+        newly = cancel_bus.set_cancel_requested(report_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"取消标志写入失败，请重试：{exc}")
+    cancel_bus.publish_cancel(report_id)
+    cancelled_locally = cancel_bus.request_local_cancel(report_id)
+    return {
+        "report_id": report_id,
+        "status": "running",
+        "stopping": True,
+        "noop": False,
+        "newly_set": newly,
+        "local_token_hit": cancelled_locally,
+    }
 
 
 @router.get("/diagnoses", response_model=list[DiagnosisReportOut])

@@ -32,6 +32,12 @@ class DiagnosisReport(SQLModel, table=True):
     knowledge_refs: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     business_context: dict = Field(default_factory=dict, sa_column=Column(JSON))
     error_message: str = ""
+    # 中断（stopping 是**派生**状态：cancel_requested_at 非空且 status == "running"，
+    # 不写进 status 字段，保证旧前端/旧外部链路"status 仍是 running 就继续轮询"的语义不变）
+    cancel_requested_at: Optional[datetime] = Field(default=None)
+    cancelled_at: Optional[datetime] = Field(default=None)
+    # 取消时的执行相位：model_request / tool_exec / idle（用于判定用量完整性与 gap 原因）
+    cancel_phase: str = Field(default="", max_length=16)
     # 用户反馈：""（未评）/ "up" / "down"。差评会生成自改进候选。
     feedback: str = Field(default="", index=True, max_length=16)
     feedback_note: str = Field(default="", max_length=2000)
