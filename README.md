@@ -75,6 +75,25 @@ bash scripts/stack-launcher.sh down    # 停止
 
 > 关键点：`.venv`、`node_modules`、`.dev-stack`（运行态：沙箱 venv / 采集器密钥）都不入库，但**本地需要保留**；`stack-launcher.sh` 会自动准备 `.dev-stack`。
 
+### 本地部署模型（可选）
+
+控制台与 SVOM 浮窗都能选「本地模型」；本地走 OpenAI 兼容端点（默认 Ollama）：
+
+```bash
+# 1) 拉一个能胜任工具调用的模型（0.5B 这类小模型答不了诊断，别用）
+docker exec ai-ops-agent-ollama-1 ollama pull qwen2.5:7b
+
+# 2) 指向它，然后**重启后端**（配置在导入时读取）
+#    .env:  LLM_LOCAL_BASE_URL=http://localhost:11434/v1
+#           LLM_LOCAL_MODEL=qwen2.5:7b
+```
+
+注意事项：
+- **容器内拉取可能因 DNS 失败**（`lookup ...cloudflarestorage.com: no such host`）——ollama 会续传，
+  直接重试即可（实测重试一次即成功）；
+- **选了 local 就不会静默回退到远程 API**（用户选本地的动机常是数据不出网），本地失败会显式报错；
+- 本地模型在无 GPU 的容器里是 CPU 推理，7B 会明显慢于 API，适合"数据不出网"优先于速度的场景。
+
 ---
 
 ## 4. 仓库结构
