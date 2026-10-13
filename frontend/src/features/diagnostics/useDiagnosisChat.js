@@ -83,6 +83,8 @@ function buildAgentMessageFromReport(report) {
     conversationCostUsd: report.conversation_cost_usd,
     usageComplete: report.usage_complete !== false,
     usageGapReason: report.usage_gap_reason || '',
+    // 派生标记：success 但没有做任何取证（无工具调用/证据，且答案未引用知识库文档）
+    unverifiedReason: report.unverified_reason || '',
     cancelPhase: report.cancel_phase || '',
     canResume: !!report.can_resume,
     resumedFrom: report.resumed_from_report_id || null,

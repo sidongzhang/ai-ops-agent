@@ -71,6 +71,17 @@ def save_diagnosis_report(
     return report
 
 
+def _report_out(row: DiagnosisReport) -> DiagnosisReportOut:
+    """构造出参：`model_dump()` 不包含派生属性，这里把「未取证」标记补上。
+
+    `unverified_reason` 是读取时派生的（见 models.diagnostics），用于把
+    "success 但没做任何取证"的报告显式标出来，避免"没干活"被当成"干完了"。
+    """
+    payload = row.model_dump()
+    payload["unverified_reason"] = row.unverified_reason
+    return DiagnosisReportOut(**payload)
+
+
 def list_diagnosis_reports(
     session: Session,
     system_id: int,
@@ -93,7 +104,7 @@ def list_diagnosis_reports(
         .limit(limit)
     ).all()
     rows.reverse()
-    return [DiagnosisReportOut(**row.model_dump()) for row in rows]
+    return [_report_out(row) for row in rows]
 
 
 def get_diagnosis_report(
@@ -106,7 +117,7 @@ def get_diagnosis_report(
     report = session.get(DiagnosisReport, report_id)
     if not report or report.org_id != org_id or report.system_id != system_id:
         raise LookupError("诊断报告不存在")
-    return DiagnosisReportOut(**report.model_dump())
+    return _report_out(report)
 
 
 def _safe_doc_name(name: str) -> str:

@@ -255,6 +255,10 @@ function modelOptionLabel(option) {
             </div>
           </div>
           <div v-else class="agent-response">
+            <div v-if="message.unverifiedReason" class="unverified-hint">
+              ⚠️ 本次**未做任何工具取证**（无工具调用、无证据步，结论也未引用知识库文档），
+              内容可能缺少实时证据支撑，请人工核实后再采信。
+            </div>
             <div :class="['agent-answer', message.status === 'running' ? 'agent-answer--running' : '']">
               <template v-if="message.status === 'running'">
                 <a-spin size="small" class="bubble__spin" />
@@ -524,6 +528,17 @@ function modelOptionLabel(option) {
   color: var(--text);
 }
 .agent-answer { font-size: 14px; line-height: 1.7; color: var(--text); text-align: left; word-break: break-word; overflow-x: auto; }
+.unverified-hint {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid #ffe08a;
+  border-left: 3px solid #faad14;
+  border-radius: 6px;
+  background: #fffbe6;
+  color: #8a6100;
+  font-size: 13px;
+  line-height: 1.6;
+}
 .agent-answer--running { display: flex; align-items: flex-start; gap: 8px; }
 
 /* 结论：唯一焦点 */

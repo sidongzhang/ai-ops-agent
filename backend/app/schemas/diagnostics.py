@@ -103,6 +103,9 @@ class DiagnosisReportOut(BaseModel):
     # 用量完整性（false = 含取不到的用量）+ 估算费用（价格表推算，非账单）
     usage_complete: bool = True
     usage_gap_reason: str = ""
+    # 派生（不落库）：success 但**完全没有取证**（无工具调用/无证据/无知识引用）→
+    # 结论很可能没有依据。本地小模型尤其容易触发，UI 应显式提示而不是当成正常成功。
+    unverified_reason: str = ""
     cost_usd_estimated: float | None = None
     # 会话累计（= 用量账本 SUM(delta)，与"本次 total_tokens"区分开，避免重复计数）
     conversation_tokens: int = 0

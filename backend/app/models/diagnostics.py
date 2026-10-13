@@ -53,3 +53,43 @@ class DiagnosisReport(SQLModel, table=True):
     feedback_note: str = Field(default="", max_length=2000)
     feedback_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=utcnow, index=True)
+
+    @property
+    def unverified_reason(self) -> str:
+        """派生（不落库）：`success` 但**没有实际取证**时给出原因码。
+
+        为什么需要：模型（尤其本地小模型）会给出"没干活却像干完了"的结论，例如只回
+        「我没有获取数据的能力」或凭常识编一段，而报告状态仍是 `success`。
+        实测：本地 3B 对"TCAT 切割任务有几条没完成"未调用任何工具就作答（#268）。
+
+        判据（用 206 条历史报告校准过，命中 2 条、误报 0 条）：
+          status=success + 结论非空 + **无工具调用 + 无证据步 + 无 evidence_sources**
+          + 答案里**没有引用**本次检索到的任何知识库文档（按 `knowledge_refs[].name` 判断）。
+        最后一条很关键：纯知识库回答会明确写出文档名（如"依据 多星联合分析流程_v3.md"），
+        那是有依据的，不能标；而"我拿不到数据"式的回答不会引用任何文档。
+        采用**读取时派生**而非加列：历史报告立刻生效，无需迁移。
+        """
+        if self.status != "success" or not (self.answer or "").strip():
+            return ""
+        if self.tool_calls or self.evidence or self.evidence_sources:
+            return ""
+        if _answer_cites_knowledge(self.answer, self.knowledge_refs):
+            return ""
+        return "no_tool_evidence"
+
+
+def _answer_cites_knowledge(answer: str, refs: list | None) -> bool:
+    """答案里是否引用了本次检索到的知识库文档（`name` 或去掉扩展名的文件名）。"""
+    text = answer or ""
+    for ref in refs or []:
+        if not isinstance(ref, dict):
+            continue
+        name = str(ref.get("name") or ref.get("title") or "").strip()
+        if not name:
+            continue
+        if name in text:
+            return True
+        stem = name.rsplit(".", 1)[0].strip()
+        if len(stem) >= 6 and stem in text:
+            return True
+    return False
