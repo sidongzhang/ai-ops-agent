@@ -121,6 +121,10 @@ bash scripts/prepare-local-model.sh qwen2.5:3b
 `bash scripts/prepare-local-model.sh`（= `FROM qwen2.5:3b` + `PARAMETER num_ctx 16384`）。
 
 其他实测注意事项：
+- **模型大小 vs 内存（很关键）**：同一台 Apple M2 / **8GB** 内存、同样开 Metal：
+  - `3B`（+16k 上下文）→ 9k 提示 prefill 36s，**可以跑**；
+  - `7B`（+16k 上下文）→ 同样的 9k 提示 **241s 未返回**（内存 free≈0，换页 thrash）→ **不可用**。
+  - 注意这台机器同时还跑着 6GB 的 colima VM。要跑 7B 建议 **≥16GB** 内存。
 - **拉模型可能因代理失败**：宿主机走代理时 CDN 会被解析成 fake-IP（`198.18.0.51`），
   ollama 会以"redirect target not allowed"拒绝跳转。可直接从容器拷已有模型：
   `docker cp ai-ops-agent-ollama-1:/root/.ollama/models/. ~/.ollama/models/`；
@@ -134,6 +138,26 @@ bash scripts/prepare-local-model.sh qwen2.5:3b
 - **embedding 与聊天模型会抢算力**：若 `EMBEDDING_BASE_URL` 指向同一个 Ollama，跑本地聊天模型时
   embedding 可能排队/超时（`OLLAMA_NUM_PARALLEL=1`），表现为 RAG **静默降级**；
   用宿主机原生（GPU）后基本消除。
+
+### 本地模型能力边界（实测，务必知道）
+
+用 `aiops-qwen2.5-3b`（原生 Metal）跑真机诊断，**基础设施类能用、业务数据集类不能用**：
+
+| 问题 | 工具调用 | 结果 |
+|---|---|---|
+| Redis 内存现在多少？ | `run_redis_command` | ✅ 引真实 `used_memory`（41~66s） |
+| Kafka 有积压吗？ | `investigate`+`query_prometheus`+`run_kafka_command` | ⚠️ 结论对，但没给 LAG 具体数值 |
+| TCAT 切割任务有几条没完成？（业务数据集） | 无 / `query_business_dataset`（用错字段） | ❌ 3/3 失败，给不出答案 |
+
+⚠️ **失败时报告状态仍是 `success`**（例：模型答"我没有获取数据的能力"也算成功）。
+本地模型会让"没干活"看起来像"干完了"，因此**本地结果必须人工复核**；
+正式演示/生产建议用 API 模型。
+
+一条命令自检本地模型是否可用（重点查"上下文被截断"这种假可用）：
+
+```bash
+bash scripts/check-local-llm.sh
+```
 
 ---
 
