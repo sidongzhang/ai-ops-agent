@@ -476,6 +476,10 @@ def complete_diagnosis_report(
         report = session.get(DiagnosisReport, report_id)
         if not report or report.org_id != org_id or report.system_id != system_id:
             return
+        # 在会话内取出「用户原始问题」：会话关闭后 report 是 detached 实例，
+        # 再读属性会抛 DetachedInstanceError（旧版正是在会话外读 report.question，
+        # 导致内部诊断的记忆写入一直静默失败）。
+        original_question = report.question or question
         try:
             result = diagnose_system(
                 session,
@@ -488,7 +492,7 @@ def complete_diagnosis_report(
                 model_name=model_name,
                 on_progress=_progress_recorder(report_id, org_id, system_id),
                 follow_up_report_id=follow_up_report_id,
-                intent_text=report.question or question,
+                intent_text=original_question,
                 images=images,
             )
         except Exception as exc:  # noqa: BLE001
@@ -514,11 +518,11 @@ def complete_diagnosis_report(
 
         # 记忆的 symptom 必须是「用户原始问题」：外部链路会把只读快照拼进
         # 传给模型的 question，若直接落库会把大段上下文写进记忆（污染检索）。
-        # report.question 始终是 start_diagnosis 时保存的原始问题。
+        # original_question 在会话内取自 report.question（start_diagnosis 时保存的原始问题）。
         save_memory(
             org_id=org_id,
             system_id=system_id,
-            question=(report.question or question),
+            question=original_question,
             answer=result.answer,
             report_id=report_id,
         )

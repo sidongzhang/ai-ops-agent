@@ -231,8 +231,10 @@ stop_docker() {
 # ---------- 应用 ----------
 start_apps() {
   step "[2/4] ai-ops-agent 应用"
-  local red_env="export CELERY_BROKER_URL='redis://127.0.0.1:6379/0' CELERY_RESULT_BACKEND='redis://127.0.0.1:6379/1';"
+  local red_env="export CELERY_BROKER_URL='redis://127.0.0.1:6379/0' CELERY_RESULT_BACKEND='redis://127.0.0.1:6379/1' PYTHONUNBUFFERED=1;"
 
+  # PYTHONUNBUFFERED=1：stdout 重定向到日志文件时 Python 会块缓冲，应用日志
+  # （诊断耗时/token/缓存命中/成本）与 uvicorn 访问日志会长时间不落盘。
   start_service aiops-backend "$ROOT/backend" \
     ".venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $P_BACKEND --reload" "$red_env"
   wait_http "http://127.0.0.1:$P_BACKEND/healthz" "后端 API" 90

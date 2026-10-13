@@ -18,7 +18,15 @@ _LOG_LEVEL = getattr(logging, settings.log_level.upper(), logging.INFO)
 
 
 def _setup_app_logging() -> None:
+    """给 `app.*` 命名空间挂 handler。
+
+    必须在 **uvicorn 配置完日志之后** 也要再调用一次：uvicorn 用 `dictConfig` 且默认
+    `disable_existing_loggers=True`，会把启动前就存在的 `app` logger 置为 disabled，
+    导致应用侧日志（诊断耗时、token、缓存命中、工具链路、成本）全部消失。
+    这里显式解除 disabled，幂等，不抢 uvicorn 的配置。
+    """
     app_logger = logging.getLogger("app")
+    app_logger.disabled = False
     app_logger.setLevel(_LOG_LEVEL)
     if app_logger.handlers:
         return
@@ -33,6 +41,8 @@ _setup_app_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # uvicorn 已用 dictConfig 配置过日志，这里再挂一次确保 app.* 不被禁用（见函数注释）。
+    _setup_app_logging()
     init_db()
     # 审批工作流 checkpointer：PG 环境下持久化（重启不丢挂起的审批），失败降级内存版
     await init_persistent_checkpointer()

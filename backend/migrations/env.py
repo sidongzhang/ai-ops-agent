@@ -14,7 +14,11 @@ from app.models import Org, User, MonitoredSystem, Collector, Service, ActionWor
 
 config = context.config
 
-if config.config_file_name is not None:
+# alembic 官方约定：调用方可用 `config.attributes["configure_logger"] = False`
+# 声明"我自己管日志"。默认的 fileConfig 会以 disable_existing_loggers=True 行事，
+# 把启动前已存在的 uvicorn / app.* logger 全部禁用 —— 表现为服务起来后
+# 应用日志（诊断耗时、token、缓存命中、成本、工具链）与 uvicorn 访问日志集体消失。
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 # SQLModel 统一 metadata（所有 table=True 模型自动注册）

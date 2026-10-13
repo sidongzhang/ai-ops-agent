@@ -71,7 +71,12 @@ def _run_alembic_upgrade() -> None:
     from alembic.config import Config
 
     ini_path = Path(__file__).resolve().parents[2] / "alembic.ini"
-    command.upgrade(Config(str(ini_path)), "head")
+    cfg = Config(str(ini_path))
+    # alembic 默认会在 upgrade 时调用 fileConfig，而它以 disable_existing_loggers=True 行事，
+    # 会把启动前已存在的 uvicorn / app.* logger **全部禁用** —— 表现为启动后应用日志（诊断耗时、
+    # token、缓存命中、成本、工具链）与 uvicorn 访问日志一起消失。这里显式关闭日志重配。
+    cfg.attributes["configure_logger"] = False
+    command.upgrade(cfg, "head")
 
 
 def get_session():

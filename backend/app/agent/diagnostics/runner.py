@@ -226,8 +226,8 @@ def diagnose_with_details(
             generation.end(
                 output=answer,
                 usage={
-                    "input": usage.request_tokens or 0,
-                    "output": usage.response_tokens or 0,
+                    "input": usage.input_tokens or 0,
+                    "output": usage.output_tokens or 0,
                 },
             )
         if trace:
@@ -240,6 +240,7 @@ def diagnose_with_details(
             f"tokens={usage.total_tokens} "
             f"(in={usage.input_tokens} out={usage.output_tokens} "
             f"cache_read={usage.cache_read_tokens} cache_write={usage.cache_write_tokens}) "
+            f"cost={getattr(usage, 'cost', None)} "
             f"tool_calls={getattr(usage, 'tool_calls', 0)} elapsed={elapsed:.2f}s"
         )
 
