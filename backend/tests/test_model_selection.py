@@ -78,6 +78,27 @@ class LocalModelPreflightTests(unittest.TestCase):
         self.assertIn("未安装", reason)
         self.assertIn("ollama pull qwen2.5:7b", reason, "要给出可直接照做的修复命令")
 
+    def test_missing_tag_matches_latest(self) -> None:
+        """Ollama 把没写 tag 的名字归一化为 `:latest`：不能因此误判"未安装"。
+
+        真实踩过：配置 `aiops-qwen2.5-3b`（无 tag），`/v1/models` 返回
+        `aiops-qwen2.5-3b:latest` → 严格比较判成"未安装"，连诊断都被 409 挡住。
+        """
+        from app.agent.llm import local_model_status
+
+        client = self._client(payload={"data": [{"id": "aiops-qwen2.5-3b:latest"}]})
+        self.assertIsNone(local_model_status(self._local("aiops-qwen2.5-3b"), client=client))
+        # 反方向也要成立
+        client2 = self._client(payload={"data": [{"id": "qwen2.5:3b"}]})
+        self.assertIsNone(local_model_status(self._local("qwen2.5:3b:latest"), client=client2))
+
+    def test_similar_names_do_not_false_match(self) -> None:
+        from app.agent.llm import local_model_status
+
+        client = self._client(payload={"data": [{"id": "qwen2.5:7b"}]})
+        reason = local_model_status(self._local("qwen2.5:3b"), client=client)
+        self.assertIsNotNone(reason, "不同尺寸的模型不能被判成同一个")
+
     def test_reason_when_endpoint_unreachable(self) -> None:
         import httpx
 

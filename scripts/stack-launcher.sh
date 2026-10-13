@@ -177,9 +177,16 @@ start_docker() {
                ai-ops-agent-node-exporter-1 >/dev/null 2>&1 || true
 
   if [ "$STACK_OLLAMA" = "1" ]; then
-    docker start ai-ops-agent-ollama-1 >/dev/null 2>&1 \
-      || ( cd "$ROOT" && docker compose --profile llm up -d ollama >/dev/null 2>&1 ) || true
-    ok "ollama 已启动（想省内存可设 STACK_OLLAMA=0 跳过）"
+    # 宿主机若已有原生 ollama 在服务 11434（macOS 上走 Metal/GPU，实测比容器快 6~10 倍），
+    # 就不要再去启动容器——容器会因端口被占而启动失败，徒增困惑。
+    if curl -s --noproxy '*' --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+      ok "11434 已有 ollama 在服务（宿主机原生，走 GPU）；跳过容器"
+      say "  - 如需用容器版：先停掉宿主机 ollama，再设 STACK_OLLAMA=1 重启"
+    else
+      docker start ai-ops-agent-ollama-1 >/dev/null 2>&1 \
+        || ( cd "$ROOT" && docker compose --profile llm up -d ollama >/dev/null 2>&1 ) || true
+      ok "ollama 已启动（想省内存可设 STACK_OLLAMA=0 跳过）"
+    fi
   else
     docker stop ai-ops-agent-ollama-1 >/dev/null 2>&1 || true
     say "  - 已按 STACK_OLLAMA=0 跳过 ollama"

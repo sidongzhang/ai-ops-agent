@@ -77,37 +77,63 @@ bash scripts/stack-launcher.sh down    # 停止
 
 ### 本地部署模型（可选）
 
-控制台与 SVOM 浮窗都能选「本地模型」；本地走 OpenAI 兼容端点（默认 Ollama）：
+控制台与 SVOM 浮窗都能选「本地模型」（走 OpenAI 兼容端点）。
+
+**第一条建议：别把 Ollama 放在容器里，用宿主机原生版。** 同一台 Apple M2 / 同一个 3B 模型实测：
+
+| 指标 | 容器（colima VM） | 宿主机原生 | 倍数 |
+|---|---|---|---|
+| prefill | 31 tok/s | **332 tok/s** | 10.6× |
+| 生成 | 4.7 tok/s | **40 tok/s** | 8.6× |
+| 冷加载 | 65s | **9s** | 7.2× |
+| 一次本地诊断（同题） | 334s | **41s** | 8.1× |
+
+差距的原因是**算力**：colima 是 Linux VM，拿不到 Apple GPU（日志里 `inference library=cpu`）；
+宿主机原生是 `library=Metal`。**本地模型的定位是"数据不出网"，不是"更快"**——即使用了 GPU，
+"9k tokens 提示 × 每轮诊断 2 次"仍要 ~40s prefill（提示越大越慢，见下）。
 
 ```bash
-# 1) 拉一个能胜任工具调用的模型（0.5B 这类小模型答不了诊断，别用）
-docker exec ai-ops-agent-ollama-1 ollama pull qwen2.5:3b   # 7B 需 ≥10GB 可用内存，见下
+# 1) 装原生（macOS）并启动
+brew install ollama && ollama serve        # 默认 11434
 
-# 2) 指向它，然后**重启后端**（配置在导入时读取）
-#    .env:  LLM_LOCAL_BASE_URL=http://localhost:11434/v1
-#           LLM_LOCAL_MODEL=qwen2.5:3b
+# 2) 关键：做一个"上下文够大"的模型（脚本见下），然后 .env 指向它并重启后端
+#    LLM_LOCAL_BASE_URL=http://localhost:11434/v1
+#    LLM_LOCAL_MODEL=aiops-qwen2.5-3b
+bash scripts/prepare-local-model.sh qwen2.5:3b
+
+# 3) 若 11434 已有宿主机 ollama 在服务，stack-launcher 会自动跳过容器版
 ```
 
-注意事项：
-- **上下文必须够大（最容易踩、且最隐蔽）**：我们的系统提示 + 工具 schema ≈ **8~10k tokens**。
-  Ollama 的默认上下文由编排文件里的 `OLLAMA_CONTEXT_LENGTH` 决定（曾设为 1024），
-  设小了会**静默截断提示**——模型看不到工具说明，于是 0 次工具调用、答非所问，
-  而报告仍然是 `success`（实测 `prompt_eval` 只有 514 tokens；改成 16384 后变成 8194）。
-  注意 **OpenAI 兼容接口不透传 `num_ctx`**，只能通过 `OLLAMA_CONTEXT_LENGTH` 或自定义模型设置；
-- **容器内拉取可能因 DNS 失败**（`lookup ...cloudflarestorage.com: no such host`）——ollama 会续传，
-  直接重试即可（实测重试一次即成功）；
-- **内存要够**：实测本机 colima VM 只有 **6 GiB** 时，7B（Q4 权重 4.7G）叠加我们 ~8k token
-  系统提示的 KV cache 放不下 → 不是"立刻报错"而是**卡在 prefill**，最后 `llama-server ... signal: killed`。
-  要么换 3B（≈2G，能跑但能力有限），要么给 VM 加内存后重启：`colima stop && colima start --memory 12`；
-- **开了就绪检查**：选「本地模型」时先探测端点与模型是否就绪，没就绪立刻 409 并给出
-  `ollama pull ...` 的修复命令；`/diagnose/model-options` 也会带 `available`/`reason`；
-- **本地端点有 120s 读超时**（`LLM_LOCAL_TIMEOUT_SECONDS`）：卡死时变成可读失败，不会无限挂起；
-- **注意 embedding 与聊天模型抢 CPU**：若 `EMBEDDING_BASE_URL` 也指向同一个 Ollama
-  （默认 `nomic-embed-text`），跑本地聊天模型时 embedding 调用会因 CPU 争抢而超时，
-  表现为 RAG 知识检索**静默降级**（日志 `[rag] embedding API 失败: timed out`），
-  每次超时还白等 30s。要么把 embedding 指到独立服务，要么用 API 模型跑诊断；
-- **选了 local 就不会静默回退到远程 API**（用户选本地的动机常是数据不出网），本地失败会显式报错；
-- 本地模型在无 GPU 的容器里是 CPU 推理，明显慢于 API，适合"数据不出网"优先于速度的场景。
+**第二条：上下文必须 ≥ 提示规模，否则会被静默截断（本仓库踩过）。**
+我们的系统提示 + 工具 schema ≈ **8~10k tokens**。上下文设小了，Ollama 会**截断提示**：
+模型根本看不到工具说明 → **0 次工具调用、答非所问，而报告状态仍然是 `success`**。
+实测同一个 ~9k tokens 提示：
+
+| 配置 | `prompt_eval_count` |
+|---|---|
+| 容器 `OLLAMA_CONTEXT_LENGTH=1024` | 514 |
+| 容器 16384 | 9017 |
+| 原生默认（2048） | 2050 |
+| **`aiops-qwen2.5-3b`（num_ctx 烧进模型）** | **9014** |
+
+注意：**OpenAI 兼容接口不透传 `num_ctx`**，而 `OLLAMA_CONTEXT_LENGTH` 只在"以正确方式启动 ollama"时才有
+（`brew services start ollama` 就带不上）——所以**把 `num_ctx` 烧进模型**才稳：
+`bash scripts/prepare-local-model.sh`（= `FROM qwen2.5:3b` + `PARAMETER num_ctx 16384`）。
+
+其他实测注意事项：
+- **拉模型可能因代理失败**：宿主机走代理时 CDN 会被解析成 fake-IP（`198.18.0.51`），
+  ollama 会以"redirect target not allowed"拒绝跳转。可直接从容器拷已有模型：
+  `docker cp ai-ops-agent-ollama-1:/root/.ollama/models/. ~/.ollama/models/`；
+  容器内拉取则可能因 DNS 失败（`no such host`）——ollama 会续传，重试即可；
+- **内存要够**：6 GiB 的 VM 放不下 7B（权重 4.7G + KV），表现不是"报错"而是**卡在 prefill**，
+  最后 `llama-server ... signal: killed`。要跑 7B 就 `colima start --memory 12` 或换原生；
+- **就绪检查**：选「本地模型」时会先探测端点与模型是否就绪，没就绪立刻 409 并给出修复命令；
+  `/diagnose/model-options` 也带 `available`/`reason`（控制台会标「未就绪」并禁用）；
+- **本地端点有有界读超时**（`LLM_LOCAL_TIMEOUT_SECONDS`，默认 300s）：卡死变可读失败，不会无限挂起；
+- **选了 local 不会静默回退到远程 API**（选本地的动机常是数据不出网），失败会显式报错；
+- **embedding 与聊天模型会抢算力**：若 `EMBEDDING_BASE_URL` 指向同一个 Ollama，跑本地聊天模型时
+  embedding 可能排队/超时（`OLLAMA_NUM_PARALLEL=1`），表现为 RAG **静默降级**；
+  用宿主机原生（GPU）后基本消除。
 
 ---
 

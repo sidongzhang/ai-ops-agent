@@ -104,6 +104,19 @@ class LocalModelUnavailable(RuntimeError):
     """
 
 
+def _normalize_model_name(name: str) -> str:
+    """Ollama 把没写 tag 的模型名归一化为 `:latest`，比较时必须对齐，否则误判"未安装"。"""
+    value = (name or "").strip()
+    return value[: -len(":latest")] if value.endswith(":latest") else value
+
+
+def _model_installed(configured: str, available: list[str]) -> bool:
+    target = _normalize_model_name(configured)
+    return any(
+        _normalize_model_name(name) == target for name in available if name
+    )
+
+
 def local_model_status(
     endpoint: LLMEndpoint,
     *,
@@ -139,7 +152,7 @@ def local_model_status(
         names = [str(item.get("id") or "") for item in entries if isinstance(item, dict)]
     except Exception:
         names = []
-    if names and endpoint.model not in names:
+    if names and not _model_installed(endpoint.model, names):
         listing = "、".join(n for n in names if n) or "（空）"
         return (
             f"本地模型 {endpoint.model!r} 未安装（当前可用：{listing}）。"
