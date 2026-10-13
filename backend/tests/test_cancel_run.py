@@ -64,7 +64,10 @@ class CancelDuringModelRequestTests(unittest.TestCase):
         try:
             result, still_alive = _run_in_thread(
                 lambda: runner.diagnose_with_details(
-                    DESCRIPTOR, QUESTION, cancel_token=token, on_phase=phases.append
+                    # skill_steps="" 显式跳过"剧本语义路由"的 embedding 调用：
+                    # 那是网络调用，机器繁忙时会让"首个模型请求"迟迟发不出，导致用例假失败。
+                    DESCRIPTOR, QUESTION, cancel_token=token, on_phase=phases.append,
+                    skill_steps="",
                 ),
                 delay=0,
                 token=token,
@@ -97,7 +100,8 @@ class CancelDuringToolExecutionTests(unittest.TestCase):
             with slow_tool:
                 result, still_alive = _run_in_thread(
                     lambda: runner.diagnose_with_details(
-                        DESCRIPTOR, QUESTION, cancel_token=token, on_phase=phases.append
+                        DESCRIPTOR, QUESTION, cancel_token=token, on_phase=phases.append,
+                        skill_steps="",
                     ),
                     delay=1.5,
                     token=token,
