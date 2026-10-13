@@ -4,7 +4,7 @@
   * 任何 MCP 客户端（Claude Desktop / Cursor / 其他 Agent）都能直接使用这套运维工具
   * 新数据源接入从「改 Agent 代码」变为「注册一个 MCP 工具」
   * 平台自身的诊断 Agent 后续可切换为 MCP Client 动态发现工具（当前仍用原生工具集，
-    避免 IPC 开销；见 AGENT_BRIEF「MCP 工具层」节）
+    避免 IPC 开销；见 docs/MCP接入.md）
 
 工具集（全部只读，与诊断 Agent 的取证白名单一致）：
   list_services / health_check / check_container_state / read_logs / search_logs /
