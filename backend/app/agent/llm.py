@@ -225,6 +225,22 @@ def endpoint_for_mode(mode_value: str) -> LLMEndpoint:
 
 def make_chat_model(endpoint: LLMEndpoint | None = None) -> OpenAIChatModel:
     target = endpoint or default_endpoint()
+    if target.mode == "local":
+        # 本地模型最常见的故障是"卡死"（内存不足被 OOM、或极慢的 CPU prefill）：
+        # 没有超时会一直挂到用户手动停止（实测 >8 分钟 0 输出）。
+        # 给一个**读超时**（默认 120s，可用 LLM_LOCAL_TIMEOUT_SECONDS 调），
+        # 让"卡住"变成一条可读的失败信息。
+        import httpx
+        from openai import AsyncOpenAI
+
+        seconds = max(5.0, float(settings.llm_local_timeout_seconds))
+        client = AsyncOpenAI(
+            base_url=target.base_url,
+            api_key=target.api_key or "ollama",
+            timeout=httpx.Timeout(connect=5.0, read=seconds, write=30.0, pool=5.0),
+            max_retries=1,
+        )
+        return OpenAIChatModel(target.model, provider=OpenAIProvider(openai_client=client))
     return OpenAIChatModel(
         target.model,
         provider=OpenAIProvider(base_url=target.base_url, api_key=target.api_key),

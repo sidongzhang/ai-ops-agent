@@ -81,18 +81,24 @@ bash scripts/stack-launcher.sh down    # 停止
 
 ```bash
 # 1) 拉一个能胜任工具调用的模型（0.5B 这类小模型答不了诊断，别用）
-docker exec ai-ops-agent-ollama-1 ollama pull qwen2.5:7b
+docker exec ai-ops-agent-ollama-1 ollama pull qwen2.5:3b   # 7B 需 ≥10GB 可用内存，见下
 
 # 2) 指向它，然后**重启后端**（配置在导入时读取）
 #    .env:  LLM_LOCAL_BASE_URL=http://localhost:11434/v1
-#           LLM_LOCAL_MODEL=qwen2.5:7b
+#           LLM_LOCAL_MODEL=qwen2.5:3b
 ```
 
 注意事项：
 - **容器内拉取可能因 DNS 失败**（`lookup ...cloudflarestorage.com: no such host`）——ollama 会续传，
   直接重试即可（实测重试一次即成功）；
+- **内存要够**：实测本机 colima VM 只有 **6 GiB** 时，7B（Q4 权重 4.7G）叠加我们 ~8k token
+  系统提示的 KV cache 放不下 → 不是"立刻报错"而是**卡在 prefill**，最后 `llama-server ... signal: killed`。
+  要么换 3B（≈2G，能跑但能力有限），要么给 VM 加内存后重启：`colima stop && colima start --memory 12`；
+- **开了就绪检查**：选「本地模型」时先探测端点与模型是否就绪，没就绪立刻 409 并给出
+  `ollama pull ...` 的修复命令；`/diagnose/model-options` 也会带 `available`/`reason`；
+- **本地端点有 120s 读超时**（`LLM_LOCAL_TIMEOUT_SECONDS`）：卡死时变成可读失败，不会无限挂起；
 - **选了 local 就不会静默回退到远程 API**（用户选本地的动机常是数据不出网），本地失败会显式报错；
-- 本地模型在无 GPU 的容器里是 CPU 推理，7B 会明显慢于 API，适合"数据不出网"优先于速度的场景。
+- 本地模型在无 GPU 的容器里是 CPU 推理，明显慢于 API，适合"数据不出网"优先于速度的场景。
 
 ---
 

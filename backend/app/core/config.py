@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     llm_local_base_url: str = "http://localhost:11434/v1"
     llm_local_api_key: str = "ollama"
     llm_local_model: str = "qwen2.5:0.5b"
+    # 本地模型（CPU 推理）偶发"卡死"：给读超时，卡住时变成可读失败而不是无限挂起。
+    llm_local_timeout_seconds: float = 120.0
     # 高级模型可单独指定；未指定则复用当前 LLM_MODE 对应配置。
     advanced_llm_mode: str = ""
     advanced_llm_api_base_url: str = ""
