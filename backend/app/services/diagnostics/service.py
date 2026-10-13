@@ -768,6 +768,14 @@ def _resume_prior_usage(payload: dict | None):
     return (payload or {}).get("prior_usage")
 
 
+def _clock_hint() -> str:
+    """当前时间提示：**易变内容**，单独放在系统提示末尾（原先混在数据集目录里，
+    每天变化会把前缀缓存打散）。"""
+    now = datetime.now(timezone.utc).astimezone()
+    weekday = "一二三四五六日"[now.weekday()]
+    return f"## 当前时间\n（当前时间：{now:%Y-%m-%d %H:%M}，周{weekday}）"
+
+
 def _record_usage_and_settle(
     *,
     report_id: int,
@@ -850,6 +858,7 @@ def diagnose_system(
     message_history=None,
     prior_usage=None,
     prompt_override: str | None = None,
+    clock_hint: str = "",
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
     started_at = time.monotonic()
@@ -857,6 +866,7 @@ def diagnose_system(
     template = match_skill(question, _disabled_template_names(system))
     descriptor = system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
     knowledge_context = get_relevant_context(question, str(system.id))
+    clock_hint = _clock_hint()
     conversation_context = ""
     if follow_up_report_id:
         prev_report = session.get(DiagnosisReport, follow_up_report_id)
@@ -980,6 +990,7 @@ def diagnose_system(
             model_name=model_name,
             on_progress=on_progress,
             images=images,
+            clock_hint=clock_hint,
             cancel_token=cancel_token,
             on_phase=on_phase,
             message_history=message_history,

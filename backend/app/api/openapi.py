@@ -178,7 +178,11 @@ def _external_diagnosis_question(
             "若 run_match.matched=false，必须明确说明未匹配到具体运行实例，不得把 recent_abnormal_runs 当作当前任务：",
             context_json,
         ])
-    return "\n".join(lines)[:18000]
+    # 快照瘦身：这段内容会被**每次请求**重发且无法命中前缀缓存（属请求级内容），
+    # 18000 字符 ≈4.5k tokens 太重；压到 8000 并在结尾提示"明细按需查数据集"，
+    # 让模型用 query_business_dataset 取细节，而不是把整份快照背在上下文里。
+    lines.append("（以上为上下文快照，字段有限；需要明细/更多字段时请用业务数据集按需查询）")
+    return "\n".join(lines)[:8000]
 
 
 @router.post("/diagnoses", response_model=DiagnoseResponse, status_code=status.HTTP_202_ACCEPTED)

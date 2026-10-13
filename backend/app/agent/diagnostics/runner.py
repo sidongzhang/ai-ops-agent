@@ -125,6 +125,7 @@ def diagnose_with_details(
     message_history=None,
     prior_usage=None,
     prompt_override: str | None = None,
+    clock_hint: str = "",
 ) -> DiagnosisRun:
     model = pick_model(question, model_mode=model_mode, model_name=model_name)
     model_name = model.model_name if hasattr(model, "model_name") else str(model)
@@ -176,6 +177,7 @@ def diagnose_with_details(
             intent_text=intent_text or question,
             progress_sink=on_progress,
             image_count=len(images or []),
+            clock_hint=clock_hint,
             cancel_token=cancel_token,
         )
         prompt = prompt_override or _build_prompt(question, images)

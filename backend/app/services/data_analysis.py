@@ -378,8 +378,9 @@ def describe_readonly_datasets(config: dict) -> str:
     datasets = list_readonly_datasets(config)
     if not datasets:
         return ""
-    today = datetime.now().date()
-    lines = [f"（当前日期：{today.isoformat()}，周{'一二三四五六日'[today.weekday()]}）"]
+    # 注意：当前日期**不再**拼进数据集目录——它每天变化，会把系统提示前缀缓存打散。
+    # 改由调用方把它放进"易变后缀"（见 AgentDeps.clock_hint）。
+    lines = []
     for item in datasets:
         line = f"- {item['code']}：{item['label']}"
         if item["description"]:
@@ -393,7 +394,6 @@ def describe_readonly_datasets(config: dict) -> str:
 def _parse_date(value: Any) -> str:
     text_value = str(value or "").strip()
     lowered = text_value.lower()
-    today = datetime.now().date()
     if not text_value or lowered in {"today", "今天", "今日"}:
         return today.isoformat()
     if lowered in {"yesterday", "昨天"}:
