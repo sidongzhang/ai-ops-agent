@@ -95,6 +95,79 @@ def endpoint_for_choice(choice: str = "auto", model_name: str = "") -> LLMEndpoi
     return endpoint
 
 
+class LocalModelUnavailable(RuntimeError):
+    """本地模型端点未就绪（连不上、或配置的模型没装）。
+
+    为什么要前置检查：本地模型（尤其 7B）**加载失败/放不下内存**时，表现不是"立刻报错"，
+    而是长时间"卡在 prefill"（实测 >8 分钟 0 token，最后被 OOM kill）。用户会以为是平台坏了。
+    所以选 local 时先跑一次廉价就绪检查，就绪不了就立刻给明确原因。
+    """
+
+
+def local_model_status(
+    endpoint: LLMEndpoint,
+    *,
+    timeout: float = 3.0,
+    client=None,
+) -> str | None:
+    """检查本地端点是否可用。返回 None 表示可用，否则返回给用户看的原因。"""
+    if endpoint.mode != "local":
+        return None
+    import httpx
+
+    url = endpoint.base_url.rstrip("/") + "/models"
+    headers = {"Authorization": f"Bearer {endpoint.api_key or 'ollama'}"}
+    owned = client is None
+    try:
+        http = client or httpx.Client(timeout=timeout)
+    except Exception as exc:  # pragma: no cover - 构造客户端失败极少见
+        return f"无法创建 HTTP 客户端：{exc}"
+    try:
+        resp = http.get(url, headers=headers)
+    except Exception as exc:
+        return (
+            f"连不上本地模型服务 {endpoint.base_url}（{type(exc).__name__}）。"
+            "请确认 Ollama/vLLM/LM Studio 已启动，或改用「API 模型」"
+        )
+    finally:
+        if owned:
+            http.close()
+    if resp.status_code != 200:
+        return f"本地模型服务返回 HTTP {resp.status_code}（{url}）"
+    try:
+        entries = (resp.json() or {}).get("data") or []
+        names = [str(item.get("id") or "") for item in entries if isinstance(item, dict)]
+    except Exception:
+        names = []
+    if names and endpoint.model not in names:
+        listing = "、".join(n for n in names if n) or "（空）"
+        return (
+            f"本地模型 {endpoint.model!r} 未安装（当前可用：{listing}）。"
+            f"请先执行 `ollama pull {endpoint.model}`"
+        )
+    return None
+
+
+def ensure_model_ready(
+    model_mode: str,
+    model_name: str = "",
+    *,
+    timeout: float = 3.0,
+    client=None,
+) -> LLMEndpoint | None:
+    """解析用户选择的模型；若选了本地模型且没就绪，抛 LocalModelUnavailable。
+
+    返回解析出的端点（None = auto，交给路由按问题严重程度决定）。
+    """
+    endpoint = endpoint_for_choice(model_mode, model_name)
+    if endpoint is None:
+        return None
+    reason = local_model_status(endpoint, timeout=timeout, client=client)
+    if reason:
+        raise LocalModelUnavailable(f"本地模型未就绪：{reason}")
+    return endpoint
+
+
 def model_options() -> list[dict]:
     """Safe model options for the UI. Never expose API keys."""
     default = default_endpoint()

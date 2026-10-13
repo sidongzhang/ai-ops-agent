@@ -56,6 +56,15 @@ def diagnose_system(
     if cancel_bus.is_shutting_down():
         # 关停中：拒绝新诊断（避免"刚提交就被杀"的坏体验）
         raise HTTPException(503, "服务正在关停，请稍后重试", headers={"Retry-After": "5"})
+    from ..agent.llm import LocalModelUnavailable, ensure_model_ready
+
+    try:
+        # 选了本地模型就先做一次廉价就绪检查：没就绪就立刻报错。
+        # 否则会"卡在 prefill"很久（实测 7B 放不下内存时 >8 分钟 0 输出、最后被 OOM kill），
+        # 用户会以为平台坏了。
+        ensure_model_ready(body.model_mode, body.model_name)
+    except LocalModelUnavailable as exc:
+        raise HTTPException(409, str(exc))
     from ..services.diagnostics.usage import BudgetExceeded
 
     try:
@@ -183,6 +192,12 @@ def resume_diagnosis(
     from ..services.diagnostics.usage import BudgetExceeded
 
     opts = body or ResumeRequest()
+    from ..agent.llm import LocalModelUnavailable, ensure_model_ready
+
+    try:
+        ensure_model_ready(opts.model_mode, opts.model_name)
+    except LocalModelUnavailable as exc:
+        raise HTTPException(409, str(exc))
     try:
         started, payload = start_resume(
             session,
@@ -224,7 +239,17 @@ def get_diagnose_model_options(
 
     try:
         require_system(session, system_id, org_id)
-        return {"options": model_options()}
+        options = model_options()
+        # 给「本地模型」标出是否就绪，前端可直接禁用并显示原因（避免用户选了才发现跑不了）。
+        from ..agent.llm import endpoint_for_mode, local_model_status
+
+        for item in options:
+            if item.get("value") == "local":
+                reason = local_model_status(endpoint_for_mode("local"), timeout=1.5)
+                item["available"] = reason is None
+                if reason:
+                    item["reason"] = reason
+        return {"options": options}
     except LookupError as exc:
         raise HTTPException(404, str(exc))
 

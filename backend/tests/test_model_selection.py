@@ -42,5 +42,83 @@ class LocalEndpointTests(unittest.TestCase):
         self.assertTrue(ep.model, "本地端点必须配置模型名")
 
 
+class LocalModelPreflightTests(unittest.TestCase):
+    """本地模型的**前置就绪检查**（避免"选完才发现跑不了/卡住"）。"""
+
+    def _client(self, *, status: int = 200, payload=None, exc: Exception | None = None):
+        import httpx
+
+        def handler(request):  # noqa: ANN001
+            if exc is not None:
+                raise exc
+            return httpx.Response(status, json=payload if payload is not None else {"data": []})
+
+        return httpx.Client(transport=httpx.MockTransport(handler))
+
+    def _local(self, model: str = "qwen2.5:3b"):
+        from app.agent.llm import LLMEndpoint
+
+        return LLMEndpoint(
+            mode="local", model=model,
+            base_url="http://localhost:11434/v1", api_key="ollama",
+        )
+
+    def test_ready_when_model_present(self) -> None:
+        from app.agent.llm import local_model_status
+
+        client = self._client(payload={"data": [{"id": "qwen2.5:3b"}]})
+        self.assertIsNone(local_model_status(self._local(), client=client))
+
+    def test_reason_when_model_missing(self) -> None:
+        from app.agent.llm import local_model_status
+
+        client = self._client(payload={"data": [{"id": "smollm2:135m"}]})
+        reason = local_model_status(self._local("qwen2.5:7b"), client=client)
+        self.assertIsNotNone(reason)
+        self.assertIn("未安装", reason)
+        self.assertIn("ollama pull qwen2.5:7b", reason, "要给出可直接照做的修复命令")
+
+    def test_reason_when_endpoint_unreachable(self) -> None:
+        import httpx
+
+        from app.agent.llm import local_model_status
+
+        client = self._client(exc=httpx.ConnectError("connection refused"))
+        reason = local_model_status(self._local(), client=client)
+        self.assertIsNotNone(reason)
+        self.assertIn("连不上", reason)
+
+    def test_reason_when_service_errors(self) -> None:
+        from app.agent.llm import local_model_status
+
+        reason = local_model_status(self._local(), client=self._client(status=500))
+        self.assertIsNotNone(reason)
+        self.assertIn("500", reason)
+
+    def test_api_endpoint_is_not_probed(self) -> None:
+        """远程 API 端点不做本地检查（否则每次诊断都多一次无谓的探测）。"""
+        from app.agent.llm import LLMEndpoint, local_model_status
+
+        api = LLMEndpoint(mode="api", model="deepseek-chat", base_url="https://x/v1", api_key="k")
+        self.assertIsNone(local_model_status(api, client=self._client(status=500)))
+
+    def test_ensure_model_ready_raises_with_reason(self) -> None:
+        from unittest import mock
+
+        from app.agent.llm import LocalModelUnavailable, ensure_model_ready
+
+        client = self._client(payload={"data": [{"id": "smollm2:135m"}]})
+        with mock.patch("app.agent.llm.endpoint_for_choice", return_value=self._local("qwen2.5:7b")):
+            with self.assertRaises(LocalModelUnavailable) as ctx:
+                ensure_model_ready("local", client=client)
+        self.assertIn("本地模型未就绪", str(ctx.exception))
+
+    def test_ensure_model_ready_skips_auto(self) -> None:
+        """auto 不做检查（由路由按问题严重程度决定），也不应触发任何网络调用。"""
+        from app.agent.llm import ensure_model_ready
+
+        self.assertIsNone(ensure_model_ready("auto"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -211,8 +211,14 @@ def create_external_diagnosis(
     business_context = dict(body.business_context or {})
     if images:
         business_context["images"] = describe_images(images)
+    from app.agent.llm import LocalModelUnavailable, ensure_model_ready
     from app.services.diagnostics.usage import BudgetExceeded
 
+    try:
+        # 外部链路（ALGP/SVOM）同样先做本地模型就绪检查，避免"提交后长时间无响应"。
+        ensure_model_ready(body.model_mode, getattr(body, "model_name", ""))
+    except LocalModelUnavailable as exc:
+        raise HTTPException(409, str(exc))
     try:
         started = start_diagnosis(
             session,
@@ -292,6 +298,12 @@ def resume_external_diagnosis(
 
     opts = body or OpenResumeIn()
     actor_id = f"openapi:{identity.token.id}:resume"
+    from app.agent.llm import LocalModelUnavailable, ensure_model_ready
+
+    try:
+        ensure_model_ready(opts.model_mode, getattr(opts, "model_name", ""))
+    except LocalModelUnavailable as exc:
+        raise HTTPException(409, str(exc))
     try:
         started, payload = start_resume(
             session,
