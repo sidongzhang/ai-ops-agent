@@ -30,6 +30,13 @@ jobs:
       - name: Sync dependencies (backend/.venv, incl. dev)
         run: uv sync --directory backend --frozen
 
+      # 后端单测/集成测试（294 项）：全部用 sqlite 或纯函数，不依赖 Postgres/Redis，
+      # 因此 CI 里可直接跑（conftest 会把仓库根加入 sys.path，collector 等包可导入）。
+      - name: Backend tests
+        run: |
+          cd backend
+          .venv/bin/python -m pytest tests -q
+
       - name: Run eval gate (smoke)
         run: bash scripts/eval-gate.sh
 
