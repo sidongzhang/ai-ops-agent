@@ -86,6 +86,11 @@ def _install_shutdown_signal_handlers() -> None:
 async def lifespan(app: FastAPI):
     # uvicorn 已用 dictConfig 配置过日志，这里再挂一次确保 app.* 不被禁用（见函数注释）。
     _setup_app_logging()
+    if not settings.encryption_key:
+        # 明文凭据只允许出现在本机开发：生产缺失时 config 已拒绝启动，这里只兜住 dev。
+        log.warning(
+            "[security] ENCRYPTION_KEY 未配置：连接器凭据将以明文存库（仅限开发环境）"
+        )
     _install_shutdown_signal_handlers()
     init_db()
     # 收尸：上次进程被硬杀/关停超时留下的 running 报告，启动时收成终态（可恢复性如实标注）

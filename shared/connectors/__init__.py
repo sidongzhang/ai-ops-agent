@@ -24,8 +24,14 @@ _REGISTRY = {
 
 
 def get_connector(service: dict, system: dict) -> Connector:
-    kind = (service or {}).get('connector', 'local')
-    cls = _REGISTRY.get(kind, LocalConnector)
+    kind = (service or {}).get('connector', 'local') or 'local'
+    cls = _REGISTRY.get(kind)
+    if cls is None:
+        # 以前未知类型会静默回退 LocalConnector：拼错一个字母就会拿 127.0.0.1
+        # 去探活，把"本机端口不通"写进诊断结论。这里改为显式失败。
+        raise ValueError(
+            f"未知的连接器类型 {kind!r}；可用类型：{', '.join(sorted(_REGISTRY))}"
+        )
     return cls(service, system)
 
 

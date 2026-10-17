@@ -10,6 +10,7 @@
 ⚠️ 这不是安全沙箱（无法阻断本机网络/文件读取）。面向生产请把本文件换成容器/
 gVisor/nsjail 执行。这里只用于受信环境下的数据分析。
 """
+import logging
 import os
 import shutil
 import subprocess
@@ -18,13 +19,33 @@ import tempfile
 import uuid
 from typing import Mapping
 
+from app.core import metrics
 from app.core.config import settings
+
+log = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 20
 MAX_OUTPUT_BYTES = 200_000
 MAX_OUTPUT_FILES = 20
 MAX_FILE_BYTES = 5_000_000
 _SCRIPT_NAME = "__main__.py"
+
+
+def blocked_reason() -> str | None:
+    """返回"禁止执行"的原因；None 表示可以执行。
+
+    此前 docker 不可用时会静默退回在 API 进程内执行模型生成的代码——那是
+    读得到 `.env`、连得上内网和数据库的进程。宁可让工具失败，也不静默降级。
+    """
+    image = (settings.sandbox_container_image or "").strip()
+    if image and not shutil.which("docker"):
+        return (
+            "已配置 SANDBOX_CONTAINER_IMAGE，但本机找不到 docker CLI；"
+            "拒绝退回在 API 进程内执行模型代码"
+        )
+    if settings.is_production and not image:
+        return "生产环境未配置 SANDBOX_CONTAINER_IMAGE，拒绝在 API 进程内执行模型代码"
+    return None
 
 
 def _preexec():
@@ -98,6 +119,18 @@ def run_python(code: str, files: Mapping[str, bytes] | None = None, timeout: int
 
     outputs: {文件名: bytes}，即脚本新产生（不含输入文件与本脚本）的文件。
     """
+    reason = blocked_reason()
+    if reason:
+        log.error("[sandbox] 拒绝执行：%s", reason)
+        metrics.inc("aiops_sandbox_blocked_total")
+        return {
+            "ok": False,
+            "stdout": "",
+            "stderr": f"沙箱不可用：{reason}",
+            "outputs": {},
+            "returncode": None,
+        }
+
     files = files or {}
     workdir = _new_workdir()
     try:

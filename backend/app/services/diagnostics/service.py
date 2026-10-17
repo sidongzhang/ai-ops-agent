@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 
 from sqlmodel import Session
 
+from app.core import metrics
+
 from app.agent.runtime.entrypoint import diagnose_with_details
 from app.agent.runtime.contracts import RuntimeCompatibilityError, RuntimeBudgetExceeded, RuntimeExecutionError
 from app.agent.runtime.factory import get_runtime
@@ -305,8 +307,9 @@ def _business_dataset_query(session: Session, system, org_id: int, actor_id: str
                     output={"rows": len(rows), "sql": result["sql"]},
                     commit=True,
                 )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:  # noqa: BLE001 - 查询已执行，但审计失败必须留痕
+            log.exception("[audit] 数据集查询审计写入失败 system=%s dataset=%s", system.id, meta.get("code"))
+            metrics.inc("aiops_audit_write_failures_total", stage="dataset_query")
         return f"{header} 共 {len(rows)} 行（最多展示 40 行）：\n{payload}{total_line}"
 
     return query, catalog
@@ -1192,8 +1195,8 @@ def diagnose_system(
                     commit=True,
                 )
                 return result
-            except Exception:
-                pass
+            except Exception as fallback_exc:  # noqa: BLE001 - 兜底失败则走统一错误路径
+                log.warning("[diagnosis] kafka 兜底失败，回退到错误路径：%s", fallback_exc, exc_info=True)
         record_audit_event(
             session,
             org_id=org_id,
