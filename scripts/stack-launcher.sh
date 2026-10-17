@@ -47,6 +47,12 @@ export PATH="$JAVA_HOME/bin:$HOME_DIR/.local/bin:/opt/homebrew/bin:/usr/local/bi
 export DOCKER_HOST="unix://$HOME_DIR/.colima/default/docker.sock"
 export NO_PROXY="127.0.0.1,localhost,::1,0.0.0.0${NO_PROXY:+,$NO_PROXY}"
 export no_proxy="$NO_PROXY"
+
+# 本地集成 token 从 .env 读取，绝不写回脚本（脚本在版本控制里，token 一旦提交即视为泄露）。
+if [ -z "${ALGP_SYSTEM_TOKEN:-}" ] && [ -f "$ROOT/.env" ]; then
+  ALGP_SYSTEM_TOKEN="$(sed -n 's/^ALGP_SYSTEM_TOKEN=//p' "$ROOT/.env" | tail -1)"
+fi
+export ALGP_SYSTEM_TOKEN="${ALGP_SYSTEM_TOKEN:-}"
 # 设为 0 可跳过 ollama（省内存）
 export STACK_OLLAMA="${STACK_OLLAMA:-1}"
 
@@ -277,9 +283,13 @@ start_algp() {
   local jenv="export JAVA_HOME='$JAVA_HOME' PATH='$JAVA_HOME/bin:/opt/homebrew/bin:/usr/bin:/bin';"
   local ds="--spring.datasource.dynamic.datasource.master.url='jdbc:mysql://127.0.0.1:3307/algp?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true' --spring.datasource.dynamic.datasource.master.username=root --spring.datasource.dynamic.datasource.master.password=root"
 
+  if [ -z "${ALGP_SYSTEM_TOKEN:-}" ]; then
+    warn "未设置 ALGP_SYSTEM_TOKEN（应写在 .env），ALGP 将以空 token 启动，AIOps 回调会 401"
+  fi
+
   start_service algp-backend "$ALGP_DIR" \
     "java --add-opens=java.base/java.lang=ALL-UNNAMED -jar algp-web/target/algp.jar --spring.profiles.active=dev $ds" \
-    "$jenv export AIOPS_BASE_URL='http://127.0.0.1:$P_BACKEND' AIOPS_SYSTEM_CODE='algp' AIOPS_TOKEN='sys_mN3FgcFf1CUbDG1GqUlQzx0ftvFHQdCdQprZM_gEiSU';"
+    "$jenv export AIOPS_BASE_URL='http://127.0.0.1:$P_BACKEND' AIOPS_SYSTEM_CODE='algp' AIOPS_TOKEN='${ALGP_SYSTEM_TOKEN:-}';"
   wait_port "$P_ALGP" "algp 后端" 150
 
   start_service hxmt-worker "$HXMT_DIR" \

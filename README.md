@@ -32,7 +32,7 @@
 ## 测试与评测门禁
 
 ```bash
-# 单元/集成测试（约 294 项）
+# 单元/集成测试（约 328 项）
 backend/.venv/bin/python -m pytest backend/tests -q
 
 # 评测数据集校验（不调用模型）
@@ -54,6 +54,21 @@ backend/.venv/bin/python evals/run_eval.py --run --judge --gate --thresholds eva
 
 口径说明：`tool_selection_f1` 只作信息指标——`required_tools` 是**最低要求**，
 额外的只读取证是期望行为；门禁看「必要工具覆盖率 recall」+「平均调用上限」。
+
+## 安全与备份
+
+上线前的安全清单、密钥轮换与备份/恢复步骤见 [`SECURITY.md`](SECURITY.md)。要点：
+
+- `JWT_SECRET` / `ENCRYPTION_KEY` 无默认值；`ENVIRONMENT=production` 下缺失会**拒绝启动**。
+- 飞书 Webhook 必须配置 `FEISHU_VERIFICATION_TOKEN`，否则返回 503（fail-closed）。
+- 数据库备份：`scripts/backup.sh`；恢复：`scripts/restore_db.py --backup <目录> --yes`。
+
+```bash
+# 立即备份一次（保留最近 14 份）
+scripts/backup.sh
+# 检查最近备份是否新鲜（>26h 返回非 0，便于告警）
+scripts/backup.sh check
+```
 
 ## 运行数据与构建
 
