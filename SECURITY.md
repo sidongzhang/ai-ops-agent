@@ -69,6 +69,9 @@ scripts/backup.sh check
 # 恢复（先预览，确认后加 --yes；会清空同名表）
 backend/.venv/bin/python scripts/restore_db.py --backup backups/20261017-160623
 backend/.venv/bin/python scripts/restore_db.py --backup backups/20261017-160623 --yes
+
+# 恢复演练：灌进同库临时 schema（LIKE 复制真实表结构）→ 逐表对账 → 自动删除
+backend/.venv/bin/python scripts/verify_backup.py
 ```
 
 产物结构：
@@ -94,6 +97,9 @@ backups/20261017-160623/
 ```
 
 > 备份目录含业务数据，已加入 `.gitignore`；请另外同步到异机/对象存储（本脚本只负责本地产物）。
+
+> 恢复脚本会按外键依赖顺序清空/插入，并在 PostgreSQL 上重置自增序列；
+> JSONL 兜底产物不含自定义列（如 pgvector）的 DDL，演练与恢复请优先用 `pg_dump` 产物。
 
 ---
 

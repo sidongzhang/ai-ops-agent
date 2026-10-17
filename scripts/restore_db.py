@@ -29,6 +29,13 @@ for _p in (REPO_ROOT, REPO_ROOT / "backend"):
 BATCH = 500
 
 
+def _adapt(value):
+    """JSON/数组列在 JSONL 里是对象，psycopg2 不能直接适配 dict/list，先序列化成字符串。"""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
 def _pg_conn_args(url: str) -> tuple[list[str], dict[str, str]]:
     from sqlalchemy.engine import make_url
 
@@ -70,13 +77,47 @@ def _ordered_tables(conn) -> list[str]:
     return ordered
 
 
+def _reset_sequences(conn, tables: list[str]) -> None:
+    """恢复后把自增序列推到当前最大值之后（否则新写入会撞主键）。仅 PostgreSQL。"""
+    if conn.dialect.name != "postgresql":
+        return
+    preparer = conn.dialect.identifier_preparer
+    for table in tables:
+        try:
+            columns = conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() AND table_name = :t "
+                    "AND (column_default LIKE 'nextval%' OR is_identity = 'YES')"
+                ),
+                {"t": table},
+            ).scalars().all()
+            for column in columns:
+                sequence = conn.execute(
+                    text("SELECT pg_get_serial_sequence(:t, :c)"), {"t": table, "c": column}
+                ).scalar()
+                if not sequence:
+                    continue
+                quoted_table = preparer.quote(table)
+                quoted_column = preparer.quote(column)
+                conn.execute(
+                    text(
+                        f"SELECT setval(:seq, COALESCE((SELECT MAX({quoted_column}) "
+                        f"FROM {quoted_table}), 1))"
+                    ),
+                    {"seq": sequence},
+                )
+        except Exception:  # noqa: BLE001 - 单表序列修复失败不影响已恢复的数据
+            continue
+
+
 def _load_rows(path: Path) -> list[dict]:
     with gzip.open(path, "rt", encoding="utf-8") as fh:
         return [json.loads(line) for line in fh if line.strip()]
 
 
-def restore_jsonl(backup_dir: Path, url: str) -> dict[str, int]:
-    from sqlalchemy import create_engine, text
+def restore_jsonl(backup_dir: Path, url: str, *, skip_missing: bool = False) -> dict[str, int]:
+    from sqlalchemy import create_engine, inspect, text
 
     tables_dir = backup_dir / "tables"
     files = {p.name[: -len(".jsonl.gz")]: p for p in sorted(tables_dir.glob("*.jsonl.gz"))}
@@ -86,7 +127,16 @@ def restore_jsonl(backup_dir: Path, url: str) -> dict[str, int]:
     engine = create_engine(url)
     counts: dict[str, int] = {}
     with engine.begin() as conn:
-        order = _ordered_tables(conn)
+        existing = set(inspect(conn).get_table_names())
+        missing = sorted(set(files) - existing)
+        if missing and not skip_missing:
+            raise RuntimeError(
+                "目标库缺少这些表：" + ", ".join(missing) + "（可用 --skip-missing 跳过）"
+            )
+        # _ordered_tables 只返回目标库已存在的表；再按备份里实际有的表过滤
+        order = [name for name in _ordered_tables(conn) if name in files]
+        if missing:
+            print(f"[restore] 跳过目标库不存在的表：{', '.join(missing)}", file=sys.stderr)
         # 先按反序清空（子表先删），再按正序插入（父表先插）
         for name in reversed(order):
             if name in files:
@@ -108,10 +158,12 @@ def restore_jsonl(backup_dir: Path, url: str) -> dict[str, int]:
             stmt = text(f"INSERT INTO {quoted} ({col_sql}) VALUES ({bind_sql})")
             for start in range(0, len(rows), BATCH):
                 chunk = [
-                    {f"p{i}": row.get(col) for i, col in enumerate(cols)}
+                    {f"p{i}": _adapt(row.get(col)) for i, col in enumerate(cols)}
                     for row in rows[start : start + BATCH]
                 ]
                 conn.execute(stmt, chunk)
+
+        _reset_sequences(conn, [name for name in order if name in counts])
     return counts
 
 
@@ -140,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backup", required=True, help="backup_db.py 产物目录")
     parser.add_argument("--database-url", default="", help="默认取 .env 的 DATABASE_URL")
     parser.add_argument("--yes", action="store_true", help="确认执行（会删除现有数据）")
+    parser.add_argument("--skip-missing", action="store_true", help="跳过目标库中不存在的表")
     args = parser.parse_args(argv)
 
     backup_dir = Path(args.backup)
@@ -166,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
             restore_pg_dump(backup_dir, url)
             print("[restore] pg_restore 完成")
         else:
-            counts = restore_jsonl(backup_dir, url)
+            counts = restore_jsonl(backup_dir, url, skip_missing=args.skip_missing)
             print(f"[restore] 完成，共 {len(counts)} 张表 / {sum(counts.values())} 行")
     except Exception as exc:  # noqa: BLE001
         print(f"[restore] 失败：{exc}", file=sys.stderr)

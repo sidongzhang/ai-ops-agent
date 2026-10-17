@@ -19,7 +19,7 @@ from scripts.restore_db import _ordered_tables, restore_jsonl
 def _make_schema(db: Path) -> None:
     engine = create_engine(f"sqlite:///{db}")
     with engine.begin() as conn:
-        conn.execute(text("CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT)"))
+        conn.execute(text("CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT, meta JSON)"))
         conn.execute(
             text(
                 "CREATE TABLE child (id INTEGER PRIMARY KEY, "
@@ -31,7 +31,7 @@ def _make_schema(db: Path) -> None:
 def _seed(db: Path) -> None:
     engine = create_engine(f"sqlite:///{db}")
     with engine.begin() as conn:
-        conn.execute(text("INSERT INTO parent (id, name) VALUES (1, 'a'), (2, 'b')"))
+        conn.execute(text("INSERT INTO parent (id, name, meta) VALUES (1, 'a', '{\"k\": 1}'), (2, 'b', NULL)"))
         conn.execute(
             text(
                 "INSERT INTO child (id, parent_id, note) VALUES (10, 1, 'x'), (11, 2, 'y')"
@@ -68,7 +68,7 @@ def test_backup_manifest_and_roundtrip(tmp_path: Path) -> None:
     counts = restore_jsonl(final, f"sqlite:///{dst}")
 
     assert counts == {"parent": 2, "child": 2}
-    assert _rows(dst, "parent") == [(1, "a"), (2, "b")]
+    assert _rows(dst, "parent") == [(1, "a", '{"k": 1}'), (2, "b", None)]
     assert _rows(dst, "child") == [(10, 1, "x"), (11, 2, "y")]
 
 
@@ -86,7 +86,7 @@ def test_restore_overwrites_existing_rows(tmp_path: Path) -> None:
         conn.execute(text("INSERT INTO parent (id, name) VALUES (99, 'stale')"))
 
     restore_jsonl(final, f"sqlite:///{dst}")
-    assert _rows(dst, "parent") == [(1, "a"), (2, "b")]
+    assert _rows(dst, "parent") == [(1, "a", '{"k": 1}'), (2, "b", None)]
 
 
 def test_prune_keeps_newest_and_ignores_partial(tmp_path: Path) -> None:

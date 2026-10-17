@@ -68,6 +68,8 @@ backend/.venv/bin/python evals/run_eval.py --run --judge --gate --thresholds eva
 scripts/backup.sh
 # 检查最近备份是否新鲜（>26h 返回非 0，便于告警）
 scripts/backup.sh check
+# 恢复演练（临时 schema + 行数对账，验证完自动清理）
+backend/.venv/bin/python scripts/verify_backup.py
 ```
 
 平台自身指标：`GET /metrics`（Prometheus 文本格式），已加入 `prometheus/prometheus.yml` 的
