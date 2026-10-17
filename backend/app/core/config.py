@@ -1,8 +1,11 @@
 """控制面配置（pydantic-settings）。复用仓库根目录的 .env（含 DEEPSEEK_API_KEY 等）。"""
 import os
+import secrets
+import warnings
 
+from cryptography.fernet import Fernet
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
 
 # 本机服务（Prometheus、各被监控服务探活、采集器）绝不能走 HTTP 代理。
 # 开发机上常设的 HTTP_PROXY 会把 127.0.0.1 的请求也转发出去，代理一旦不可用，
@@ -36,6 +39,14 @@ for _var in ("NO_PROXY", "no_proxy"):
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+# 历史上用过的开发默认值。它们已经进入公开 git 历史，必须视为已泄露：
+# 生产环境出现这些值等同于"任何人都能签发平台 owner 的 token"。
+_LEGACY_INSECURE_JWT_SECRETS = {
+    "dev-secret-change-me-in-prod",
+    "change-me-in-production",
+}
+_MIN_JWT_SECRET_LEN = 32
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -44,11 +55,15 @@ class Settings(BaseSettings):
         extra='ignore',
     )
 
+    # 运行环境：dev / production。production 下安全配置缺失时拒绝启动（fail-fast）。
+    environment: str = "dev"
+
     # 数据层：dev 用 SQLite，生产改成 postgresql+psycopg://... 即可
     database_url: str = f"sqlite:///{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'dev.db')}"
 
-    # 鉴权
-    jwt_secret: str = "dev-secret-change-me-in-prod"
+    # 鉴权：不提供默认值。开发环境缺失时生成本进程随机密钥（重启即失效），
+    # 生产环境缺失或仍是历史默认值时拒绝启动。
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
 
@@ -131,7 +146,10 @@ class Settings(BaseSettings):
     # 飞书机器人（Webhook 接收 + 主动推送共用同一个自建应用）
     feishu_app_id: str = ""
     feishu_app_secret: str = ""
+    # 事件订阅「Verification Token」；配置后所有 webhook 必须携带一致 token，否则 403。
     feishu_verification_token: str = ""
+    # 事件订阅「Encrypt Key」；配置后按飞书规范 AES-256-CBC 解密整包。
+    feishu_encrypt_key: str = ""
     feishu_alert_chat_id: str = ""   # 默认告警群，无 chat_id 时回退到此
 
     # 凭据字段加密（Fernet AES-128）；空字符串 = dev 模式跳过加密
@@ -190,6 +208,49 @@ class Settings(BaseSettings):
 
     # 证据约束（防幻觉）：含具体数字但无任何取证工具调用时，在回答后附"未取证"提示
     diagnosis_evidence_guard: bool = True
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() in {"prod", "production"}
+
+    @model_validator(mode="after")
+    def _validate_security_settings(self) -> "Settings":
+        """安全配置 fail-fast：宁可起不来，也不带着可预测密钥对外提供服务。"""
+        # JWT：生产必须显式配置强随机值；开发缺失时生成随机密钥，绝不沿用历史默认值。
+        if not self.jwt_secret or self.jwt_secret in _LEGACY_INSECURE_JWT_SECRETS:
+            if self.is_production:
+                raise ValueError(
+                    "JWT_SECRET 未配置或仍为历史默认值（已泄露）。"
+                    "生产环境必须设置为 ≥32 字符的强随机串，例如："
+                    "python -c \"import secrets;print(secrets.token_urlsafe(48))\""
+                )
+            self.jwt_secret = secrets.token_urlsafe(48)
+            warnings.warn(
+                "JWT_SECRET 未配置，已生成本次进程内随机密钥（重启后登录态失效）。"
+                "请在 .env 中设置固定的 JWT_SECRET。",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        elif self.is_production and len(self.jwt_secret) < _MIN_JWT_SECRET_LEN:
+            raise ValueError(
+                f"JWT_SECRET 长度不足 {_MIN_JWT_SECRET_LEN} 字符，生产环境拒绝启动。"
+            )
+
+        # 凭据加密：生产缺密钥等于把 SSH/DB/通知凭据明文落库，直接拒绝启动。
+        if self.encryption_key:
+            try:
+                Fernet(self.encryption_key.encode())
+            except Exception as exc:  # noqa: BLE001 - 统一转成可读的启动错误
+                raise ValueError(
+                    "ENCRYPTION_KEY 不是合法的 Fernet 密钥。"
+                    "生成方式：python -c \"from cryptography.fernet import Fernet;"
+                    "print(Fernet.generate_key().decode())\""
+                ) from exc
+        elif self.is_production:
+            raise ValueError(
+                "ENCRYPTION_KEY 未配置：连接器凭据会以明文落库，生产环境拒绝启动。"
+            )
+        return self
 
 
 settings = Settings()

@@ -1,4 +1,7 @@
 """Feishu webhook handling helpers."""
+import base64
+import hashlib
+import hmac
 import json
 import logging
 import threading
@@ -15,6 +18,67 @@ from app.services.descriptors.builder import system_to_descriptor
 from .feishu import FeishuClient
 
 log = logging.getLogger(__name__)
+
+
+class WebhookAuthError(Exception):
+    """Webhook 验签失败。status_code 供 API 层直接映射 HTTP 状态。"""
+
+    def __init__(self, message: str, status_code: int = 403) -> None:
+        self.status_code = status_code
+        super().__init__(message)
+
+
+def decrypt_feishu_payload(encrypted: str, encrypt_key: str) -> dict:
+    """按飞书事件加密规范解密：AES-256-CBC，key=sha256(Encrypt Key)，IV=密文前 16 字节。"""
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    try:
+        raw = base64.b64decode(encrypted)
+    except Exception as exc:  # noqa: BLE001
+        raise WebhookAuthError("加密事件不是合法的 base64", 400) from exc
+    if len(raw) <= 16:
+        raise WebhookAuthError("加密事件长度非法", 400)
+
+    key = hashlib.sha256(encrypt_key.encode("utf-8")).digest()
+    iv, ciphertext = raw[:16], raw[16:]
+    decryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).decryptor()
+    padded = decryptor.update(ciphertext) + decryptor.finalize()
+
+    pad = padded[-1] if padded else 0
+    if pad < 1 or pad > 16 or padded[-pad:] != bytes([pad]) * pad:
+        raise WebhookAuthError("加密事件解密失败（padding 非法）", 400)
+    try:
+        return json.loads(padded[:-pad].decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise WebhookAuthError("加密事件解密后不是合法 JSON", 400) from exc
+
+
+def _verification_token_of(payload: dict) -> str:
+    """兼容飞书 v2（header.token）与 v1（顶层 token）两种事件格式。"""
+    header = payload.get("header") or {}
+    return str(header.get("token") or payload.get("token") or "")
+
+
+def verify_webhook(body: dict) -> dict:
+    """校验来源并返回（可能的）解密后明文事件。
+
+    设计取舍：未配置 Verification Token 时**拒绝处理**而不是放行——
+    这个端点可以用租户自己的凭据驱动一次带工具的诊断，匿名可达等于把平台变成代理。
+    """
+    payload = body
+    if "encrypt" in body:
+        if not settings.feishu_encrypt_key:
+            raise WebhookAuthError("收到加密事件，但服务端未配置 FEISHU_ENCRYPT_KEY", 503)
+        payload = decrypt_feishu_payload(str(body["encrypt"]), settings.feishu_encrypt_key)
+
+    expected = settings.feishu_verification_token
+    if not expected:
+        raise WebhookAuthError("服务端未配置 FEISHU_VERIFICATION_TOKEN，拒绝处理", 503)
+
+    if not hmac.compare_digest(_verification_token_of(payload), expected):
+        raise WebhookAuthError("verification token 不匹配", 403)
+    return payload
+
 
 _seen: deque = deque(maxlen=200)
 _seen_lock = threading.Lock()
@@ -85,17 +149,15 @@ def handle_message(text: str, chat_id: str, message_id: str, app_id: str, app_se
 
 
 async def process_webhook_payload(body: dict, background: BackgroundTasks) -> dict:
-    challenge = body.get("challenge") or body.get("event", {}).get("challenge")
+    payload = verify_webhook(body)
+
+    challenge = payload.get("challenge") or payload.get("event", {}).get("challenge")
     if challenge:
-        token = body.get("token", "")
-        if settings.feishu_verification_token and token and token != settings.feishu_verification_token:
-            log.warning("[feishu-webhook] verification token 不匹配")
-            return {"error": "invalid token"}
         log.info("[feishu-webhook] URL 验证成功")
         return {"challenge": challenge}
 
-    header = body.get("header", {})
-    event_type = header.get("event_type", "") or body.get("type", "")
+    header = payload.get("header", {})
+    event_type = header.get("event_type", "") or payload.get("type", "")
     if not event_type:
         return {"code": 0}
 
@@ -104,7 +166,7 @@ async def process_webhook_payload(body: dict, background: BackgroundTasks) -> di
         return {"code": 0}
 
     if event_type == "im.message.receive_v1":
-        event = body.get("event", {})
+        event = payload.get("event", {})
         message = event.get("message", {})
         if message.get("message_type") == "text":
             raw = json.loads(message.get("content", "{}"))

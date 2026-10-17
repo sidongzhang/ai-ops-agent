@@ -180,7 +180,10 @@ class SystemServiceTests(unittest.TestCase):
 
         self.assertEqual(result["app_secret"], "***")
         self.assertEqual(result["chat_id"], "oc_new")
-        self.assertEqual(system.notify["app_secret"], "real-secret")
+        # 落库值可能是密文（配置了 ENCRYPTION_KEY 时），契约是"能解回原文"而不是"必须是明文"
+        from app.core.security import decrypt_sensitive_fields
+
+        self.assertEqual(decrypt_sensitive_fields(system.notify)["app_secret"], "real-secret")
 
     def test_update_restart_policy_requires_owner_and_keeps_owner_authorized(self) -> None:
         with Session(self.engine) as session:
@@ -2274,6 +2277,10 @@ class DiagnoseAndWebhookServiceTests(unittest.TestCase):
                 )
 
     def test_process_webhook_payload_handles_challenge_and_dedup(self) -> None:
+        from unittest.mock import patch
+
+        from app.core.config import settings
+
         class _Background:
             def __init__(self):
                 self.calls = []
@@ -2282,12 +2289,18 @@ class DiagnoseAndWebhookServiceTests(unittest.TestCase):
                 self.calls.append(args)
 
         bg = _Background()
-        result = self._run_async(feishu_webhook_service.process_webhook_payload({"challenge": "abc"}, bg))
-        self.assertEqual(result, {"challenge": "abc"})
+        # 验签已改为 fail-closed：这里显式配置 token，覆盖 challenge 与去重两条主链路
+        with patch.object(settings, "feishu_verification_token", "vt-test"):
+            result = self._run_async(
+                feishu_webhook_service.process_webhook_payload(
+                    {"challenge": "abc", "token": "vt-test"}, bg
+                )
+            )
+            self.assertEqual(result, {"challenge": "abc"})
 
-        payload = {"header": {"event_type": "noop", "event_id": "evt-1"}}
-        first = self._run_async(feishu_webhook_service.process_webhook_payload(payload, bg))
-        second = self._run_async(feishu_webhook_service.process_webhook_payload(payload, bg))
+            payload = {"header": {"token": "vt-test", "event_type": "noop", "event_id": "evt-1"}}
+            first = self._run_async(feishu_webhook_service.process_webhook_payload(payload, bg))
+            second = self._run_async(feishu_webhook_service.process_webhook_payload(payload, bg))
         self.assertEqual(first, {"code": 0})
         self.assertEqual(second, {"code": 0})
         self.assertEqual(bg.calls, [])
