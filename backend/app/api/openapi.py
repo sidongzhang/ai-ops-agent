@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.database import get_session
 from app.core.security import hash_system_token
+from app.core.net import client_ip, ip_in_allowlist
 from app.models.systems import MonitoredSystem
 from app.models.tokens import SystemToken
 from app.repositories.systems import get_system_by_key
@@ -73,8 +74,10 @@ def require_openapi_identity(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "系统编码与 Token 不匹配")
 
     if token.allowed_ips:
-        client_ip = request.client.host if request.client else ""
-        if client_ip not in token.allowed_ips:
+        # 反向代理后 request.client.host 恒为 127.0.0.1：必须解析 X-Forwarded-For，
+        # 否则白名单要么全拒、要么形同虚设。
+        source_ip = client_ip(request)
+        if not ip_in_allowlist(source_ip, token.allowed_ips):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "来源 IP 不在允许范围内")
 
     return OpenApiIdentity(system=system, token=token)

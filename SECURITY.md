@@ -112,6 +112,7 @@ backups/20261017-160623/
 | CORS | `allow_origins=*` + `allow_credentials=True` | 默认不带凭证；配置 `CORS_ORIGINS` 后收敛白名单 |
 | 响应头 | 无 | Caddy 统一加 `nosniff` / `X-Frame-Options: DENY` / `no-referrer` / `Permissions-Policy`，移除 `Server` |
 | 审批执行 | 「批准执行」裸点击即下发生产动作 | 前端二次确认（危险操作样式），展示动作与触发问题 |
+| 系统 token IP 白名单 | 用 `request.client.host`，反向代理后恒为 127.0.0.1（白名单全拒或失效） | 仅信任 `TRUSTED_PROXIES` 的 X-Forwarded-For，从右往左取真实来源；白名单支持 CIDR |
 
 ## 6. 平台自身指标
 
@@ -127,6 +128,9 @@ backups/20261017-160623/
 | `aiops_unknown_connector_total` | 未知连接器类型 | `increase(...[10m]) > 0` |
 
 需要鉴权时设置 `METRICS_TOKEN`，抓取端带 `Authorization: Bearer <token>`。
+
+告警规则见 `prometheus/alerts.yml`（控制面不可达 / DB 不可用 / 审计写失败 / 沙箱拒绝执行 /
+未知连接器），已随 Prometheus 一起加载。
 
 ## 7. 还剩的工程项
 

@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     login_window_seconds: int = 300
     # CORS 允许来源（逗号分隔）。留空 = *（且不携带凭证）；填了才启用 credentials。
     cors_origins: str = ""
+    # 受信任的反向代理（逗号分隔，支持 CIDR）。只有来自这些地址的请求才采信 X-Forwarded-For。
+    trusted_proxies: str = "127.0.0.1,::1"
 
     # Agent 模型（OpenAI 兼容）。推荐新配置：LLM_MODE=api/local。
     pi_price_profile: str = ""
