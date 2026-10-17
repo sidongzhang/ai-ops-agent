@@ -5,6 +5,8 @@
 """
 import pytest
 
+from app.core import metrics
+from app.services.descriptors.health import collect_health
 from app.services.descriptors.runtime import get_connector  # 触发 shared 路径注入
 from connectors import LocalConnector, TcpConnector
 
@@ -28,3 +30,13 @@ def test_unknown_connector_raises_with_available_types() -> None:
     message = str(excinfo.value)
     assert "tcpp" in message
     assert "tcp" in message  # 提示可用类型
+
+
+def test_collect_health_reports_unknown_connector_and_counts() -> None:
+    metrics.reset()
+
+    rows = collect_health({"id": 1, "services": [{"name": "svc", "connector": "tcpp"}]})
+
+    assert rows[0]["ok"] is False
+    assert "未知的连接器类型" in rows[0]["detail"]
+    assert 'aiops_unknown_connector_total{kind="tcpp"} 1' in metrics.render()

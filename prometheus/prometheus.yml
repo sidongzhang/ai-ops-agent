@@ -5,6 +5,9 @@ global:
 # `up{target_id="<id>"}` 判定 UP/DOWN（见 HeartbeatCheckScheduler）。
 # 因此每个抓取任务必须带上 target_id 标签，且取值与 sys_monitor_target.target_id 完全一致。
 # 缺失标签会让对应监控对象永远显示 DOWN。
+rule_files:
+  - /etc/prometheus/alerts.yml
+
 scrape_configs:
   # 控制面自身指标：审计写失败 / 沙箱拒绝执行 / 未知连接器 / DB 连通性。
   # 容器内通过 host.docker.internal 访问宿主机上的 uvicorn（colima 已验证可达）。

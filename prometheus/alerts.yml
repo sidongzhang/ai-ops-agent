@@ -1,0 +1,44 @@
+groups:
+  - name: aiops-control-plane
+    rules:
+      - alert: AIOpsControlPlaneDown
+        expr: up{job="aiops-control-plane"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 控制面抓取失败
+          description: Prometheus 连续 2 分钟抓不到控制面 /metrics，检查 uvicorn 进程与端口。
+
+      - alert: AIOpsDatabaseDown
+        expr: aiops_db_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 控制面数据库不可用
+          description: /metrics 自检 SELECT 1 失败，诊断与审批将整体不可用。
+
+      - alert: AIOpsAuditWriteFailures
+        expr: increase(aiops_audit_write_failures_total[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 审计写入失败
+          description: 10 分钟内出现审计写失败（stage={{ $labels.stage }}）。AI 层要求"审计写不进则不执行"，平台层必须同样重视。
+
+      - alert: AIOpsSandboxBlocked
+        expr: increase(aiops_sandbox_blocked_total[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 沙箱拒绝执行
+          description: 代码沙箱不可用（docker 缺失或生产未配镜像），已拒绝退回进程内执行。
+
+      - alert: AIOpsUnknownConnector
+        expr: increase(aiops_unknown_connector_total[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 未知连接器类型
+          description: 服务配置里的 connector 拼写错误或类型未注册（kind={{ $labels.kind }}），健康检查会失败。
