@@ -48,6 +48,12 @@ class CancelBusTests(unittest.TestCase):
             session.add(report)
             session.commit()
             self.report_id = report.id
+            # register() 现在会 UPDATE 抢占 DB 行（status=running 且 runner_id 为空），
+            # 所以"第二条并发运行"必须是真实行，不能用 report_id+1 伪造。
+            second = DiagnosisReport(org_id=1, system_id=1, question="q2", status="running")
+            session.add(second)
+            session.commit()
+            self.second_report_id = second.id
 
     def tearDown(self) -> None:
         cancel_bus.set_session_factory(None)
@@ -110,18 +116,18 @@ class CancelBusTests(unittest.TestCase):
     def test_request_local_cancel_unknown_report(self) -> None:
         self.assertFalse(cancel_bus.request_local_cancel(99999))
 
-    @pytest.mark.skip(reason="重构后契约变更：待按新实现重写（commit 323a42d，见 ARCHITECTURE.md）")
-
     def test_cancel_all_and_wait_reports_unpersisted(self) -> None:
         t1, t2 = FakeToken(), FakeToken()
         reg1 = cancel_bus.register(self.report_id, t1)
-        reg2 = cancel_bus.register(self.report_id + 1, t2)
+        reg2 = cancel_bus.register(self.second_report_id, t2)
+        self.assertIsNotNone(reg1, "第一条应抢占成功")
+        self.assertIsNotNone(reg2, "第二条应抢占成功")
         reg2.done.set()                     # 模拟"已落库"
         result = cancel_bus.cancel_all_and_wait(grace_seconds=0.3)
         self.assertEqual(result["cancelled"], 2)
         self.assertTrue(t1.cancelled and t2.cancelled)
         self.assertEqual(result["persisted"], 1)
-        self.assertEqual(result["unpersisted"], [self.report_id])
+        self.assertEqual(result["unpersisted"], [self.report_id])  # reg1 未 done → 未收尾
 
     def test_phase_tracking(self) -> None:
         cancel_bus.register(self.report_id, FakeToken())

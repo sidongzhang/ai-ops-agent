@@ -2177,8 +2177,6 @@ class DiagnoseAndWebhookServiceTests(unittest.TestCase):
         self.engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
         SQLModel.metadata.create_all(self.engine)
 
-    @pytest.mark.skip(reason="重构后契约变更：待按新实现重写（commit 323a42d，见 ARCHITECTURE.md）")
-
     def test_diagnose_system_wraps_agent_answer(self) -> None:
         original_diagnose = diagnose_service.diagnose_with_details
         try:
@@ -2206,7 +2204,8 @@ class DiagnoseAndWebhookServiceTests(unittest.TestCase):
         self.assertEqual(response.system_id, system.id)
         self.assertIn("为什么慢", response.answer)
         self.assertEqual(response.template_name, "performance_analysis")
-        self.assertEqual(response.duration_ms, 12)
+        # duration_ms 现在是**端到端墙钟**（含上下文构建/校验），不再是模型段耗时
+        self.assertGreaterEqual(response.duration_ms, 12)
         self.assertEqual(audit.input["template_name"], "performance_analysis")
         self.assertEqual(audit.output["tool_calls"][0]["tool"], "query_prometheus")
         self.assertEqual(report.question, "为什么慢")

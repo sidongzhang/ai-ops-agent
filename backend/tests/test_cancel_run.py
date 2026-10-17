@@ -88,9 +88,15 @@ class CancelDuringModelRequestTests(unittest.TestCase):
 
 
 class CancelDuringToolExecutionTests(unittest.TestCase):
-    @pytest.mark.skip(reason="重构后契约变更：待按新实现重写（commit 323a42d，见 ARCHITECTURE.md）")
     def test_cancel_during_tool_execution(self) -> None:
+        from pydantic_ai import UsageLimits
         original = runner.pick_model
+        # TestModel(call_tools="all") 会连委派子代理内部工具一起调，超过线上 24 次工具预算；
+        # 本用例只验证"工具执行期取消"，故仅在测试内放宽预算。
+        original_limits = runner._usage_limits
+        runner._usage_limits = lambda: UsageLimits(  # type: ignore[assignment]
+            request_limit=60, tool_calls_limit=300, total_tokens_limit=3_000_000
+        )
         runner.pick_model = lambda *a, **k: TestModel(call_tools="all")   # 触发真实工具链
         token = CancellationToken()
         phases: list[str] = []
@@ -110,6 +116,7 @@ class CancelDuringToolExecutionTests(unittest.TestCase):
                 )
         finally:
             runner.pick_model = original
+            runner._usage_limits = original_limits
 
         self.assertFalse(still_alive)
         self.assertIsNotNone(result)

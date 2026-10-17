@@ -18,6 +18,10 @@ def _demo_config() -> str:
                 "args": [str(_SERVER_PATH)],
                 "description": "演示集群",
                 "timeout": 40,
+                # 授权：org 1 / system 2，且只开放这两个只读工具（空列表=拒绝）
+                "org_ids": [1],
+                "system_ids": [2],
+                "allowed_tools": ["list_pods", "recent_events"],
             }
         ]
     )
@@ -49,12 +53,11 @@ def test_catalog_empty_when_unconfigured(monkeypatch):
     assert mcp.catalog() == ""
 
 
-@pytest.mark.skip(reason="重构后契约变更：待按新实现重写（commit 323a42d，见 ARCHITECTURE.md）")
 
 
 def test_catalog_lists_servers_and_usage(monkeypatch):
     monkeypatch.setattr(settings, "mcp_servers", _demo_config())
-    text = mcp.catalog()
+    text = mcp.catalog(org_id=1, system_id=2)
     assert "demo-k8s" in text
     assert "mcp_list_tools" in text
 
@@ -65,28 +68,35 @@ def test_unknown_server_is_reported(monkeypatch):
     assert "未找到" in mcp.call_tool_text("没有这个", "t")
 
 
-@pytest.mark.skip(reason="重构后契约变更：待按新实现重写（commit 323a42d，见 ARCHITECTURE.md）")
 
 
 def test_call_rejects_bad_arguments_json(monkeypatch):
     monkeypatch.setattr(settings, "mcp_servers", _demo_config())
-    assert "不是合法 JSON" in mcp.call_tool_text("demo-k8s", "list_pods", "{oops}")
-    assert "必须是 JSON 对象" in mcp.call_tool_text("demo-k8s", "list_pods", "[1,2]")
+    assert "不是合法 JSON" in mcp.call_tool_text("demo-k8s", "list_pods", "{oops}", org_id=1, system_id=2)
+    assert "必须是 JSON 对象" in mcp.call_tool_text("demo-k8s", "list_pods", "[1,2]", org_id=1, system_id=2)
 
 
-@pytest.mark.skip(reason="重构后契约变更：待按新实现重写（commit 323a42d，见 ARCHITECTURE.md）")
 
 
 def test_stdio_end_to_end_list_and_call(monkeypatch):
     """真实通过 stdio 连本地演示 MCP server：先列工具，再调用取数据。"""
     monkeypatch.setattr(settings, "mcp_servers", _demo_config())
 
-    listing = mcp.list_tools_text("demo-k8s")
+    listing = mcp.list_tools_text("demo-k8s", org_id=1, system_id=2)
     assert "list_pods" in listing
     assert "recent_events" in listing
 
-    events = mcp.call_tool_text("demo-k8s", "recent_events", '{"namespace": "aiops-prod"}')
+    events = mcp.call_tool_text("demo-k8s", "recent_events", '{"namespace": "aiops-prod"}', org_id=1, system_id=2)
     assert "BackOff" in events
 
-    pods = mcp.call_tool_text("demo-k8s", "list_pods", "{}")
+    pods = mcp.call_tool_text("demo-k8s", "list_pods", "{}", org_id=1, system_id=2)
     assert "CrashLoopBackOff" in pods
+
+
+def test_unauthorized_scope_is_denied(monkeypatch):
+    """MCP 改为"先授权再调用"：org/system 不匹配或工具不在白名单一律拒绝。"""
+    monkeypatch.setattr(settings, "mcp_servers", _demo_config())
+
+    assert mcp.catalog(org_id=9, system_id=9) == "", "未授权组织不应看到 MCP 目录"
+    assert "拒绝" in mcp.call_tool_text("demo-k8s", "list_pods", "{}", org_id=9, system_id=2)
+    assert "拒绝" in mcp.call_tool_text("demo-k8s", "delete_pod", "{}", org_id=1, system_id=2)

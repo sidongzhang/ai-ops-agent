@@ -59,18 +59,24 @@ class UsageAccountingTests(unittest.TestCase):
         self.assertTrue(out["usage_complete"])
         self.assertAlmostEqual(out["cost_delta"], 0.01, places=6)
 
-    @pytest.mark.skip(reason="重构后契约变更：待按新实现重写（commit 323a42d，见 ARCHITECTURE.md）")
-
     def test_resume_does_not_double_count(self) -> None:
-        """关键：框架累计值不能当增量再累加一遍。"""
+        """关键：框架累计值不能当增量再累加一遍。
+
+        线上 resume 会**新建报告**（账本幂等键是 report:{report_id}，同一报告只能记一次），
+        这里按真实语义建第二条报告，而不是在同一报告上重复记账。
+        """
         with Session(self.engine) as s:
             usage.record_run_usage(
                 report_id=self.report_id, org_id=1, system_id=1,
                 usage_json=self._usage(1000, 0.01), session=s,
             )
+            resumed = DiagnosisReport(org_id=1, system_id=1, question="q-resume", status="success", total_tokens=0)
+            s.add(resumed)
+            s.commit()
+            s.refresh(resumed)
             # 第二轮（resume）：框架给出的是累计 2500，baseline=上一轮累计 1000 → 增量 1500
             out2 = usage.record_run_usage(
-                report_id=self.report_id, org_id=1, system_id=1,
+                report_id=resumed.id, org_id=1, system_id=1, run_kind="resume",
                 usage_json=self._usage(2500, 0.025), before_json=self._usage(1000, 0.01), session=s,
             )
         self.assertEqual(out2["tokens_delta"], 1500, "resume 增量必须是 2500-1000")
