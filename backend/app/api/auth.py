@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
 from ..core.database import get_session
+from ..core import metrics
 from ..core.config import settings
 from ..core.ratelimit import SlidingWindowLimiter
 from ..core.deps import get_current_user
@@ -42,6 +43,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depend
     key = (form.username or "").strip().lower()
     allowed, retry_after = _login_limiter.check(key)
     if not allowed:
+        metrics.inc("aiops_login_failures_total", reason="rate_limited")
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "登录尝试过于频繁，请稍后再试",
@@ -50,6 +52,7 @@ def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depend
     user = session.exec(select(User).where(User.email == form.username)).first()
     if not user or not verify_password(form.password, user.hashed_password):
         _login_limiter.hit(key)
+        metrics.inc("aiops_login_failures_total", reason="bad_credentials")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "邮箱或密码错误")
     _login_limiter.reset(key)
     return TokenResponse(access_token=create_access_token(user.id, user.org_id))

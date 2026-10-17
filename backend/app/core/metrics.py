@@ -22,6 +22,7 @@ _HELP = {
     "aiops_audit_write_failures_total": ("counter", "审计写入失败次数（按 stage）"),
     "aiops_sandbox_blocked_total": ("counter", "沙箱拒绝执行次数（防止静默降级到进程内）"),
     "aiops_unknown_connector_total": ("counter", "未知连接器类型次数（按 kind）"),
+    "aiops_login_failures_total": ("counter", "登录失败次数（按 reason）"),
 }
 
 

@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.api import auth
+from app.core import metrics
 from app.core.database import get_session
 from app.core.ratelimit import SlidingWindowLimiter
 from app.core.security import hash_password
@@ -59,6 +60,7 @@ def _client() -> TestClient:
 
 def test_login_returns_429_after_repeated_failures() -> None:
     auth._login_limiter.clear()
+    metrics.reset()
     client = _client()
 
     for _ in range(5):
@@ -74,6 +76,10 @@ def test_login_returns_429_after_repeated_failures() -> None:
     )
     assert blocked.status_code == 429
     assert int(blocked.headers["Retry-After"]) >= 1
+
+    rendered = metrics.render()
+    assert 'aiops_login_failures_total{reason="bad_credentials"} 5' in rendered
+    assert 'aiops_login_failures_total{reason="rate_limited"} 1' in rendered
 
 
 def test_successful_login_clears_failures() -> None:

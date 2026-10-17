@@ -42,3 +42,11 @@ groups:
         annotations:
           summary: 未知连接器类型
           description: 服务配置里的 connector 拼写错误或类型未注册（kind={{ $labels.kind }}），健康检查会失败。
+
+      - alert: AIOpsLoginFailureSpike
+        expr: increase(aiops_login_failures_total[5m]) > 20
+        labels:
+          severity: warning
+        annotations:
+          summary: 登录失败激增
+          description: 5 分钟内登录失败超过 20 次（reason={{ $labels.reason }}），疑似撞库或凭据错误。
