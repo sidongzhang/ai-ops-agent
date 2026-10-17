@@ -1,0 +1,6 @@
+2024-05-06 16:30:00 WARN  [health] dependency kafka container ai-ops-agent-kafka-1 restarted (restart count 3)
+2024-05-06 16:30:01 ERROR [health] container state exited, reason=OOMKilled, exit code 137
+2024-05-06 16:30:05 WARN  [kafka] consumer group lag spiked after broker restart (lag=18422)
+2024-05-06 16:31:00 INFO  [host] cgroup memory.current 1.9GiB / memory.max 2.0GiB
+2024-05-06 16:31:00 WARN  [host] 内存上限 reached, kernel oom-killer selected the JVM process (score 987)
+2024-05-06 16:32:00 INFO  [host] disk usage 41% (not full), filesystem is not the bottleneck

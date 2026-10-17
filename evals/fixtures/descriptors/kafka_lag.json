@@ -1,0 +1,39 @@
+{
+  "id": "eval-docker-local",
+  "name": "eval-docker-local 本地演示栈（Kafka 消费堆积场景）",
+  "local": true,
+  "infra": {
+    "prometheus_url": "http://127.0.0.1:9090",
+    "prometheus": { "url": "http://127.0.0.1:9090" }
+  },
+  "services": [
+    {
+      "name": "Kafka",
+      "connector": "tcp",
+      "config": { "host": "127.0.0.1", "port": 9092, "container": "ai-ops-agent-kafka-1" },
+      "host": "127.0.0.1",
+      "port": 9092,
+      "container": "ai-ops-agent-kafka-1",
+      "runtime": { "container": "ai-ops-agent-kafka-1", "systemd_unit": "", "selector": "" }
+    },
+    {
+      "name": "Prometheus",
+      "connector": "prometheus",
+      "config": { "url": "http://127.0.0.1:9090" },
+      "url": "http://127.0.0.1:9090",
+      "up_query": "up",
+      "runtime": { "container": "ai-ops-agent-prometheus-1", "systemd_unit": "", "selector": "" }
+    },
+    {
+      "name": "ConsumerWorker",
+      "connector": "local",
+      "kind": "process",
+      "config": {
+        "log_file": "evals/fixtures/logs/consumer-worker.log",
+        "pid_file": "pids/consumer.pid"
+      },
+      "log_file": "evals/fixtures/logs/consumer-worker.log",
+      "runtime": { "container": "", "systemd_unit": "", "selector": "" }
+    }
+  ]
+}

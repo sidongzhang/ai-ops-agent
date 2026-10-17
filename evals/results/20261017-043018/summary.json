@@ -1,0 +1,6207 @@
+{
+  "meta": {
+    "generated_at": "2026-10-17T04:30:57+00:00",
+    "dry_run": true,
+    "mode": "dry_run",
+    "harness": "evals/run_eval.py",
+    "dataset_path": "/Users/zhangsidong/ai-ops-agent/evals/datasets/seed_cases.jsonl",
+    "case_count": 114,
+    "descriptor_dir": "/Users/zhangsidong/ai-ops-agent/evals/fixtures/descriptors",
+    "docs_root": "/Users/zhangsidong/ai-ops-agent/evals/knowledge/docs",
+    "docs": [
+      "container-oom-and-log-storm-runbook.md",
+      "kafka-lag-runbook.md",
+      "mysql-connections-slow-sql-runbook.md",
+      "redis-memory-runbook.md"
+    ],
+    "doc_count": 4,
+    "rag_mode": "keyword（强制离线，确定性）",
+    "model_override": "",
+    "model_mode": "auto",
+    "concurrency": 1,
+    "timeout_s": 300.0,
+    "ablation_groups": [
+      "full"
+    ],
+    "ablation_descriptions": {
+      "baseline": "裸 Agent：skill_steps=\"\"、knowledge_context=\"\"、data_catalog=\"\"",
+      "playbook": "仅 YAML 剧本：skill_steps=match_skill(question).steps",
+      "rag": "仅知识库：knowledge_context=get_relevant_context(question, system_id)",
+      "full": "线上默认行为：剧本 + RAG"
+    },
+    "injection_note": "journal 中仍标记为已注入的用例: 无",
+    "proxy_notes": [],
+    "fault_type_filter": [],
+    "case_id_filter": [],
+    "command": "evals/run_eval.py --dry-run --gate --thresholds evals/thresholds.smoke.json",
+    "primary_group": "full"
+  },
+  "overall": {
+    "cases": 114,
+    "errors": 0,
+    "task_success_rate": 88.6,
+    "rca_accuracy": 0.92,
+    "tool_selection_f1": 0.81,
+    "tool_selection_precision": 1.0,
+    "tool_selection_recall": 0.714,
+    "tool_param_validity": 98.2,
+    "evidence_coverage_rate": 98.2,
+    "avg_tool_calls": 1.91,
+    "avg_progress_events": 3.82,
+    "redundant_call_rate": 32.9,
+    "hallucination_rate": 11.4,
+    "tool_degraded_rate": 0.0,
+    "avg_duration_ms": 749.6,
+    "avg_total_tokens": 244.9,
+    "diagnosis_evidence_rate_pct": 98.2,
+    "diagnosis_success_rate_pct": 88.6
+  },
+  "by_fault_type": {
+    "container_oom": {
+      "cases": 15,
+      "errors": 0,
+      "task_success_rate": 86.7,
+      "rca_accuracy": 0.889,
+      "tool_selection_f1": 0.778,
+      "tool_selection_precision": 1.0,
+      "tool_selection_recall": 0.667,
+      "tool_param_validity": 100.0,
+      "evidence_coverage_rate": 100.0,
+      "avg_tool_calls": 2.0,
+      "avg_progress_events": 4.0,
+      "redundant_call_rate": 33.3,
+      "hallucination_rate": 13.3,
+      "tool_degraded_rate": 0.0,
+      "avg_duration_ms": 764.9,
+      "avg_total_tokens": 231.2,
+      "diagnosis_evidence_rate_pct": 100.0,
+      "diagnosis_success_rate_pct": 86.7
+    },
+    "kafka_lag": {
+      "cases": 20,
+      "errors": 0,
+      "task_success_rate": 90.0,
+      "rca_accuracy": 0.9,
+      "tool_selection_f1": 0.772,
+      "tool_selection_precision": 1.0,
+      "tool_selection_recall": 0.658,
+      "tool_param_validity": 95.0,
+      "evidence_coverage_rate": 95.0,
+      "avg_tool_calls": 1.9,
+      "avg_progress_events": 3.8,
+      "redundant_call_rate": 32.5,
+      "hallucination_rate": 10.0,
+      "tool_degraded_rate": 0.0,
+      "avg_duration_ms": 760.7,
+      "avg_total_tokens": 246.4,
+      "diagnosis_evidence_rate_pct": 95.0,
+      "diagnosis_success_rate_pct": 90.0
+    },
+    "log_error_storm": {
+      "cases": 15,
+      "errors": 0,
+      "task_success_rate": 86.7,
+      "rca_accuracy": 0.889,
+      "tool_selection_f1": 0.778,
+      "tool_selection_precision": 1.0,
+      "tool_selection_recall": 0.667,
+      "tool_param_validity": 100.0,
+      "evidence_coverage_rate": 100.0,
+      "avg_tool_calls": 2.0,
+      "avg_progress_events": 4.0,
+      "redundant_call_rate": 33.3,
+      "hallucination_rate": 13.3,
+      "tool_degraded_rate": 0.0,
+      "avg_duration_ms": 727.8,
+      "avg_total_tokens": 242.2,
+      "diagnosis_evidence_rate_pct": 100.0,
+      "diagnosis_success_rate_pct": 86.7
+    },
+    "mysql_connections": {
+      "cases": 15,
+      "errors": 0,
+      "task_success_rate": 86.7,
+      "rca_accuracy": 0.9,
+      "tool_selection_f1": 0.778,
+      "tool_selection_precision": 1.0,
+      "tool_selection_recall": 0.667,
+      "tool_param_validity": 100.0,
+      "evidence_coverage_rate": 100.0,
+      "avg_tool_calls": 2.0,
+      "avg_progress_events": 4.0,
+      "redundant_call_rate": 33.3,
+      "hallucination_rate": 13.3,
+      "tool_degraded_rate": 0.0,
+      "avg_duration_ms": 760.1,
+      "avg_total_tokens": 254.6,
+      "diagnosis_evidence_rate_pct": 100.0,
+      "diagnosis_success_rate_pct": 86.7
+    },
+    "redis_memory": {
+      "cases": 20,
+      "errors": 0,
+      "task_success_rate": 90.0,
+      "rca_accuracy": 0.933,
+      "tool_selection_f1": 0.965,
+      "tool_selection_precision": 1.0,
+      "tool_selection_recall": 0.947,
+      "tool_param_validity": 95.0,
+      "evidence_coverage_rate": 95.0,
+      "avg_tool_calls": 1.6,
+      "avg_progress_events": 3.2,
+      "redundant_call_rate": 32.5,
+      "hallucination_rate": 10.0,
+      "tool_degraded_rate": 0.0,
+      "avg_duration_ms": 669.0,
+      "avg_total_tokens": 242.1,
+      "diagnosis_evidence_rate_pct": 95.0,
+      "diagnosis_success_rate_pct": 90.0
+    },
+    "service_unreachable": {
+      "cases": 14,
+      "errors": 0,
+      "task_success_rate": 92.9,
+      "rca_accuracy": 0.929,
+      "tool_selection_f1": 0.786,
+      "tool_selection_precision": 1.0,
+      "tool_selection_recall": 0.679,
+      "tool_param_validity": 100.0,
+      "evidence_coverage_rate": 100.0,
+      "avg_tool_calls": 2.0,
+      "avg_progress_events": 4.0,
+      "redundant_call_rate": 32.1,
+      "hallucination_rate": 7.1,
+      "tool_degraded_rate": 0.0,
+      "avg_duration_ms": 812.1,
+      "avg_total_tokens": 259.2,
+      "diagnosis_evidence_rate_pct": 100.0,
+      "diagnosis_success_rate_pct": 92.9
+    },
+    "slow_sql": {
+      "cases": 15,
+      "errors": 0,
+      "task_success_rate": 86.7,
+      "rca_accuracy": 1.0,
+      "tool_selection_f1": 0.778,
+      "tool_selection_precision": 1.0,
+      "tool_selection_recall": 0.667,
+      "tool_param_validity": 100.0,
+      "evidence_coverage_rate": 100.0,
+      "avg_tool_calls": 2.0,
+      "avg_progress_events": 4.0,
+      "redundant_call_rate": 33.3,
+      "hallucination_rate": 13.3,
+      "tool_degraded_rate": 0.0,
+      "avg_duration_ms": 780.0,
+      "avg_total_tokens": 240.3,
+      "diagnosis_evidence_rate_pct": 100.0,
+      "diagnosis_success_rate_pct": 86.7
+    }
+  },
+  "ablations": {
+    "full": {
+      "description": "线上默认行为：剧本 + RAG",
+      "overall": {
+        "cases": 114,
+        "errors": 0,
+        "task_success_rate": 88.6,
+        "rca_accuracy": 0.92,
+        "tool_selection_f1": 0.81,
+        "tool_selection_precision": 1.0,
+        "tool_selection_recall": 0.714,
+        "tool_param_validity": 98.2,
+        "evidence_coverage_rate": 98.2,
+        "avg_tool_calls": 1.91,
+        "avg_progress_events": 3.82,
+        "redundant_call_rate": 32.9,
+        "hallucination_rate": 11.4,
+        "tool_degraded_rate": 0.0,
+        "avg_duration_ms": 749.6,
+        "avg_total_tokens": 244.9,
+        "diagnosis_evidence_rate_pct": 98.2,
+        "diagnosis_success_rate_pct": 88.6
+      },
+      "by_fault_type": {
+        "container_oom": {
+          "cases": 15,
+          "errors": 0,
+          "task_success_rate": 86.7,
+          "rca_accuracy": 0.889,
+          "tool_selection_f1": 0.778,
+          "tool_selection_precision": 1.0,
+          "tool_selection_recall": 0.667,
+          "tool_param_validity": 100.0,
+          "evidence_coverage_rate": 100.0,
+          "avg_tool_calls": 2.0,
+          "avg_progress_events": 4.0,
+          "redundant_call_rate": 33.3,
+          "hallucination_rate": 13.3,
+          "tool_degraded_rate": 0.0,
+          "avg_duration_ms": 764.9,
+          "avg_total_tokens": 231.2,
+          "diagnosis_evidence_rate_pct": 100.0,
+          "diagnosis_success_rate_pct": 86.7
+        },
+        "kafka_lag": {
+          "cases": 20,
+          "errors": 0,
+          "task_success_rate": 90.0,
+          "rca_accuracy": 0.9,
+          "tool_selection_f1": 0.772,
+          "tool_selection_precision": 1.0,
+          "tool_selection_recall": 0.658,
+          "tool_param_validity": 95.0,
+          "evidence_coverage_rate": 95.0,
+          "avg_tool_calls": 1.9,
+          "avg_progress_events": 3.8,
+          "redundant_call_rate": 32.5,
+          "hallucination_rate": 10.0,
+          "tool_degraded_rate": 0.0,
+          "avg_duration_ms": 760.7,
+          "avg_total_tokens": 246.4,
+          "diagnosis_evidence_rate_pct": 95.0,
+          "diagnosis_success_rate_pct": 90.0
+        },
+        "log_error_storm": {
+          "cases": 15,
+          "errors": 0,
+          "task_success_rate": 86.7,
+          "rca_accuracy": 0.889,
+          "tool_selection_f1": 0.778,
+          "tool_selection_precision": 1.0,
+          "tool_selection_recall": 0.667,
+          "tool_param_validity": 100.0,
+          "evidence_coverage_rate": 100.0,
+          "avg_tool_calls": 2.0,
+          "avg_progress_events": 4.0,
+          "redundant_call_rate": 33.3,
+          "hallucination_rate": 13.3,
+          "tool_degraded_rate": 0.0,
+          "avg_duration_ms": 727.8,
+          "avg_total_tokens": 242.2,
+          "diagnosis_evidence_rate_pct": 100.0,
+          "diagnosis_success_rate_pct": 86.7
+        },
+        "mysql_connections": {
+          "cases": 15,
+          "errors": 0,
+          "task_success_rate": 86.7,
+          "rca_accuracy": 0.9,
+          "tool_selection_f1": 0.778,
+          "tool_selection_precision": 1.0,
+          "tool_selection_recall": 0.667,
+          "tool_param_validity": 100.0,
+          "evidence_coverage_rate": 100.0,
+          "avg_tool_calls": 2.0,
+          "avg_progress_events": 4.0,
+          "redundant_call_rate": 33.3,
+          "hallucination_rate": 13.3,
+          "tool_degraded_rate": 0.0,
+          "avg_duration_ms": 760.1,
+          "avg_total_tokens": 254.6,
+          "diagnosis_evidence_rate_pct": 100.0,
+          "diagnosis_success_rate_pct": 86.7
+        },
+        "redis_memory": {
+          "cases": 20,
+          "errors": 0,
+          "task_success_rate": 90.0,
+          "rca_accuracy": 0.933,
+          "tool_selection_f1": 0.965,
+          "tool_selection_precision": 1.0,
+          "tool_selection_recall": 0.947,
+          "tool_param_validity": 95.0,
+          "evidence_coverage_rate": 95.0,
+          "avg_tool_calls": 1.6,
+          "avg_progress_events": 3.2,
+          "redundant_call_rate": 32.5,
+          "hallucination_rate": 10.0,
+          "tool_degraded_rate": 0.0,
+          "avg_duration_ms": 669.0,
+          "avg_total_tokens": 242.1,
+          "diagnosis_evidence_rate_pct": 95.0,
+          "diagnosis_success_rate_pct": 90.0
+        },
+        "service_unreachable": {
+          "cases": 14,
+          "errors": 0,
+          "task_success_rate": 92.9,
+          "rca_accuracy": 0.929,
+          "tool_selection_f1": 0.786,
+          "tool_selection_precision": 1.0,
+          "tool_selection_recall": 0.679,
+          "tool_param_validity": 100.0,
+          "evidence_coverage_rate": 100.0,
+          "avg_tool_calls": 2.0,
+          "avg_progress_events": 4.0,
+          "redundant_call_rate": 32.1,
+          "hallucination_rate": 7.1,
+          "tool_degraded_rate": 0.0,
+          "avg_duration_ms": 812.1,
+          "avg_total_tokens": 259.2,
+          "diagnosis_evidence_rate_pct": 100.0,
+          "diagnosis_success_rate_pct": 92.9
+        },
+        "slow_sql": {
+          "cases": 15,
+          "errors": 0,
+          "task_success_rate": 86.7,
+          "rca_accuracy": 1.0,
+          "tool_selection_f1": 0.778,
+          "tool_selection_precision": 1.0,
+          "tool_selection_recall": 0.667,
+          "tool_param_validity": 100.0,
+          "evidence_coverage_rate": 100.0,
+          "avg_tool_calls": 2.0,
+          "avg_progress_events": 4.0,
+          "redundant_call_rate": 33.3,
+          "hallucination_rate": 13.3,
+          "tool_degraded_rate": 0.0,
+          "avg_duration_ms": 780.0,
+          "avg_total_tokens": 240.3,
+          "diagnosis_evidence_rate_pct": 100.0,
+          "diagnosis_success_rate_pct": 86.7
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "svc-unreachable-001",
+      "fault_type": "service_unreachable",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "connection refused",
+          "weight": 1.0
+        },
+        {
+          "key": "8000",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 603,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 961,
+      "total_tokens": 283,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "svc-unreachable-002",
+      "fault_type": "service_unreachable",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "3306",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 1.0
+        },
+        {
+          "key": "MySQL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 407,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 859,
+      "total_tokens": 265,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "svc-unreachable-003",
+      "fault_type": "service_unreachable",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 2,
+      "evidence_hits": [
+        {
+          "key": "connection refused",
+          "weight": 1.0
+        },
+        {
+          "key": "6379",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 80,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 522,
+      "total_tokens": 271,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "svc-unreachable-004",
+      "fault_type": "service_unreachable",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "3306",
+          "weight": 1.0
+        },
+        {
+          "key": "正常退出",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 322,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 635,
+      "total_tokens": 239,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "svc-unreachable-005",
+      "fault_type": "service_unreachable",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "Prometheus",
+          "weight": 1.0
+        },
+        {
+          "key": "9090",
+          "weight": 1.0
+        },
+        {
+          "key": "未运行",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 500,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 979,
+      "total_tokens": 278,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "redis-memory-001",
+      "fault_type": "redis_memory",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 1,
+      "progress_event_count": 2,
+      "progress_tool_ms": 95,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 535,
+      "total_tokens": 223,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-002",
+      "fault_type": "redis_memory",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 524,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 902,
+      "total_tokens": 259,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "redis-memory-003",
+      "fault_type": "redis_memory",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.5,
+      "evidence_hit_count": 1,
+      "evidence_partial_count": 1,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 0.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 0.5
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "恶意刷接口攻击"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 100,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 472,
+      "total_tokens": 232,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-004",
+      "fault_type": "redis_memory",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 106,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 553,
+      "total_tokens": 262,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-001",
+      "fault_type": "kafka_lag",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 437,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 774,
+      "total_tokens": 243,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "run_kafka_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "kafka-lag-002",
+      "fault_type": "kafka_lag",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "rebalance",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 276,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 775,
+      "total_tokens": 271,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-003",
+      "fault_type": "kafka_lag",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "partition",
+          "weight": 1.0
+        },
+        {
+          "key": "lag",
+          "weight": 1.0
+        },
+        {
+          "key": "OOMKilled",
+          "weight": 0.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "网络分区导致 broker 失联"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 430,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 771,
+      "total_tokens": 270,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-004",
+      "fault_type": "kafka_lag",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "kafka_brokers",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 662,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1044,
+      "total_tokens": 283,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-001",
+      "fault_type": "mysql_connections",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 363,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 757,
+      "total_tokens": 264,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "mysql-connections-002",
+      "fault_type": "mysql_connections",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "连接数",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 292,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 764,
+      "total_tokens": 264,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-003",
+      "fault_type": "mysql_connections",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.833,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 1,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        },
+        {
+          "key": "连接数",
+          "weight": 0.5
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "慢 SQL 拖垮数据库"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 98,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 472,
+      "total_tokens": 254,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-001",
+      "fault_type": "container_oom",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 311,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 646,
+      "total_tokens": 244,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "read_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "container-oom-002",
+      "fault_type": "container_oom",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 306,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 703,
+      "total_tokens": 243,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-003",
+      "fault_type": "container_oom",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存上限",
+          "weight": 0.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "磁盘写满导致"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 330,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 701,
+      "total_tokens": 236,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "slow-sql-001",
+      "fault_type": "slow_sql",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 517,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 991,
+      "total_tokens": 245,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "slow-sql-002",
+      "fault_type": "slow_sql",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "慢查询",
+          "weight": 1.0
+        },
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 94,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 494,
+      "total_tokens": 255,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "slow-sql-003",
+      "fault_type": "slow_sql",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "慢查询",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "网络抖动导致"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 372,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 858,
+      "total_tokens": 260,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-001",
+      "fault_type": "log_error_storm",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 258,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 617,
+      "total_tokens": 242,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "read_logs",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "log-error-storm-002",
+      "fault_type": "log_error_storm",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重复",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 382,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 867,
+      "total_tokens": 257,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-003",
+      "fault_type": "log_error_storm",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 0.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "DDoS 攻击"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 140,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 559,
+      "total_tokens": 232,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "svc-unreachable-mysql-v001",
+      "fault_type": "service_unreachable",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "3306",
+          "weight": 1.0
+        },
+        {
+          "key": "正常退出",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 567,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 966,
+      "total_tokens": 297,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "svc-unreachable-mysql-v002",
+      "fault_type": "service_unreachable",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "3306",
+          "weight": 1.0
+        },
+        {
+          "key": "正常退出",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 634,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 959,
+      "total_tokens": 285,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "svc-unreachable-mysql-v003",
+      "fault_type": "service_unreachable",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "3306",
+          "weight": 1.0
+        },
+        {
+          "key": "正常退出",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 298,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 621,
+      "total_tokens": 215,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "svc-unreachable-redis-v004",
+      "fault_type": "service_unreachable",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 2,
+      "evidence_hits": [
+        {
+          "key": "6379",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 223,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 620,
+      "total_tokens": 272,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "svc-unreachable-redis-v005",
+      "fault_type": "service_unreachable",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 2,
+      "evidence_hits": [
+        {
+          "key": "6379",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 434,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 853,
+      "total_tokens": 260,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "svc-unreachable-redis-v006",
+      "fault_type": "service_unreachable",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.5,
+      "evidence_hit_count": 1,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 2,
+      "evidence_hits": [
+        {
+          "key": "6379",
+          "weight": 1.0
+        },
+        {
+          "key": "连接被拒绝",
+          "weight": 0.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "Redis 内存打满导致"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 560,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 913,
+      "total_tokens": 224,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "svc-unreachable-prom-v007",
+      "fault_type": "service_unreachable",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 2,
+      "evidence_hits": [
+        {
+          "key": "9090",
+          "weight": 1.0
+        },
+        {
+          "key": "未运行",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 327,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 752,
+      "total_tokens": 269,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "svc-unreachable-prom-v008",
+      "fault_type": "service_unreachable",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 2,
+      "evidence_hits": [
+        {
+          "key": "9090",
+          "weight": 1.0
+        },
+        {
+          "key": "未运行",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 478,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 822,
+      "total_tokens": 256,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "svc-unreachable-prom-v009",
+      "fault_type": "service_unreachable",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.5,
+      "evidence_hit_count": 1,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 2,
+      "evidence_hits": [
+        {
+          "key": "9090",
+          "weight": 1.0
+        },
+        {
+          "key": "未运行",
+          "weight": 0.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 462,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 908,
+      "total_tokens": 215,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "list_services"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "check_service"
+      ]
+    },
+    {
+      "case_id": "redis-memory-v010",
+      "fault_type": "redis_memory",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 1,
+      "progress_event_count": 2,
+      "progress_tool_ms": 74,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 544,
+      "total_tokens": 223,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v011",
+      "fault_type": "redis_memory",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 492,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 988,
+      "total_tokens": 253,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v012",
+      "fault_type": "redis_memory",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.833,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 1,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 0.5
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 190,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 520,
+      "total_tokens": 239,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v013",
+      "fault_type": "redis_memory",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 1,
+      "progress_event_count": 2,
+      "progress_tool_ms": 315,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 719,
+      "total_tokens": 223,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v014",
+      "fault_type": "redis_memory",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 552,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 871,
+      "total_tokens": 253,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v015",
+      "fault_type": "redis_memory",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.833,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 1,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 0.5
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "网络抖动导致"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 600,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1033,
+      "total_tokens": 246,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v016",
+      "fault_type": "redis_memory",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 1,
+      "progress_event_count": 2,
+      "progress_tool_ms": 121,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 580,
+      "total_tokens": 223,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v017",
+      "fault_type": "redis_memory",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 98,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 415,
+      "total_tokens": 253,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v018",
+      "fault_type": "redis_memory",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.833,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 1,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 0.5
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 374,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 802,
+      "total_tokens": 239,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v019",
+      "fault_type": "redis_memory",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 1,
+      "progress_event_count": 2,
+      "progress_tool_ms": 307,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 677,
+      "total_tokens": 223,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v020",
+      "fault_type": "redis_memory",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 336,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 765,
+      "total_tokens": 253,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v021",
+      "fault_type": "redis_memory",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.833,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 1,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 0.5
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 280,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 739,
+      "total_tokens": 239,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v022",
+      "fault_type": "redis_memory",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 1,
+      "progress_event_count": 2,
+      "progress_tool_ms": 285,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 710,
+      "total_tokens": 223,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v023",
+      "fault_type": "redis_memory",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 1.0
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 90,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 497,
+      "total_tokens": 253,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "redis-memory-v024",
+      "fault_type": "redis_memory",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.833,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 1,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "maxmemory",
+          "weight": 1.0
+        },
+        {
+          "key": "used_memory",
+          "weight": 0.5
+        },
+        {
+          "key": "evicted_keys",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 148,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 592,
+      "total_tokens": 239,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 1,
+      "actual_tools": [
+        "run_redis_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "kafka-lag-v025",
+      "fault_type": "kafka_lag",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 119,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 457,
+      "total_tokens": 245,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "run_kafka_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "kafka-lag-v026",
+      "fault_type": "kafka_lag",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 168,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 488,
+      "total_tokens": 246,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v027",
+      "fault_type": "kafka_lag",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 0.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 610,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1080,
+      "total_tokens": 225,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v028",
+      "fault_type": "kafka_lag",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 387,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 794,
+      "total_tokens": 245,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "run_kafka_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "kafka-lag-v029",
+      "fault_type": "kafka_lag",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 544,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 921,
+      "total_tokens": 246,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v030",
+      "fault_type": "kafka_lag",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 0.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 90,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 566,
+      "total_tokens": 225,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v031",
+      "fault_type": "kafka_lag",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 281,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 739,
+      "total_tokens": 245,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "run_kafka_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "kafka-lag-v032",
+      "fault_type": "kafka_lag",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 196,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 644,
+      "total_tokens": 246,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v033",
+      "fault_type": "kafka_lag",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 0.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 614,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 996,
+      "total_tokens": 225,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v034",
+      "fault_type": "kafka_lag",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 494,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 883,
+      "total_tokens": 245,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "run_kafka_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "kafka-lag-v035",
+      "fault_type": "kafka_lag",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 252,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 591,
+      "total_tokens": 246,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v036",
+      "fault_type": "kafka_lag",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 0.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "Kafka broker 磁盘写满"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 544,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1017,
+      "total_tokens": 237,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v037",
+      "fault_type": "kafka_lag",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 355,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 722,
+      "total_tokens": 245,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "run_kafka_command"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "kafka-lag-v038",
+      "fault_type": "kafka_lag",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 1.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 378,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 824,
+      "total_tokens": 246,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "kafka-lag-v039",
+      "fault_type": "kafka_lag",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "kafka_consumergroup_lag",
+          "weight": 1.0
+        },
+        {
+          "key": "offset",
+          "weight": 0.0
+        },
+        {
+          "key": "消费组",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 200,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 656,
+      "total_tokens": 225,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "run_kafka_command"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-v040",
+      "fault_type": "mysql_connections",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 365,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 858,
+      "total_tokens": 263,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "mysql-connections-v041",
+      "fault_type": "mysql_connections",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 136,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 627,
+      "total_tokens": 247,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-v042",
+      "fault_type": "mysql_connections",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 0.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 644,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1109,
+      "total_tokens": 247,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-v043",
+      "fault_type": "mysql_connections",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 225,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 528,
+      "total_tokens": 263,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "mysql-connections-v044",
+      "fault_type": "mysql_connections",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 654,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1146,
+      "total_tokens": 247,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-v045",
+      "fault_type": "mysql_connections",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 0.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "慢 SQL 占用连接"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 284,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 678,
+      "total_tokens": 256,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-v046",
+      "fault_type": "mysql_connections",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 253,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 637,
+      "total_tokens": 263,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "mysql-connections-v047",
+      "fault_type": "mysql_connections",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 402,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 736,
+      "total_tokens": 247,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-v048",
+      "fault_type": "mysql_connections",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 0.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 138,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 561,
+      "total_tokens": 247,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-v049",
+      "fault_type": "mysql_connections",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 408,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 817,
+      "total_tokens": 263,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "mysql-connections-v050",
+      "fault_type": "mysql_connections",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 1.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 306,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 646,
+      "total_tokens": 247,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "mysql-connections-v051",
+      "fault_type": "mysql_connections",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "max_connections",
+          "weight": 1.0
+        },
+        {
+          "key": "Threads_connected",
+          "weight": 0.0
+        },
+        {
+          "key": "1040",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 656,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1066,
+      "total_tokens": 247,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "search_logs"
+      ]
+    },
+    {
+      "case_id": "slow-sql-v052",
+      "fault_type": "slow_sql",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 232,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 720,
+      "total_tokens": 230,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "slow-sql-v053",
+      "fault_type": "slow_sql",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 380,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 858,
+      "total_tokens": 241,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "slow-sql-v054",
+      "fault_type": "slow_sql",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 212,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 697,
+      "total_tokens": 238,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "slow-sql-v055",
+      "fault_type": "slow_sql",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 256,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 611,
+      "total_tokens": 230,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "slow-sql-v056",
+      "fault_type": "slow_sql",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 674,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1035,
+      "total_tokens": 241,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "slow-sql-v057",
+      "fault_type": "slow_sql",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "连接数打满导致排队"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 504,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 895,
+      "total_tokens": 246,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "slow-sql-v058",
+      "fault_type": "slow_sql",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 359,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 741,
+      "total_tokens": 230,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "slow-sql-v059",
+      "fault_type": "slow_sql",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 296,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 680,
+      "total_tokens": 241,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "slow-sql-v060",
+      "fault_type": "slow_sql",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 622,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 989,
+      "total_tokens": 238,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "slow-sql-v061",
+      "fault_type": "slow_sql",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 440,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 897,
+      "total_tokens": 230,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "query_prometheus",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "slow-sql-v062",
+      "fault_type": "slow_sql",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 200,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 587,
+      "total_tokens": 241,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "slow-sql-v063",
+      "fault_type": "slow_sql",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "全表扫描",
+          "weight": 1.0
+        },
+        {
+          "key": "索引",
+          "weight": 1.0
+        },
+        {
+          "key": "type=ALL",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 218,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 647,
+      "total_tokens": 238,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "query_prometheus"
+      ]
+    },
+    {
+      "case_id": "container-oom-v064",
+      "fault_type": "container_oom",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 435,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 888,
+      "total_tokens": 244,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "read_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "container-oom-v065",
+      "fault_type": "container_oom",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 180,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 535,
+      "total_tokens": 226,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-v066",
+      "fault_type": "container_oom",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存上限",
+          "weight": 0.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 246,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 727,
+      "total_tokens": 214,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-v067",
+      "fault_type": "container_oom",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 183,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 622,
+      "total_tokens": 244,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "read_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "container-oom-v068",
+      "fault_type": "container_oom",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 572,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1026,
+      "total_tokens": 226,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-v069",
+      "fault_type": "container_oom",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存上限",
+          "weight": 0.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "Kafka 消费积压导致"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 388,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 852,
+      "total_tokens": 223,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-v070",
+      "fault_type": "container_oom",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 468,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 841,
+      "total_tokens": 244,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "read_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "container-oom-v071",
+      "fault_type": "container_oom",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 224,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 683,
+      "total_tokens": 226,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-v072",
+      "fault_type": "container_oom",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存上限",
+          "weight": 0.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 594,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 1083,
+      "total_tokens": 214,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-v073",
+      "fault_type": "container_oom",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 462,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 821,
+      "total_tokens": 244,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service",
+        "read_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "container-oom-v074",
+      "fault_type": "container_oom",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 286,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 674,
+      "total_tokens": 226,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "container-oom-v075",
+      "fault_type": "container_oom",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "OOMKilled",
+          "weight": 1.0
+        },
+        {
+          "key": "exit 137",
+          "weight": 1.0
+        },
+        {
+          "key": "内存上限",
+          "weight": 0.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 222,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 672,
+      "total_tokens": 214,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "check_service"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-v076",
+      "fault_type": "log_error_storm",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 190,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 660,
+      "total_tokens": 243,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "read_logs",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "log-error-storm-v077",
+      "fault_type": "log_error_storm",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重复",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 266,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 682,
+      "total_tokens": 256,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-v078",
+      "fault_type": "log_error_storm",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 0.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 448,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 769,
+      "total_tokens": 224,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-v079",
+      "fault_type": "log_error_storm",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 429,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 772,
+      "total_tokens": 243,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "read_logs",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "log-error-storm-v080",
+      "fault_type": "log_error_storm",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重复",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 142,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 618,
+      "total_tokens": 256,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-v081",
+      "fault_type": "log_error_storm",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 0.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 348,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 830,
+      "total_tokens": 224,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-v082",
+      "fault_type": "log_error_storm",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 273,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 689,
+      "total_tokens": 243,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "read_logs",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "log-error-storm-v083",
+      "fault_type": "log_error_storm",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重复",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 482,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 904,
+      "total_tokens": 256,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-v084",
+      "fault_type": "log_error_storm",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 0.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 162,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 463,
+      "total_tokens": 224,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-v085",
+      "fault_type": "log_error_storm",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 442,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 781,
+      "total_tokens": 243,
+      "tool_precision": 1.0,
+      "tool_recall": 1.0,
+      "tool_f1": 1.0,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 2,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "read_logs",
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "log-error-storm-v086",
+      "fault_type": "log_error_storm",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 3,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 1.0
+        },
+        {
+          "key": "重复",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 588,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 925,
+      "total_tokens": 256,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "log-error-storm-v087",
+      "fault_type": "log_error_storm",
+      "difficulty": "hard",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 0,
+      "rca_accuracy": 0.667,
+      "evidence_hit_count": 2,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 3,
+      "evidence_hits": [
+        {
+          "key": "连接池",
+          "weight": 1.0
+        },
+        {
+          "key": "PoolExhausted",
+          "weight": 0.0
+        },
+        {
+          "key": "重试",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 1,
+      "hallucination_phrases": [
+        "磁盘快满导致 IO 阻塞"
+      ],
+      "evidence_coverage": 1.0,
+      "tool_call_count": 2,
+      "progress_event_count": 4,
+      "progress_tool_ms": 414,
+      "tool_param_validity": 1.0,
+      "redundant_call_rate": 0.5,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 781,
+      "total_tokens": 234,
+      "tool_precision": 1.0,
+      "tool_recall": 0.5,
+      "tool_f1": 0.667,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 1,
+      "required_tools_total": 2,
+      "actual_tools": [
+        "search_logs"
+      ],
+      "unexpected_tools": [],
+      "missed_tools": [
+        "read_logs"
+      ]
+    },
+    {
+      "case_id": "knowledge-redis-runbook-001",
+      "fault_type": "redis_memory",
+      "difficulty": "easy",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 1,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 1,
+      "evidence_hits": [
+        {
+          "key": "RB-REDIS-2026-01",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 0.0,
+      "tool_call_count": 0,
+      "progress_event_count": 0,
+      "progress_tool_ms": 0,
+      "tool_param_validity": 0.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 466,
+      "total_tokens": 283,
+      "tool_precision": null,
+      "tool_recall": null,
+      "tool_f1": null,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 0,
+      "required_tools_total": 0,
+      "actual_tools": [],
+      "unexpected_tools": [],
+      "missed_tools": []
+    },
+    {
+      "case_id": "knowledge-kafka-runbook-001",
+      "fault_type": "kafka_lag",
+      "difficulty": "medium",
+      "ablation": "full",
+      "model": "mock://dry-run",
+      "status": "ok",
+      "error": "",
+      "task_success": 1,
+      "rca_accuracy": 1.0,
+      "evidence_hit_count": 1,
+      "evidence_partial_count": 0,
+      "evidence_total_keys": 1,
+      "evidence_hits": [
+        {
+          "key": "RB-KAFKA-2026-01",
+          "weight": 1.0
+        }
+      ],
+      "hallucination": 0,
+      "hallucination_phrases": [],
+      "evidence_coverage": 0.0,
+      "tool_call_count": 0,
+      "progress_event_count": 0,
+      "progress_tool_ms": 0,
+      "tool_param_validity": 0.0,
+      "redundant_call_rate": 0.0,
+      "degraded_call_rate": 0.0,
+      "duration_ms": 472,
+      "total_tokens": 269,
+      "tool_precision": null,
+      "tool_recall": null,
+      "tool_f1": null,
+      "required_tool_hit": true,
+      "required_tools_hit_count": 0,
+      "required_tools_total": 0,
+      "actual_tools": [],
+      "unexpected_tools": [],
+      "missed_tools": []
+    }
+  ]
+}

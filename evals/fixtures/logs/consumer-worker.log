@@ -1,0 +1,9 @@
+2024-05-06 13:40:01 INFO  [consumer] joined group order-consumer, partitions [order-events-0, order-events-1, order-events-2]
+2024-05-06 13:44:12 WARN  [consumer] rebalance triggered (member count changed), revoking partitions
+2024-05-06 13:44:13 INFO  [consumer] re-assigned partitions [order-events-0, order-events-1, order-events-2]
+2024-05-06 13:44:31 WARN  [consumer] max.poll.interval.ms exceeded, leaving group to avoid infinite rebalance
+2024-05-06 13:44:32 WARN  [consumer] rebalance triggered again, this is the 7th rebalance in 5 minutes
+2024-05-06 13:45:00 WARN  [consumer] processing slow: batch handler p99 = 4.8s, batch size 500
+2024-05-06 13:45:10 ERROR [consumer] offset commit skipped, group is rebalancing
+2024-05-06 13:46:00 WARN  [consumer] consumer group lag keeps growing, no offset committed since 13:44:12
+2024-05-06 13:47:00 INFO  [consumer] consumer group order-consumer lag=48210, partitions=3
