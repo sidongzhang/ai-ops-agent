@@ -5,30 +5,57 @@
 """
 import unittest
 
-from app.agent.diagnostics.runner import _fallback_api_model
+from app.agent.diagnostics.fallback import FallbackMode, api_fallback_model, decide_fallback
 
 
 class ModelFallbackPolicyTests(unittest.TestCase):
     def test_local_never_falls_back_to_api(self) -> None:
         self.assertIsNone(
-            _fallback_api_model("local"),
+            api_fallback_model("local"),
             "选了本地模型时不得回退到远程 API（数据出网的合规风险）",
         )
 
     def test_explicit_api_or_advanced_never_fall_back(self) -> None:
-        for mode in ("api", "advanced", "default"):
-            self.assertIsNone(_fallback_api_model(mode), f"{mode} 不应回退")
+        for mode in ("api", "advanced", "default", "local"):
+            self.assertIsNone(api_fallback_model(mode), f"{mode} 不应回退")
 
     def test_auto_may_fall_back(self) -> None:
         """auto 模式：本地模型失败时允许回退到 API（当前 llm_mode=local 时才有效）。"""
         from app.agent.llm import default_endpoint
 
         if default_endpoint().mode == "local":
-            self.assertIsNotNone(_fallback_api_model("auto"))
-            self.assertIsNotNone(_fallback_api_model(""))
+            self.assertIsNotNone(api_fallback_model("auto"))
+            self.assertIsNotNone(api_fallback_model(""))
         else:
             # 默认就是 API 时，没有可回退的目标
-            self.assertIsNone(_fallback_api_model("auto"))
+            self.assertIsNone(api_fallback_model("auto"))
+
+
+class FallbackDecisionTests(unittest.TestCase):
+    def test_images_never_downgrade_to_text(self) -> None:
+        decision = decide_fallback(model_mode="auto", has_images=True)
+        self.assertIs(decision.mode, FallbackMode.NONE)
+        self.assertEqual(decision.reason, "image_input_requires_multimodal")
+
+    def test_explicit_local_gets_text_retry_not_model_switch(self) -> None:
+        decision = decide_fallback(model_mode="local", has_images=False)
+        self.assertIs(decision.mode, FallbackMode.TEXT)
+        self.assertIsNone(decision.model)
+
+    def test_auto_local_with_key_switches_to_api(self) -> None:
+        from unittest.mock import patch
+
+        from app.agent.diagnostics import fallback as policy
+
+        fake_api = object()
+        with patch.object(policy, "default_endpoint", return_value=type("E", (), {"mode": "local"})()), \
+             patch.object(policy, "endpoint_for_mode", return_value=type("E", (), {"api_key": "sk-test"})()), \
+             patch.object(policy, "make_chat_model", return_value=fake_api):
+            decision = policy.decide_fallback(model_mode="auto", has_images=False)
+
+        self.assertIs(decision.mode, FallbackMode.API_MODEL)
+        self.assertIs(decision.model, fake_api)
+        self.assertEqual(decision.reason, "local_model_failed")
 
 
 class LocalEndpointTests(unittest.TestCase):

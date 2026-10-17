@@ -15,7 +15,6 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 
-from app.agent.llm import default_endpoint, endpoint_for_mode, make_chat_model
 from app.agent.lazy_agent import LazyAgent
 from app.core.config import settings
 from app.agent.runtime.contracts import RuntimeResult as DiagnosisRun, RuntimeBudgetExceeded
@@ -26,6 +25,7 @@ from app.agent.harness.evidence import outcome_for_result
 from app.agent.harness.execution import ExecutionTracker, ExecutionUnsettled, observe_remote_command
 from .knowledge.store import append_runbook_entry
 from .history import compact_messages
+from .fallback import FallbackMode, decide_fallback
 from .models import pick_model
 from .tool_events import iter_tool_events, safe_emit
 from .tools import AgentDeps, register_tools
@@ -227,11 +227,12 @@ def diagnose_with_details(
             _ensure_executor_settled(deps, model_name, started_at)
             safe_emit(on_progress, {'kind': 'answer_attempt'})
             deps.usage_gaps.append('model_failed_attempt')
-            if images:
-                # Do not silently discard image input by entering the text-only fallback.
+            decision = decide_fallback(model_mode=model_mode, has_images=bool(images))
+            if decision.mode is FallbackMode.NONE:
+                # 带图请求绝不降级到纯文本：丢弃图片比失败更糟
                 raise RuntimeError("图片诊断执行失败，请确认所选模型支持图片或稍后重试；未丢弃图片改为纯文本回答。") from exc
-            fallback = _fallback_api_model(model_mode)
-            if not fallback:
+            fallback = decision.model
+            if decision.mode is FallbackMode.TEXT:
                 result = _run_text_fallback(
                     model,
                     descriptor=descriptor,
@@ -246,8 +247,9 @@ def diagnose_with_details(
             else:
                 fallback_name = _model_name(fallback)
                 log.warning(
-                    "[diagnose] local model failed, fallback to API model=%s error=%s",
+                    "[diagnose] local model failed, fallback to API model=%s reason=%s error=%s",
                     fallback_name,
+                    decision.reason,
                     exc,
                 )
                 model = fallback
@@ -519,17 +521,6 @@ def _normalize_answer(answer) -> str:
     if match and match.start() > 0:
         text = text[match.start():].lstrip()
     return re.sub(r"^(?:[-*_]{3,}[ \t]*\n+)+", "", text).lstrip()
-
-
-def _fallback_api_model(model_mode: str):
-    if (model_mode or "auto").strip().lower() not in {"", "auto", "default"}:
-        return None
-    if default_endpoint().mode != "local":
-        return None
-    api_endpoint = endpoint_for_mode("api")
-    if not api_endpoint.api_key:
-        return None
-    return make_chat_model(api_endpoint)
 
 
 def _model_name(model) -> str:

@@ -551,7 +551,7 @@ StateGraph(WorkflowState).add_node("analyze", analyze_node)
 3. **`mcp.py` 在同步工具里 `asyncio.run(...)`，且每次调用起一个 stdio 子进程**（无连接复用）——依赖"线程池里没有运行中的 event loop"这一前提，且开销随调用次数线性增长。
 4. **两套 schema 之间没有集中式契约测试证据**：23 个工具的 LLM 侧 schema 由签名隐式派生，"改签名即改契约"。
 5. **`services/diagnostics/service.py` 1315 行**，`diagnose_system()` 单函数内联了十几个闭包（runbook/topology/changes/archive/sandbox/失败历史），可拆为独立 provider 模块。
-6. **`runner.py` 的降级链**（本地→API→纯文本）逻辑深嵌套，`_fallback_api_model` 与外层 `model_mode` 判定耦合，建议抽成显式的 `FallbackPolicy`。
+6. ~~`runner.py` 的降级链逻辑深嵌套~~（**已抽成 `agent/diagnostics/fallback.py`**）：`decide_fallback()` 显式返回 NONE / API_MODEL / TEXT 三种决策，带图不降级、显式选择不换模型、auto 才允许切 API，均有测试覆盖。
 7. **工具类 TTL 配置与 `TOOL_CLASSES` 的新增无编译期约束**——新增工具忘记归类会静默落到 `metrics` 默认值。
 8. **`claims.py` 只覆盖 dataset 合计与健康断言**，其余量化数字只能靠 `evidence_guard` 做"有无取证"级别的粗判。
 9. **`_memoized` 的缓存 key 用 `json.dumps(default=str)`**，对含大对象的参数（如 `inputs: list`）可能产生昂贵 key。
