@@ -34,18 +34,32 @@ def test_not_flagged_when_dataset_evidence_present():
     assert meta["flagged"] is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="已知缺陷：list_services 也被算作 evidence_available，"
-           "与 evidence.py 文档承诺（探活不能证明无关业务计数）不一致；待按 claim scope 细分证据要求",
-)
 def test_health_check_is_not_evidence_for_business_counts():
-    """可用性检查不能证明业务计数——这是重构后特意收紧的一条。"""
+    """可用性检查不能证明业务计数（本次修复的核心场景）。"""
     calls = [{"tool": "list_services", "status": "success", "output": "Redis: ok"}]
     _text, meta = apply_evidence_guard("共 93 次切割。", calls)
 
-    # 探活算"尝试过取证工具"，但不足以支撑业务计数 → 仍要标记
-    assert meta["evidence_tool_used"] is True
+    assert meta["evidence_tool_used"] is True, "确实调过工具"
+    assert meta["evidence_scope"] == "data", "量化结论要求数据类证据"
+    assert meta["evidence_available"] is False
+    assert meta["flagged"] is True
+    assert meta["reason"] == "evidence_not_data_bearing"
+
+
+def test_non_quantitative_health_claim_is_covered_by_probe():
+    """非量化结论（服务活着/挂了）由探活支撑即可，不应误伤。"""
+    calls = [{"tool": "check_service", "status": "success", "output": "Redis: down"}]
+    _text, meta = apply_evidence_guard("Redis 未运行。", calls)
+
+    assert meta["has_claims"] is False
+    assert meta["evidence_scope"] == "any"
+    assert meta["flagged"] is False
+
+
+def test_failed_data_tool_is_not_evidence():
+    calls = [{"tool": "query_business_dataset", "status": "failed", "output": ""}]
+    _text, meta = apply_evidence_guard("共 93 次切割。", calls)
+
     assert meta["evidence_available"] is False
     assert meta["flagged"] is True
     assert meta["reason"] == "evidence_unavailable"

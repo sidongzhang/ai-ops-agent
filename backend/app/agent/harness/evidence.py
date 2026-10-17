@@ -16,6 +16,11 @@ REPORT_EVIDENCE_TOOLS = frozenset({
     'list_archive_files', 'read_archive_file', 'fetch_archive_file', 'run_python_analysis',
     'search_knowledge_base', 'load_runbook', 'mcp_call',
 })
+# 可用性工具：只能证明"服务是否活着"，不能证明业务计数（探活成功 ≠ 计数为真）。
+AVAILABILITY_TOOLS = frozenset({'list_services', 'check_service', 'check_container_state'})
+# 数据类证据：返回值里能承载可核对的事实/数值（数据集/指标/日志/中间件/归档/分析）。
+DATA_EVIDENCE_TOOLS = REPORT_EVIDENCE_TOOLS - AVAILABILITY_TOOLS
+
 _QUANT = re.compile(r'\d[\d,\.]*\s*(?:次|条|个|项|份|台|家|起|%|％|字节|GB|MB|KB|TB|B|ms|s|秒|分钟|小时|天)')
 CAVEAT = (
     '\n\n> ⚠️ 本回答包含具体数字，但本轮诊断中**未发现对应的取证工具调用**'
@@ -31,15 +36,21 @@ def has_quantitative_claims(answer: str) -> bool:
     return bool(_QUANT.search(answer or ''))
 
 
-def evidence_tools_used(tool_calls) -> bool:
+def evidence_tools_used(tool_calls, *, tools=None) -> bool:
     """Whether an evidence tool was attempted, including failed attempts."""
-    return any(call.get('tool') in REPORT_EVIDENCE_TOOLS for call in tool_calls or [] if isinstance(call, dict))
+    allowed = tools if tools is not None else REPORT_EVIDENCE_TOOLS
+    return any(call.get('tool') in allowed for call in tool_calls or [] if isinstance(call, dict))
 
 
-def evidence_available(tool_calls) -> bool:
-    """Successful evidence exists; relevance and factual correctness are not checked."""
+def evidence_available(tool_calls, *, tools=None) -> bool:
+    """Successful evidence exists; relevance and factual correctness are not checked.
+
+    `tools` 可收窄证据范围：量化结论应传 DATA_EVIDENCE_TOOLS——探活/容器状态这类
+    可用性检查不能证明一个无关的业务计数。
+    """
+    allowed = tools if tools is not None else REPORT_EVIDENCE_TOOLS
     return any(
-        call.get('tool') in REPORT_EVIDENCE_TOOLS
+        call.get('tool') in allowed
         and call.get('status') == 'success'
         and bool(str(call.get('output') or '').strip())
         and outcome_for_text(str(call['output']))[0] == 'success'
@@ -60,7 +71,10 @@ def apply_evidence_guard(answer: str, tool_calls, *, enabled: bool = True):
         return text, meta
     meta['has_claims'] = has_quantitative_claims(text)
     meta['evidence_tool_used'] = evidence_tools_used(tool_calls)
-    meta['evidence_available'] = evidence_available(tool_calls)
+    # 量化结论只认数据类证据；可用性工具（探活/容器状态）不足以支撑无关的业务计数
+    required_tools = DATA_EVIDENCE_TOOLS if meta['has_claims'] else REPORT_EVIDENCE_TOOLS
+    meta['evidence_scope'] = 'data' if meta['has_claims'] else 'any'
+    meta['evidence_available'] = evidence_available(tool_calls, tools=required_tools)
     from .claims import check_claims
     try:
         meta['claim_consistency'] = check_claims(text, tool_calls)
@@ -74,7 +88,15 @@ def apply_evidence_guard(answer: str, tool_calls, *, enabled: bool = True):
     unresolved = [check for check in meta['claim_consistency']['checks'] if check['status'] != 'matches_tool_text']
     if meta['has_claims'] and not meta['evidence_available']:
         meta['flagged'] = True
-        meta['reason'] = 'evidence_unavailable' if meta['evidence_tool_used'] else 'no_evidence_tool'
+        availability_only = evidence_tools_used(tool_calls, tools=AVAILABILITY_TOOLS) and not any(
+            call.get('tool') in DATA_EVIDENCE_TOOLS
+            for call in tool_calls or [] if isinstance(call, dict)
+        )
+        if meta['evidence_tool_used']:
+            # 只做了探活/容器检查，却给出了业务计数 → 证据类型不对
+            meta['reason'] = 'evidence_not_data_bearing' if availability_only else 'evidence_unavailable'
+        else:
+            meta['reason'] = 'no_evidence_tool'
     elif unresolved:
         meta['flagged'] = True
         meta['reason'] = 'claim_evidence_unresolved'
