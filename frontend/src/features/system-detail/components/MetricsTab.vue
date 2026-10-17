@@ -26,12 +26,6 @@ const hasService = (kind, port) => registered.value.some((service) => {
   return service.connector === kind || name.includes(kind) || Number(config.port) === port
 })
 
-const historySeriesByKey = computed(() => {
-  const map = new Map()
-  for (const series of history.value?.series || []) map.set(series.key, series)
-  return map
-})
-
 const historySeriesList = computed(() => history.value?.series || [])
 
 const historyStroke = {

@@ -27,7 +27,7 @@ pids/
 node_modules/
 dist/
 dist-prod/
-/package-lock.json
+# 锁文件必须入库：CI 用 `npm ci` 复现前端构建
 
 # editors / OS
 .idea/

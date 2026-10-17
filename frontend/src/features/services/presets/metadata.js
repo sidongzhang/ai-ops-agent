@@ -112,7 +112,6 @@ export const CONNECTOR_FIELDS = {
   http: [['health_url', 'HTTP 健康检查 URL', 'https://example.com/health']],
   tcp: [['host', '主机', 'example.com'], ['port', '端口', '443']],
   prometheus: [['url', 'Prometheus 地址', 'http://prom:9090'], ['up_query', '探活 PromQL', 'up']],
-  camunda_embedded: [['metrics_url', '宿主应用 actuator/prometheus 地址', 'http://127.0.0.1:9037/algp/actuator/prometheus']],
   ssh: [
     ['host', '主机', '10.0.0.1'],
     ['port', 'SSH 端口', '22'],

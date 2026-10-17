@@ -84,7 +84,6 @@ function buildAgentMessageFromReport(report) {
     templateDescription: report.template_description,
     model: report.model,
     durationMs: report.duration_ms,
-    totalTokens: report.total_tokens,
     evidenceSources: report.evidence_sources || [],
     evidenceSteps: report.evidence_steps || [],
     evidence: report.evidence || [],
@@ -169,16 +168,6 @@ function buildActionMessageFromWorkflow(workflow) {
     result: workflow.execution_result || '',
     createdAt: workflow.created_at,
   }
-}
-
-function mergeTimelineMessages(reportMessages, workflowMessages) {
-  const merged = [...reportMessages, ...workflowMessages]
-  merged.sort((left, right) => {
-    const leftTime = new Date(left.createdAt || 0).getTime()
-    const rightTime = new Date(right.createdAt || 0).getTime()
-    return leftTime - rightTime
-  })
-  return merged
 }
 
 export function useDiagnosisChat(systemId) {

@@ -46,10 +46,6 @@ const kafkaServices = computed(() => props.services.filter((service) => {
 
 const canOperate = computed(() => !props.systemLocal && !!props.restartCapability?.collector_online)
 const restartableServices = computed(() => (props.restartCapability?.services || []).filter((item) => item.restartable))
-const hasAnyActionCapabilities = computed(() => (
-  restartableServices.value.length > 0 || redisServices.value.length > 0 || kafkaServices.value.length > 0
-))
-
 const summaryText = computed(() => {
   if (props.systemLocal) return '本机系统暂不支持'
   if (!props.restartCapability?.collector_online) return '采集器未在线'

@@ -70,7 +70,7 @@ export function subscribeDiagnosis(url, onReport, onUnavailable) {
             }
           }
         } finally { await reader.cancel().catch(() => {}); reader.releaseLock() }
-      } catch (error) {
+      } catch {
         if (controller.signal.aborted) return
       } finally {
         clearTimeout(idleTimer)

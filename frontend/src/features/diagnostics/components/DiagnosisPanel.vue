@@ -16,7 +16,6 @@ const props = defineProps({
 const {
   ask,
   startNewChat,
-  historyReports,
   chats,
   activeChatId,
   chatManaging,
@@ -33,7 +32,6 @@ const {
   requestFix,
   decide,
   chatBox,
-  clearMessages,
   exportHistoryBackup,
   loadHistory,
   loadModelOptions,
@@ -45,7 +43,6 @@ const {
   modelOptions,
   question,
   renderMd,
-  lastQuestion,
   liveStepIcon,
   followUp,
   images,
@@ -54,7 +51,6 @@ const {
   maxImages,
 } = useDiagnosisChat(props.systemId)
 
-import { message } from 'ant-design-vue'
 
 const imageInput = ref(null)
 const historyOpen = ref(false)
@@ -107,19 +103,6 @@ function previewImage(url) {
 const followUpAvailable = computed(() =>
   messages.value.some((m) => m.role === 'agent' && m.status === 'success' && m.reportId)
 )
-
-// 与 SVOM 浮窗一致的展示骨架：把回答拆成 结论/影响/建议/关键证据/待确认，
-// 拆不出来时回退为整段 markdown（structured=false → null）。
-async function onClearHistoryConfirmed() {
-  // 二次确认通过后：先自动导出备份，再执行清空
-  const count = await exportHistoryBackup()
-  if (count < 0) {
-    message.warning('备份导出失败，已取消清空操作（服务端诊断历史仍保留）')
-    return
-  }
-  message.info(`已导出 ${count} 条诊断报告备份`)
-  await clearMessages()
-}
 
 watch(
   () => props.draftQuestion,

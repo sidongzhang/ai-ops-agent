@@ -56,7 +56,7 @@ async function loadSystems() {
     const { data } = await api.get('/systems')
     systems.value = data || []
     if (!systemId.value && systems.value.length) systemId.value = systems.value[0].id
-  } catch (error) {
+  } catch {
     message.error(error?.response?.data?.detail || '系统列表加载失败')
   }
 }
@@ -66,7 +66,7 @@ async function loadStats() {
   try {
     const { data } = await api.get(`/systems/${systemId.value}/improvements/stats`)
     stats.value = data
-  } catch (error) {
+  } catch {
     /* 统计失败不阻断列表 */
   }
 }

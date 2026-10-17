@@ -41,7 +41,7 @@ export default {
       if (this.performance && this.performance.timeline) { this.timeline=this.performance.timeline;return }
       if (!this.loadDetails || !(this.performance || {}).detail_available) return
       this.loading=true;this.error=''
-      try { const value=await this.loadDetails();this.timeline=value && value.timeline } catch (_) { this.error='读取失败，请确认登录和访问权限后重新展开。' } finally { this.loading=false }
+      try { const value=await this.loadDetails();this.timeline=value && value.timeline } catch { this.error='读取失败，请确认登录和访问权限后重新展开。' } finally { this.loading=false }
     }
   }
 }
