@@ -122,7 +122,9 @@ services:
       # 于是 0 次工具调用、答非所问，但报告仍写 success（实测 prompt_eval 只有 514 tokens，
       # 显式 16384 后才变成 8194）。OpenAI 兼容接口**不透传** num_ctx，只能在这里设。
       OLLAMA_CONTEXT_LENGTH: "16384"
-      OLLAMA_KEEP_ALIVE: "30s"
+      # 30s 会让 embedding 模型（nomic-embed-text）闲置即卸载，每次诊断的首个检索
+      # 要重付 ~4s 加载；实测 30m 后检索从 4.4s 降到 0.2~1.0s。
+      OLLAMA_KEEP_ALIVE: "30m"
       OLLAMA_MAX_LOADED_MODELS: "1"
       # 并行度为 1：本地聊天模型忙碌时 embedding（RAG 检索）会排队甚至超时，
       # 表现为知识检索静默降级。要跑本地聊天模型建议把 embedding 指到独立服务。

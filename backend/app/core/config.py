@@ -115,7 +115,9 @@ class Settings(BaseSettings):
 
     # 检索重排（strong rerank）：api=用 rerank API（快，需配 base_url）；llm=用大模型重排（较慢）；
     # auto=有 API 用 API、否则 LLM；off=关闭。默认 api（未配置 API 时自动跳过，不引入延迟）。
-    rerank_mode: str = "auto"
+    # auto：有 rerank 端点用 API，否则**回退到聊天模型重排**（每次检索多 3~5s，默认不用）；
+    # api：只有配置了 RERANK_BASE_URL 才重排；llm：显式用聊天模型重排；off：关闭。
+    rerank_mode: str = "api"
     rerank_base_url: str = ""       # 通用 rerank 接口（Cohere/Jina/SiliconFlow 风格）
     rerank_model: str = ""
     rerank_api_key: str = ""

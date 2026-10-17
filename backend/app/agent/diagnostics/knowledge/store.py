@@ -48,6 +48,7 @@ _HEADING_RE = re.compile(r"^#{1,6}\s+\S")
 # 进程内缓存：指纹 / 同步失败冷却
 _fingerprint_cache: dict[str, str] = {}
 _sync_blocked_until: dict[str, float] = {}
+_syncing: set[str] = set()
 _lock = threading.Lock()
 
 
@@ -203,6 +204,67 @@ def _as_int_system_id(system_id: str | int) -> int | None:
 # ── 索引构建（同步到 PG）─────────────────────────────────────
 
 @measured('preparation', 'knowledge_index_sync')
+def _has_chunks(system_id: str) -> bool:
+    """DB 里是否已有可用索引（有则可先用旧索引回答，后台再刷新）。"""
+    sid = _as_int_system_id(system_id)
+    if sid is None:
+        return False
+    from app.core.database import engine
+
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT 1 FROM knowledge_chunks WHERE system_id = :sid LIMIT 1"),
+                {"sid": sid},
+            ).first()
+        return bool(row)
+    except Exception:  # noqa: BLE001 - 索引探测失败按"无索引"处理
+        return False
+
+
+def _sync_async(system_id: str) -> None:
+    """后台同步（不阻塞检索）；同一系统同时只允许一个同步线程。"""
+    with _lock:
+        if system_id in _syncing:
+            return
+        _syncing.add(system_id)
+
+    def _worker() -> None:
+        try:
+            _sync_index(system_id)
+        finally:
+            with _lock:
+                _syncing.discard(system_id)
+
+    threading.Thread(target=_worker, name=f"rag-sync-{system_id}", daemon=True).start()
+
+
+def ensure_index(system_id: str, *, wait: bool = False) -> bool:
+    """返回"现在能否用向量检索"；索引过期时**默认后台刷新**，不阻塞本次检索。
+
+    之前检索路径直接调用 `_sync_index`，文档一变就可能阻塞在 embedding + 事务上
+    （历史上见过几十秒）。现在：
+      • 指纹命中 → True（新鲜）；
+      • 指纹不匹配且 wait=False → 起后台线程刷新，本次先用现有索引（有则 True，无则 False
+        → 走 BM25/关键词兜底）；
+      • wait=True → 同步刷新（预热/排障用）。
+    """
+    docs_dir = _docs_dir(system_id)
+    if not docs_dir.exists() or _as_int_system_id(system_id) is None:
+        return False
+    fingerprint = _fingerprint(docs_dir)
+    with _lock:
+        if _fingerprint_cache.get(system_id) == fingerprint:
+            return True
+        blocked = _sync_blocked_until.get(system_id, 0.0) > time.monotonic()
+    if blocked:
+        return _has_chunks(system_id)
+    if wait:
+        return _sync_index(system_id)
+    _sync_async(system_id)
+    return _has_chunks(system_id)
+
+
 def _sync_index(system_id: str) -> bool:
     """指纹变更时把磁盘文档分块+embedding 同步进 knowledge_chunks。成功返回 True。"""
     docs_dir = _docs_dir(system_id)
@@ -292,6 +354,7 @@ def _write_chunks(system_id: str, fingerprint: str,
         )
     with _lock:
         _fingerprint_cache[system_id] = fingerprint
+    invalidate_bm25(system_id)   # 语料已变，BM25 缓存一并失效
 
 
 # ── 公开接口（签名与旧版一致）────────────────────────────────
@@ -325,7 +388,8 @@ def search_knowledge_hits(query: str, system_id: str, max_chars: int = MAX_CHARS
     embedding 或向量库不可用时，仅 BM25 仍能出结果；两者皆空才走关键词兜底。
     """
     vector: list[dict] = []
-    if _sync_index(system_id):
+    # 索引过期时只触发后台刷新，不阻塞本次检索（旧索引/BM25/关键词均可先答）
+    if ensure_index(system_id):
         vector = _vector_hits(query, system_id)
     keyword = bm25_hits(query, system_id, limit=RERANK_POOL)
     if vector or keyword:
