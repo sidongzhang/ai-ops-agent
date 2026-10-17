@@ -8,7 +8,7 @@ celery = Celery(
     "aiops",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["app.workers.tasks"],
+    include=["app.workers.tasks", "app.workers.diagnoses"],
 )
 
 celery.conf.beat_schedule = {
@@ -27,3 +27,9 @@ celery.conf.timezone = "Asia/Shanghai"
 celery.conf.task_serializer = "json"
 celery.conf.result_serializer = "json"
 celery.conf.accept_content = ["json"]
+
+# Diagnosis work is consumed only by the dedicated worker.
+celery.conf.task_routes = {"app.tasks.diagnosis": {"queue": "diagnoses"}}
+celery.conf.worker_prefetch_multiplier = 1
+celery.conf.broker_connection_timeout = 2
+celery.conf.broker_transport_options = {"socket_connect_timeout": 2, "socket_timeout": 2}

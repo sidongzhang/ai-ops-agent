@@ -15,6 +15,8 @@ import logging
 import time
 from collections.abc import AsyncIterator, Callable
 
+from ..harness.evidence import outcome_for_result
+
 log = logging.getLogger(__name__)
 
 # 子代理轨迹会落库，输出截断得比实时链路更狠，避免轨迹表膨胀。
@@ -22,7 +24,7 @@ NESTED_OUTPUT_LIMIT = 600
 PROGRESS_OUTPUT_LIMIT = 1500
 
 
-async def iter_tool_events(events, *, id_prefix: str = "") -> AsyncIterator[dict]:
+async def iter_tool_events(events, *, id_prefix: str = "", gateway_records=None, include_text: bool = False) -> AsyncIterator[dict]:
     """规范化 pydantic-ai 工具事件：产出 tool_start / tool_end 两种载荷。
 
     ``id_prefix`` 用于给 call_id 加命名空间：子代理的事件与主代理共用同一个 call_id
@@ -30,9 +32,21 @@ async def iter_tool_events(events, *, id_prefix: str = "") -> AsyncIterator[dict
     """
     from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
 
+    from pydantic_ai.messages import PartStartEvent, PartDeltaEvent, TextPart, TextPartDelta
+    from uuid import uuid4
+    message_id = uuid4().hex
+    has_text = False
     started: dict[str, float] = {}
     async for event in events:
-        if isinstance(event, FunctionToolCallEvent):
+        if include_text and isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
+            has_text = True
+            yield {"kind": "answer_delta", "message_id": message_id, "text": event.part.content}
+        elif include_text and isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+            has_text = True
+            yield {"kind": "answer_delta", "message_id": message_id, "text": event.delta.content_delta}
+        elif isinstance(event, FunctionToolCallEvent):
+            if include_text and has_text:
+                yield {"kind": "answer_process", "message_id": message_id}
             part = event.part
             call_id = f"{id_prefix}{part.tool_call_id or f'{part.tool_name}:{len(started)}'}"
             started[call_id] = time.monotonic()
@@ -53,14 +67,22 @@ async def iter_tool_events(events, *, id_prefix: str = "") -> AsyncIterator[dict
             began = started.pop(call_id, None)
             outcome = getattr(part, "outcome", "success")
             output = getattr(part, "content", None) or event.content or ""
+            record = next((r for r in reversed(gateway_records or []) if r.get("call_id") == call_id or (not id_prefix and r.get("call_id") == raw_id)), None)
+            status, error_code = outcome_for_result(str(output), outcome=outcome)
+            if record:
+                status, error_code = record["status"], record.get("error_code", "")
             yield {
                 "kind": "tool_end",
                 "call_id": call_id,
                 "tool": getattr(part, "tool_name", "") or "",
-                "status": "success" if outcome == "success" else str(outcome),
+                "status": status,
+                "error_code": error_code,
                 "duration_ms": round((time.monotonic() - began) * 1000) if began else 0,
                 "output": str(output)[:PROGRESS_OUTPUT_LIMIT],
             }
+
+    if include_text and has_text:
+        yield {"kind": "answer_end", "message_id": message_id}
 
 
 def safe_emit(sink: Callable[[dict], None] | None, payload: dict) -> None:
@@ -71,6 +93,24 @@ def safe_emit(sink: Callable[[dict], None] | None, payload: dict) -> None:
         sink(payload)
     except Exception as exc:  # noqa: BLE001
         log.debug(f"[diagnose] 进度回调失败（不影响诊断）: {exc}")
+
+
+def nested_event_handler(deps):
+    """Share child trace and progress handling across investigator and experts."""
+    async def handler(_ctx, events):
+        async for payload in iter_tool_events(events, id_prefix=deps.tool_call_namespace,
+                                              gateway_records=deps.gateway_records):
+            item = next((call for call in deps.nested_tool_calls if call.get('call_id') == payload['call_id']), None)
+            if item is None:
+                item = {'call_id': payload['call_id'], 'tool': payload['tool'],
+                        'input': payload.get('input', {}), 'status': 'started',
+                        'duration_ms': 0, 'output': ''}
+                deps.nested_tool_calls.append(item)
+            if payload['kind'] == 'tool_end':
+                item.update(status=payload['status'], error_code=payload.get('error_code', ''),
+                            duration_ms=payload['duration_ms'], output=payload['output'][:NESTED_OUTPUT_LIMIT])
+            safe_emit(deps.progress_sink, payload)
+    return handler
 
 
 __all__ = ["iter_tool_events", "safe_emit", "NESTED_OUTPUT_LIMIT", "PROGRESS_OUTPUT_LIMIT"]

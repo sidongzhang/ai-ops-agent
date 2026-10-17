@@ -34,14 +34,3 @@ include = ["app*"]
 
 [tool.uv]
 package = false
-default-groups = ["dev"]
-
-[dependency-groups]
-dev = [
-    "pytest>=9.1.1",
-]
-
-[tool.pytest.ini_options]
-# Tests cover the standalone collector and shared connector packages as well
-# as the backend package, so the repository root must be importable.
-pythonpath = [".."]

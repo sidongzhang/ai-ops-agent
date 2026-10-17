@@ -60,7 +60,7 @@ def resolve_app_secret(app_id: str) -> str:
 
 
 def handle_message(text: str, chat_id: str, message_id: str, app_id: str, app_secret: str) -> None:
-    from app.agent.diagnostics.runner import diagnose
+    from app.agent.runtime.entrypoint import diagnose
 
     feishu = get_feishu_client(app_id, app_secret)
     reaction_id = ""

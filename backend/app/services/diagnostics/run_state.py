@@ -20,6 +20,9 @@ def save_run_state(
     run_id: str = "",
     usage_json: str = "",
     resumable: bool = True,
+    engine: str = "pydantic",
+    engine_version: str = "",
+    history_schema_version: int = 1,
 ) -> bool:
     """落库（upsert）。**返回是否真的存下来了**。
 
@@ -29,9 +32,21 @@ def save_run_state(
     if not messages_json:
         return False
     try:
-        from app.core.database import engine
+        from app.agent.runtime.contracts import RuntimeCheckpoint
+        from app.agent.runtime.factory import get_runtime
+        runtime = get_runtime(engine)
+        resumable = resumable and runtime.capabilities().resume
+        runtime.validate_checkpoint(RuntimeCheckpoint(
+            messages_json, usage_json, engine, engine_version, history_schema_version,
+        ))
+        from app.core.database import engine as db_engine
 
-        with Session(engine) as session:
+        with Session(db_engine) as session:
+            from app.models.diagnostics import DiagnosisReport
+            from sqlmodel import select
+            report=session.exec(select(DiagnosisReport).where(DiagnosisReport.id==report_id).with_for_update()).first()
+            if report is None:
+                return False
             row = session.get(DiagnosisRunState, report_id)
             if row is None:
                 row = DiagnosisRunState(report_id=report_id)
@@ -39,6 +54,10 @@ def save_run_state(
             row.conversation_id = conversation_id or row.conversation_id
             row.run_id = run_id or row.run_id
             row.framework_cumulative_json = usage_json or row.framework_cumulative_json
+            row.engine = engine
+            row.engine_version = engine_version
+            row.history_schema_version = history_schema_version
+            resumable = resumable and not (report.business_context or {}).get("execution_stop_unconfirmed",False)
             row.resumable = resumable
             session.add(row)
             # 关停时我们可能先写过"未取得可恢复历史"的兜底文案；若历史随后落库，
@@ -47,7 +66,8 @@ def save_run_state(
 
             report = session.get(DiagnosisReport, report_id)
             if (
-                report is not None
+                resumable
+                and report is not None
                 and report.status == "cancelled"
                 and "未取得可恢复历史" in (report.answer or "")
             ):
@@ -67,6 +87,9 @@ def _mark_unresumable_quiet(report_id: int) -> None:
         from app.core.database import engine
 
         with Session(engine) as session:
+            from app.models.diagnostics import DiagnosisReport
+            if session.get(DiagnosisReport,report_id) is None:
+                return
             row = session.get(DiagnosisRunState, report_id)
             if row is None:
                 row = DiagnosisRunState(report_id=report_id, messages_json="", resumable=False)
@@ -84,14 +107,28 @@ def resumable_of(report_id: int, session: Session | None = None) -> bool:
     不信任历史里的 `resumable` 标记本身——保存失败/写坏 JSON 都必须反映成 false，
     否则就等于对用户宣称"可继续"，而 resume 必然失败。
     """
+    from app.models.diagnostics import DiagnosisReport
+    from app.services.diagnostics.session import session as db_session
+    if session is None:
+        with db_session() as current:
+            return resumable_of(report_id,session=current)
+    report=session.get(DiagnosisReport,report_id)
+    if report is None or (report.business_context or {}).get('execution_stop_unconfirmed',False):
+        return False
     state = load_run_state(report_id, session=session)
     if state is None or not state.resumable or not state.messages_json:
         return False
     try:
-        from pydantic_ai.messages import ModelMessagesTypeAdapter
-
-        parsed = ModelMessagesTypeAdapter.validate_json(state.messages_json)
-        return bool(parsed)
+        from app.agent.runtime.contracts import RuntimeCheckpoint
+        from app.agent.runtime.factory import get_runtime
+        runtime = get_runtime(state.engine)
+        if not runtime.capabilities().resume:
+            return False
+        getattr(runtime,"validate_resume_checkpoint",runtime.validate_checkpoint)(RuntimeCheckpoint(
+            state.messages_json, state.framework_cumulative_json,
+            state.engine, state.engine_version, state.history_schema_version,
+        ))
+        return True
     except Exception as exc:  # noqa: BLE001
         log.warning("[run_state] report=%s 历史反序列化失败（视为不可恢复）: %s", report_id, exc)
         return False

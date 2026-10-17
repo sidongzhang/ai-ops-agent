@@ -1,5 +1,7 @@
 """控制面 FastAPI 入口。"""
 import logging
+import asyncio
+from contextlib import suppress
 import signal
 from contextlib import asynccontextmanager
 
@@ -48,8 +50,7 @@ def _install_shutdown_signal_handlers() -> None:
     跑完** → 关闭 lifespan"。而我们要取消的正是它在等的那个 BackgroundTask —— 等它自己结束
     再取消就没意义了（实测：SIGTERM 后诊断还会继续跑 30s+ 才被处理）。
 
-    做法：保留 uvicorn 原有的 handler，先在我们这里触发取消（放后台线程，信号处理器里不能阻塞），
-    再调用原 handler 让 uvicorn 正常走关停流程。
+    做法：先调用 uvicorn 原有 handler，再同步触发取消与有界清理。
     """
     from .services.diagnostics import cancel_bus
 
@@ -58,7 +59,7 @@ def _install_shutdown_signal_handlers() -> None:
             # 先让 uvicorn 置退出标志（它自己的处理器），再同步做**有界**清理。
             # 不另开线程：守护线程会被解释器直接掐掉；非守护线程在 uvicorn 的退出路径上
             # 也不保证被等待（实测进程 1s 就退了，终态没写进去）。同步做最多阻塞 grace 秒，
-            # 对 SIGTERM 是可接受代价，换来的是"报告绝不停留在 running"的确定性。
+            # 数据库不可用或进程被硬杀时仍依赖 reaper，不能承诺终态一定已写入。
             if callable(previous):
                 previous(signum, frame)
             try:
@@ -93,13 +94,38 @@ async def lifespan(app: FastAPI):
     reap_stale_diagnoses(minutes=1)
     # 审批工作流 checkpointer：PG 环境下持久化（重启不丢挂起的审批），失败降级内存版
     await init_persistent_checkpointer()
+    async def dispatch_diagnoses():
+        from .services.diagnostics.jobs import dispatch_pending
+        while True:
+            try:
+                await asyncio.to_thread(dispatch_pending)
+            except Exception as exc:
+                log.warning("[diagnosis-outbox] reconcile error: %s", type(exc).__name__)
+            await asyncio.sleep(2)
+    dispatcher = asyncio.create_task(dispatch_diagnoses())
+    async def reap_periodically():
+        while True:
+            await asyncio.sleep(30)
+            await asyncio.to_thread(reap_stale_diagnoses)
+            from app.services.diagnostics.runtime_events import reconcile_accounting
+            try:
+                await asyncio.to_thread(reconcile_accounting)
+            except Exception:
+                log.exception("[ledger] 账本补记暂不可用，下轮重试")
+    reaper_task=asyncio.create_task(reap_periodically())
     try:
         yield
     finally:
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher
         # 关停：先拒绝新诊断，再主动取消在跑诊断、有界等待它们把可恢复历史落库。
         # （硬杀 SIGKILL / 宽限期耗尽 → 由 reaper 标 failed 且 resumable=false，不谎称可恢复）
         from .services.diagnostics.shutdown import graceful_shutdown_diagnoses
 
+        reaper_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await reaper_task
         await graceful_shutdown_diagnoses()
         await shutdown_checkpointer()
 

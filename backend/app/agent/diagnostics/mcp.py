@@ -10,7 +10,8 @@
 配置（settings.mcp_servers / .env 里的 MCP_SERVERS）是一个 JSON 数组：
   [
     {"name": "k8s", "command": "{python}", "args": ["deploy/mcp/demo_k8s_server.py"],
-     "description": "Kubernetes 集群只读查询（Pod/事件/日志）", "env": {}, "timeout": 30}
+     "description": "Kubernetes 集群只读查询（Pod/事件/日志）", "env": {}, "timeout": 30,
+     "allowed_tools": ["list_pods", "recent_events"], "org_ids": [1], "system_ids": [2]}
   ]
 `{python}` 会被替换成当前解释器路径（便于用平台自带 venv 跑本地 MCP server）。
 """
@@ -34,6 +35,9 @@ class MCPServer:
     env: dict = field(default_factory=dict)
     description: str = ""
     timeout: float = 30.0
+    allowed_tools: tuple[str, ...] = ()
+    org_ids: tuple[int, ...] = ()
+    system_ids: tuple[int, ...] = ()
 
 
 def _subst(value: str) -> str:
@@ -62,6 +66,18 @@ def load_servers(raw: str | None = None) -> list[MCPServer]:
         command = str(item.get("command") or "").strip()
         if not name or not command:
             continue
+        if any(not isinstance(item.get(key, []), list) for key in ("allowed_tools", "org_ids", "system_ids")):
+            log.warning("[mcp] 非法权限配置 server=%s，已忽略", name)
+            continue
+        try:
+            org_ids = tuple(int(i) for i in item.get("org_ids", []))
+            system_ids = tuple(int(i) for i in item.get("system_ids", []))
+            timeout = float(item.get("timeout") or 30)
+            if timeout <= 0:
+                raise ValueError("timeout must be positive")
+        except (ValueError, TypeError):
+            log.warning("[mcp] 非法scope或timeout server=%s，已忽略", name)
+            continue
         args = item.get("args") or []
         servers.append(
             MCPServer(
@@ -70,7 +86,10 @@ def load_servers(raw: str | None = None) -> list[MCPServer]:
                 args=tuple(_subst(a) for a in args),
                 env={str(k): str(v) for k, v in (item.get("env") or {}).items()},
                 description=str(item.get("description") or "").strip(),
-                timeout=float(item.get("timeout") or 30),
+                timeout=timeout,
+                allowed_tools=tuple(str(t) for t in item.get("allowed_tools", []) if isinstance(t, str)),
+                org_ids=org_ids,
+                system_ids=system_ids,
             )
         )
     return servers
@@ -84,9 +103,9 @@ def get_server(name: str) -> MCPServer | None:
     return None
 
 
-def catalog() -> str:
+def catalog(*, org_id: int = 0, system_id: int = 0) -> str:
     """给系统提示用的 MCP server 清单（仅列 server，不预拉工具，避免启动即起进程）。"""
-    servers = load_servers()
+    servers = [s for s in load_servers() if permitted(s, org_id, system_id)]
     if not servers:
         return ""
     lines = [
@@ -98,6 +117,12 @@ def catalog() -> str:
         desc = f"：{server.description}" if server.description else ""
         lines.append(f"  - {server.name}{desc}")
     return "\n".join(lines)
+
+
+
+def permitted(server: MCPServer, org_id: int, system_id: int) -> bool:
+    # Empty lists deny access; local test scope must also be explicitly configured.
+    return org_id in server.org_ids and system_id in server.system_ids and bool(server.allowed_tools)
 
 
 def _params(server: MCPServer):
@@ -152,16 +177,19 @@ async def _call_tool(server: MCPServer, tool: str, arguments: dict) -> str:
             return body
 
 
-def list_tools_text(server_name: str) -> str:
+def list_tools_text(server_name: str, *, org_id: int = 0, system_id: int = 0) -> str:
     server = get_server(server_name)
     if not server:
         names = "、".join(s.name for s in load_servers()) or "（未配置任何 MCP server）"
         return f"未找到 MCP server「{server_name}」。已配置：{names}"
+    if not permitted(server, org_id, system_id):
+        return "工具访问被拒绝：MCP server 未授权给当前组织与系统"
     try:
         tools = asyncio.run(asyncio.wait_for(_list_tools(server), timeout=server.timeout + 10))
     except Exception as exc:  # noqa: BLE001
         log.warning("[mcp] 列工具失败 server=%s: %s", server.name, exc)
         return f"连接 MCP server「{server.name}」失败：{exc}"
+    tools = [tool for tool in tools if tool["name"] in server.allowed_tools]
     if not tools:
         return f"MCP server「{server.name}」没有提供任何工具。"
     lines = [f"MCP server「{server.name}」提供 {len(tools)} 个工具："]
@@ -171,10 +199,12 @@ def list_tools_text(server_name: str) -> str:
     return "\n".join(lines)
 
 
-def call_tool_text(server_name: str, tool: str, arguments_json: str = "{}") -> str:
+def call_tool_text(server_name: str, tool: str, arguments_json: str = "{}", *, org_id: int = 0, system_id: int = 0) -> str:
     server = get_server(server_name)
     if not server:
         return f"未找到 MCP server「{server_name}」，请先用 mcp_list_tools 查看可用 server。"
+    if not permitted(server, org_id, system_id) or tool not in server.allowed_tools:
+        return "工具访问被拒绝：MCP server 或工具未授权给当前组织与系统"
     try:
         arguments = json.loads(arguments_json) if (arguments_json or "").strip() else {}
     except Exception as exc:  # noqa: BLE001
@@ -187,5 +217,8 @@ def call_tool_text(server_name: str, tool: str, arguments_json: str = "{}") -> s
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("[mcp] 调用失败 server=%s tool=%s: %s", server.name, tool, exc)
+        if isinstance(exc, TimeoutError):
+            from ..harness.execution import mark_current_execution_unconfirmed
+            mark_current_execution_unconfirmed()
         return f"调用 MCP 工具失败（server={server.name} tool={tool}）：{exc}"
     return text

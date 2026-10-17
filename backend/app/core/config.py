@@ -2,6 +2,7 @@
 import os
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 # 本机服务（Prometheus、各被监控服务探活、采集器）绝不能走 HTTP 代理。
 # 开发机上常设的 HTTP_PROXY 会把 127.0.0.1 的请求也转发出去，代理一旦不可用，
@@ -52,6 +53,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24
 
     # Agent 模型（OpenAI 兼容）。推荐新配置：LLM_MODE=api/local。
+    pi_price_profile: str = ""
+    pi_runtime_enabled: bool = False
+    pi_runtime_url: str = "http://127.0.0.1:8810"
+    pi_service_secret: str = ""
+
     llm_mode: str = "api"  # api: 远程 API；local: 本地部署（Ollama/vLLM/LM Studio 等）
     llm_api_base_url: str = ""   # 空则兼容复用 deepseek_base_url
     llm_api_key: str = ""        # 空则兼容复用 deepseek_api_key
@@ -91,6 +97,7 @@ class Settings(BaseSettings):
     diagnosis_request_limit: int = 12        # 模型请求轮数
     diagnosis_tool_calls_limit: int = 24     # 工具调用次数
     diagnosis_token_limit: int = 100000      # 累计 token（含每轮重复计入的上下文）
+    diagnosis_stop_wait_seconds: float = Field(default=20.0, ge=0, le=120)
 
     # 日志级别：DEBUG / INFO / WARNING / ERROR
     log_level: str = "INFO"
@@ -145,6 +152,7 @@ class Settings(BaseSettings):
     diagnosis_max_run_seconds: int = 900          # 单次运行上限（超时交 reaper）
     diagnosis_shutdown_grace_seconds: float = 15.0  # 关停等待落库的宽限（uvicorn graceful 需 ≥）
     diagnosis_stale_heartbeat_seconds: int = 60   # 心跳过期判据（运行方每轮巡检续期，约 2s）
+    diagnosis_stale_running_minutes: int = Field(default=5, ge=1)  # 尚未注册心跳的任务启动宽限
     # 预算：未知用量不得按免费处理 → 用保守预留结算
     diagnosis_session_token_budget: int = 300000
     diagnosis_session_cost_budget_usd: float = 1.0

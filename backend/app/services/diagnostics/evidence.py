@@ -25,6 +25,9 @@ STATUS_LABELS = {
     "success": "成功",
     "started": "执行中",
     "error": "失败",
+    "denied": "已拒绝",
+    "timeout": "超时",
+    "interrupted": "已中断",
 }
 
 

@@ -11,7 +11,7 @@ from app.core.database import engine
 from app.models.messages import SystemMessage
 from app.models.tokens import SystemToken
 from app.repositories.messages import find_message_by_request_id
-from app.agent.diagnostics.runner import diagnose_with_details
+from app.agent.runtime.entrypoint import diagnose_with_details
 from app.repositories.systems import list_enabled_services_for_system
 from app.schemas.openapi import LogAnalysisAcceptedResponse, LogAnalysisResponse
 from app.services.audit import record_audit_event

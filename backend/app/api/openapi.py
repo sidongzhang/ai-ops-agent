@@ -3,8 +3,9 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from sqlmodel import Session
+from fastapi.responses import StreamingResponse
 
 from app.core.database import get_session
 from app.core.security import hash_system_token
@@ -35,7 +36,7 @@ from app.services.openapi import (
     update_open_message_status,
 )
 from app.services.log_analysis import submit_uploaded_log_analysis
-from app.services.diagnostics.service import complete_diagnosis_report, start_diagnosis
+from app.services.diagnostics.service import start_diagnosis
 from app.services.diagnostics.attachments import (
     AttachmentError,
     describe_images,
@@ -185,10 +186,9 @@ def _external_diagnosis_question(
     return "\n".join(lines)[:8000]
 
 
-@router.post("/diagnoses", response_model=DiagnoseResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/diagnoses", response_model=DiagnoseResponse, status_code=status.HTTP_202_ACCEPTED, operation_id="createDiagnosis")
 def create_external_diagnosis(
     body: OpenDiagnosisIn,
-    background_tasks: BackgroundTasks,
     identity: OpenApiIdentity = Depends(require_openapi_identity),
     session: Session = Depends(get_session),
 ):
@@ -213,12 +213,44 @@ def create_external_diagnosis(
         business_context["images"] = describe_images(images)
     from app.agent.llm import LocalModelUnavailable, ensure_model_ready
     from app.services.diagnostics.usage import BudgetExceeded
+    from app.services.diagnostics.submissions import claim, abandon, SubmissionConflict
+    from app.models.submissions import DiagnosisSubmission
 
+    try:
+        submission_id, is_new = claim(session, org_id=identity.system.org_id,
+            system_id=identity.system.id, token_id=identity.token.id, body=body)
+    except SubmissionConflict as exc:
+        raise HTTPException(409, str(exc))
+    if not is_new:
+        submission = session.get(DiagnosisSubmission, submission_id)
+        if submission.report_id is None:
+            raise HTTPException(503, "相同请求正在受理，请使用原幂等键重试", headers={"Retry-After": "2"})
+        try:
+            report = get_diagnosis_report(session, identity.system.id, identity.system.org_id, submission.report_id)
+        except LookupError:
+            raise HTTPException(410, "该请求的诊断记录已删除，不能重复创建")
+        return DiagnoseResponse.model_validate(report.model_dump())
+
+    from app.services.diagnostics.routing import decision, NeedsDiagnosis
+    try:
+        route=decision(session,identity.system.id,identity.system.org_id,body.question,
+            chat_id=body.chat_id or '',special=bool(images or body.request_id or business_context))
+        if route['resolved']=='blocked':raise NeedsDiagnosis(route)
+    except NeedsDiagnosis as exc:
+        abandon(session,submission_id)
+        raise HTTPException(409,{'code':'diagnosis_required','message':str(exc),'interaction':exc.route})
+    except LookupError as exc:
+        abandon(session,submission_id)
+        raise HTTPException(404,str(exc))
     try:
         # 外部链路（ALGP/SVOM）同样先做本地模型就绪检查，避免"提交后长时间无响应"。
         ensure_model_ready(body.model_mode, getattr(body, "model_name", ""))
     except LocalModelUnavailable as exc:
+        abandon(session, submission_id)
         raise HTTPException(409, str(exc))
+    except Exception:
+        abandon(session, submission_id)
+        raise
     try:
         started = start_diagnosis(
             session,
@@ -226,31 +258,34 @@ def create_external_diagnosis(
             identity.system.org_id,
             body.question.strip(),
             actor_id=actor_id,
+            **({"chat_id": body.chat_id} if body.chat_id else {}),
             external_request_id=body.request_id,
             business_context=business_context or None,
+            submission_id=submission_id,
+            job_question=_external_diagnosis_question(body.question.strip(), message, body.business_context),
+            job_options={"model_mode": body.model_mode, "follow_up_report_id": body.follow_up_report_id, "images": images},
         )
+    except NeedsDiagnosis as exc:
+        abandon(session,submission_id)
+        raise HTTPException(409,{'code':'diagnosis_required','message':str(exc),'interaction':exc.route})
     except BudgetExceeded as exc:
+        abandon(session, submission_id)
         raise HTTPException(429, str(exc), headers={"Retry-After": "30"})
+    except LookupError as exc:
+        abandon(session, submission_id)
+        raise HTTPException(404, str(exc))
+    except Exception:
+        abandon(session, submission_id)
+        raise
     if started.id is None:
         raise HTTPException(500, "诊断任务创建失败")
     identity.token.last_used_at = datetime.now(timezone.utc)
     session.add(identity.token)
     session.commit()
-    background_tasks.add_task(
-        complete_diagnosis_report,
-        started.id,
-        identity.system.id,
-        identity.system.org_id,
-        _external_diagnosis_question(body.question.strip(), message, body.business_context),
-        actor_id=actor_id,
-        model_mode=body.model_mode,
-        follow_up_report_id=body.follow_up_report_id,
-        images=images,
-    )
     return started
 
 
-@router.post("/diagnoses/{report_id}/cancel")
+@router.post("/diagnoses/{report_id}/cancel", operation_id="cancelDiagnosis")
 def cancel_external_diagnosis(
     report_id: int,
     identity: OpenApiIdentity = Depends(require_openapi_identity),
@@ -272,20 +307,20 @@ def cancel_external_diagnosis(
         raise HTTPException(503, f"取消标志写入失败，请重试：{exc}")
     cancel_bus.publish_cancel(report_id)
     cancelled_locally = cancel_bus.request_local_cancel(report_id)
+    session.refresh(report)
     return {
         "report_id": report_id,
-        "status": "running",
-        "stopping": True,
+        "status": report.status,
+        "stopping": report.status == "running",
         "noop": False,
         "newly_set": newly,
         "local_token_hit": cancelled_locally,
     }
 
 
-@router.post("/diagnoses/{report_id}/resume", response_model=DiagnoseResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/diagnoses/{report_id}/resume", response_model=DiagnoseResponse, status_code=status.HTTP_202_ACCEPTED, operation_id="resumeDiagnosis")
 def resume_external_diagnosis(
     report_id: int,
-    background_tasks: BackgroundTasks,
     body: OpenResumeIn | None = None,
     identity: OpenApiIdentity = Depends(require_openapi_identity),
     session: Session = Depends(get_session),
@@ -312,6 +347,7 @@ def resume_external_diagnosis(
             identity.system.org_id,
             actor_id=actor_id,
             force_refresh=opts.force_refresh,
+            job_options={"model_mode": opts.model_mode},
         )
     except ResumeNotPossible as exc:
         raise HTTPException(409, str(exc))
@@ -324,20 +360,10 @@ def resume_external_diagnosis(
         identity.token.last_used_at = datetime.now(timezone.utc)
         session.add(identity.token)
         session.commit()
-        background_tasks.add_task(
-            complete_diagnosis_report,
-            started.id,
-            identity.system.id,
-            identity.system.org_id,
-            "",
-            actor_id=actor_id,
-            model_mode=opts.model_mode,
-            resume_payload=payload,
-        )
     return started
 
 
-@router.get("/diagnoses", response_model=list[DiagnosisReportOut])
+@router.get("/diagnoses", response_model=list[DiagnosisReportOut], operation_id="listDiagnoses")
 def query_external_diagnoses(
     request_id: str = "",
     limit: int = Query(default=20, ge=1, le=100),
@@ -354,7 +380,7 @@ def query_external_diagnoses(
     )
 
 
-@router.get("/diagnoses/{report_id}", response_model=DiagnosisReportOut)
+@router.get("/diagnoses/{report_id}", response_model=DiagnosisReportOut, operation_id="getDiagnosis")
 def query_external_diagnosis(
     report_id: int,
     identity: OpenApiIdentity = Depends(require_openapi_identity),
@@ -370,6 +396,31 @@ def query_external_diagnosis(
         )
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+
+
+@router.get("/diagnoses/{report_id}/events", response_class=StreamingResponse,
+            responses={200: {"content": {"text/event-stream": {"schema": {"type": "string"}}}}})
+def stream_external_diagnosis(
+    report_id: int,
+    request: Request,
+    last_event_id: str = Header(default="", alias="Last-Event-ID", max_length=128),
+    identity: OpenApiIdentity = Depends(require_openapi_identity),
+    session: Session = Depends(get_session),
+):
+    require_scope(identity, "diagnosis:read")
+    system_id, org_id = identity.system.id, identity.system.org_id
+    try:
+        get_diagnosis_report(session, system_id, org_id, report_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    # Do not retain a read transaction for the lifetime of the event connection.
+    session.rollback()
+    from app.services.diagnostics.stream import report_events
+    return StreamingResponse(
+        report_events(request, report_id, system_id, org_id, last_event_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/log-analysis", response_model=LogAnalysisAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -593,3 +644,48 @@ def update_message_status_by_request_id(
         raise HTTPException(404, str(exc))
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+
+# Same scoped service as the console; tokens retain their existing read/run split.
+from .diagnosis_chats import ChatTitle, call as chat_call
+from app.services.diagnostics import chats as chat_service
+
+@router.get('/diagnosis-chats')
+def external_chats(identity:OpenApiIdentity=Depends(require_openapi_identity),session:Session=Depends(get_session)):
+    require_scope(identity,'diagnosis:read')
+    return chat_call(chat_service.list_chats,session,identity.system.id,identity.system.org_id)
+
+@router.post('/diagnosis-chats',status_code=201)
+def external_create_chat(body:ChatTitle,identity:OpenApiIdentity=Depends(require_openapi_identity),session:Session=Depends(get_session)):
+    require_scope(identity,'diagnosis:run')
+    return chat_call(chat_service.create_chat,session,identity.system.id,identity.system.org_id,body.title)
+
+@router.get('/diagnosis-chats/{chat_id}/reports')
+def external_chat_reports(chat_id:str,identity:OpenApiIdentity=Depends(require_openapi_identity),session:Session=Depends(get_session)):
+    require_scope(identity,'diagnosis:read')
+    return chat_call(chat_service.chat_reports,session,identity.system.id,identity.system.org_id,chat_id)
+
+@router.patch('/diagnosis-chats/{chat_id}')
+@router.post('/diagnosis-chats/{chat_id}/rename')
+def external_rename_chat(chat_id:str,body:ChatTitle,identity:OpenApiIdentity=Depends(require_openapi_identity),session:Session=Depends(get_session)):
+    require_scope(identity,'diagnosis:run')
+    return chat_call(chat_service.rename_chat,session,identity.system.id,identity.system.org_id,chat_id,body.title)
+
+@router.delete('/diagnosis-chats/{chat_id}')
+def external_delete_chat(chat_id:str,identity:OpenApiIdentity=Depends(require_openapi_identity),session:Session=Depends(get_session)):
+    require_scope(identity,'diagnosis:run')
+    return chat_call(chat_service.delete_chat,session,identity.system.id,identity.system.org_id,chat_id)
+
+
+from .diagnosis_chats import ChatMode,RoutePreview
+@router.post('/diagnosis-route')
+def external_preview(body:RoutePreview,identity:OpenApiIdentity=Depends(require_openapi_identity),session:Session=Depends(get_session)):
+    require_scope(identity,'diagnosis:run')
+    from app.services.diagnostics.routing import decision
+    return chat_call(lambda:decision(session,identity.system.id,identity.system.org_id,body.question,
+        chat_id=body.chat_id,special=body.has_images or body.has_context))
+
+@router.post('/diagnosis-chats/{chat_id}/mode')
+def external_mode(chat_id:str,body:ChatMode,identity:OpenApiIdentity=Depends(require_openapi_identity),session:Session=Depends(get_session)):
+    require_scope(identity,'diagnosis:run')
+    from app.services.diagnostics.routing import set_mode
+    return chat_call(set_mode,session,identity.system.id,identity.system.org_id,chat_id,body.interaction_mode)

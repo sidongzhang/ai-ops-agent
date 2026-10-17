@@ -63,10 +63,15 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       FEISHU_APP_ID: ${FEISHU_APP_ID:-}
       FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
-    command: celery -A app.workers.celery.celery worker --loglevel=INFO
+    command: celery -A app.workers.celery.celery worker -Q celery --loglevel=INFO
     depends_on:
       platform-api:
         condition: service_healthy
+
+  platform-diagnosis-worker:
+    extends:
+      service: platform-worker
+    command: celery -A app.workers.celery.celery worker -Q diagnoses -n diagnosis@%h --concurrency=2 --loglevel=INFO
 
   platform-beat:
     build:

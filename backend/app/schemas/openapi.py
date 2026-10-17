@@ -80,11 +80,14 @@ class OpenResumeIn(BaseModel):
 
 
 class OpenDiagnosisIn(BaseModel):
+    idempotency_key: str = Field(default="", max_length=128, pattern=r"^[A-Za-z0-9._:-]*$")
+    chat_id: str = Field(default="", max_length=64)
     question: str = Field(min_length=1, max_length=1000)
     request_id: str = Field(default="", max_length=255)
     actor_id: str = Field(default="", max_length=128)
     model_mode: Literal["auto", "default", "local", "api", "advanced"] = "auto"
-    business_context: dict[str, Any] = Field(default_factory=dict)
+    # Generated clients may serialize an omitted optional snapshot as JSON null.
+    business_context: dict[str, Any] | None = None
     # 会话式追问：带上上一轮诊断报告 id，平台会把「上一轮问题+结论」注入本轮上下文。
     follow_up_report_id: int | None = None
     # 多模态：随问题上传的截图（data URL，最多 3 张）。

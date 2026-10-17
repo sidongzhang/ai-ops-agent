@@ -5,14 +5,14 @@
   * 用户点了停止但运行方已失联（`cancel_requested_at` 有值却无人落终态）。
 
 处理：
-  * 有 `cancel_requested_at` → 落 `cancelled`（用户意图明确）；
-  * 否则 → 落 `failed`，错误信息写明"执行方已失联"；
-  * 两者都按"是否拿到可恢复历史"设 `resumable`，**绝不谎称可继续**。
+  * 失联只证明没有可靠收尾，统一落 failed，停止状态标未知；
+  * 无论用户是否点过取消、是否有历史，都禁止继续。
 """
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlalchemy import String, cast
 
 from app.core.config import settings
 from app.models.diagnostics import DiagnosisReport
@@ -32,7 +32,6 @@ def reap_stale_diagnoses(*, minutes: int | None = None, limit: int = 200) -> dic
       2. 无心跳（从未注册成功就死了）→ 退回创建时间，但窗口更短；
       3. 心跳新鲜 → **一律跳过**（哪怕报告已经跑了很久）。
     """
-    from app.models.run_state import DiagnosisRunState
     from app.services.diagnostics.session import session as _db_session
 
     window_minutes = settings.diagnosis_stale_running_minutes if minutes is None else minutes
@@ -41,14 +40,25 @@ def reap_stale_diagnoses(*, minutes: int | None = None, limit: int = 200) -> dic
     created_cutoff = now - timedelta(minutes=max(1, window_minutes))
     heartbeat_cutoff = now - timedelta(seconds=max(5, heartbeat_seconds))
     result = {"scanned": 0, "cancelled": 0, "failed": 0, "unresumable": 0, "alive": 0}
+    claimed_ids=[]
     try:
         with _db_session() as session:
             rows = session.exec(
-                select(DiagnosisReport)
+                select(DiagnosisReport,cast(DiagnosisReport.runner_heartbeat_at,String).label('heartbeat_token'))
                 .where(DiagnosisReport.status == "running")
                 .limit(limit)
             ).all()
-            for report in rows:
+            for report,heartbeat_token in rows:
+                from app.models.diagnosis_jobs import DiagnosisJob
+                job = session.get(DiagnosisJob, report.id)
+                if job and job.state == "pending":
+                    continue  # Durable queue reconciler owns unstarted work.
+                if job and job.state == "started" and report.runner_heartbeat_at is None:
+                    began = job.started_at
+                    if began is not None:
+                        began = began.replace(tzinfo=timezone.utc) if began.tzinfo is None else began
+                        if began >= created_cutoff:
+                            continue
                 heartbeat = report.runner_heartbeat_at
                 if heartbeat is not None:
                     if heartbeat.tzinfo is None:
@@ -62,32 +72,33 @@ def reap_stale_diagnoses(*, minutes: int | None = None, limit: int = 200) -> dic
                         created = created.replace(tzinfo=timezone.utc)
                     if created >= created_cutoff:
                         continue                      # 刚建、还没注册 → 再等等
-                result["scanned"] += 1
-                state = session.get(DiagnosisRunState, report.id)
-                has_history = bool(state and state.messages_json)
-                if report.cancel_requested_at is not None:
-                    report.status = "cancelled"
-                    report.cancelled_at = now
-                    report.answer = report.answer or "（诊断已被用户中断，运行方未及落库）"
-                    result["cancelled"] += 1
+                from app.services.diagnostics.usage import record_run_usage, settle_budget
+                from app.services.diagnostics.termination import mark_execution_unknown
+                if not mark_execution_unknown(session,report,'process_killed',check_heartbeat=True,
+                                              heartbeat_token=heartbeat_token):
+                    continue
+                claimed_ids.append(report.id)
+                reservation_id=(report.business_context or {}).get("budget_reservation_id","")
+                if reservation_id:
+                    # An owner was admitted. Unknown consumption is not refunded as free.
+                    summary=record_run_usage(report_id=report.id,org_id=report.org_id,system_id=report.system_id,
+                        usage_json='{"usage_complete":false,"cost_complete":false,"gap_reason":"process_killed"}',
+                        before_json="",session=session,commit=False)
+                    from app.models.usage import DiagnosisBudgetReservation
+                    reservation=session.get(DiagnosisBudgetReservation,reservation_id)
+                    if not summary["usage_complete"] and reservation is not None:
+                        summary["settle_tokens"]=max(summary["tokens_delta"],reservation.reserved_tokens)
+                        summary["settle_cost"]=max(summary["cost_delta"],reservation.reserved_cost)
+                    settle_budget(org_id=report.org_id,user_id=report.user_id or 0,system_id=report.system_id,
+                        reservation_id=reservation_id,tokens=summary["settle_tokens"],cost_usd=summary["settle_cost"],session=session)
                 else:
-                    report.status = "failed"
-                    report.error_message = "执行方已失联（心跳超时：服务重启或进程异常退出）"
-                    report.answer = report.answer or "诊断未能完成：执行方已失联"
-                    result["failed"] += 1
-                session.add(report)
-                # 释放该报告当年预留的预算（否则提前退出的诊断会一直占着会话预算）
-                from app.services.diagnostics.usage import release_for_report
-
-                release_for_report(report, moment=now)
-                if state is None:
-                    session.add(DiagnosisRunState(report_id=report.id, messages_json="", resumable=False))
-                    result["unresumable"] += 1
-                elif not has_history:
-                    state.resumable = False
-                    session.add(state)
-                    result["unresumable"] += 1
+                    # Without an immutable reservation/window identity we cannot
+                    # safely refund or move the amount into another time window.
+                    record_run_usage(report_id=report.id,org_id=report.org_id,system_id=report.system_id,
+                        usage_json='{"usage_complete":false,"cost_complete":false,"gap_reason":"process_killed"}',
+                        before_json='',session=session,commit=False)
             session.commit()
+            result['scanned']=result['failed']=result['unresumable']=len(claimed_ids)
     except Exception as exc:  # noqa: BLE001 - 收尸失败不能影响启动
         log.warning("[reaper] 收尸失败: %s", exc)
         return result

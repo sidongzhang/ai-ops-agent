@@ -4,7 +4,7 @@
   * 任何 MCP 客户端（Claude Desktop / Cursor / 其他 Agent）都能直接使用这套运维工具
   * 新数据源接入从「改 Agent 代码」变为「注册一个 MCP 工具」
   * 平台自身的诊断 Agent 后续可切换为 MCP Client 动态发现工具（当前仍用原生工具集，
-    避免 IPC 开销；见 docs/MCP接入.md）
+    避免 IPC 开销）
 
 工具集（全部只读，与诊断 Agent 的取证白名单一致）：
   list_services / health_check / check_container_state / read_logs / search_logs /
@@ -19,26 +19,22 @@
 import asyncio
 import logging
 import os
-import shlex
-import subprocess
 import sys
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
-for p in (_here.parent.parent.parent, _here.parent.parent, _here):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
+# Direct execution must not resolve the adjacent mcp.py as the third-party SDK.
+sys.path[:] = [p for p in sys.path if Path(p or ".").resolve() != _here]
+_backend = _here.parents[2]
+if str(_backend) not in sys.path:
+    sys.path.insert(0, str(_backend))
 
 from mcp.server.mcpserver import MCPServer
 
 from app.services.descriptors.builder import system_to_descriptor
-from app.services.descriptors.container_state import format_container_state, inspect_container
-from app.services.descriptors.health import (
-    collect_health,
-    read_service_logs,
-    search_service_logs,
-)
-from app.services.descriptors.ops_policy import kafka_command_denied, redis_command_denied
+from app.agent.harness.catalog import EVIDENCE_TOOLS
+from app.agent.harness.execution import ExecutionTracker
+from app.agent.harness.gateway import RunScope, ToolGateway
 
 logging.basicConfig(level=logging.INFO, format="[mcp-server] %(levelname)s %(message)s")
 log = logging.getLogger("aiops-mcp")
@@ -83,11 +79,35 @@ async def _load_descriptor() -> None:
         ).all()
         _state["descriptor"] = system_to_descriptor(system, services)
         _state["system_name"] = system.name
+        _state['org_id'] = system.org_id
+        _state['system_id'] = system.id
     log.info("已绑定系统 #%s %s", system_id, system.name)
 
 
-async def _run_blocking(fn, *args, **kwargs):
-    return await asyncio.get_event_loop().run_in_executor(None, lambda: fn(*args, **kwargs))
+async def _invoke(name, arguments):
+    """MCP retains its public aliases; execution and authority use the shared gateway."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from app.agent.diagnostics.tools import AgentDeps
+    from app.core.config import settings
+    from app.services.diagnostics.service import _tool_audit_recorder
+
+    descriptor = _descriptor()
+    if not _state.get('org_id') or not _state.get('system_id'):
+        raise RuntimeError('MCP系统身份尚未绑定，拒绝执行工具')
+    scope = RunScope(_state['org_id'], _state['system_id'], 'mcp_' + uuid4().hex, 'mcp')
+    tracker = ExecutionTracker()
+    sink = _state.get('audit_sink') or _tool_audit_recorder(scope.org_id, scope.system_id, 'mcp', None)
+    deps = AgentDeps(descriptor, scope=scope, allowed_tools=EVIDENCE_TOOLS,
+                     tool_audit_sink=sink, execution_tracker=tracker)
+    ctx = SimpleNamespace(deps=deps, tool_call_id=uuid4().hex)
+    try:
+        return (await ToolGateway().invoke(name, arguments, ctx, expected_scope=scope)).text
+    finally:
+        if not tracker.stop_confirmed():
+            confirmed = await asyncio.to_thread(tracker.wait_for_stop, settings.diagnosis_stop_wait_seconds)
+            if not confirmed:
+                log.warning('MCP工具执行停止未确认 run=%s tool=%s', scope.run_id, name)
 
 
 @server.tool(
@@ -95,10 +115,7 @@ async def _run_blocking(fn, *args, **kwargs):
     description="列出目标系统全部服务的健康状态（探活首选入手）",
 )
 async def list_services() -> str:
-    health = await _run_blocking(collect_health, _descriptor())
-    if not health:
-        return "该系统未注册任何服务"
-    return "\n".join(f"{i['name']}: {i['detail']} {'✅' if i['ok'] else '❌'}" for i in health)
+    return await _invoke('list_services', {})
 
 
 @server.tool(
@@ -106,10 +123,7 @@ async def list_services() -> str:
     description="检查单个服务的健康状态（探活 + 详情）",
 )
 async def health_check(service: str) -> str:
-    for item in await _run_blocking(collect_health, _descriptor()):
-        if item["name"] == service:
-            return f"{service}: {item['detail']} {'✅' if item['ok'] else '❌'}"
-    return f"系统中无服务「{service}」"
+    return await _invoke('check_service', {'service': service})
 
 
 @server.tool(
@@ -117,17 +131,7 @@ async def health_check(service: str) -> str:
     description="查容器真实状态：运行/退出原因/OOMKilled/退出码/内存上限/重启次数",
 )
 async def check_container_state(service: str) -> str:
-    d = _descriptor()
-    svc = next((s for s in d.get("services", []) if s.get("name") == service), None)
-    if not svc:
-        return f"系统中无服务「{service}」"
-    container = svc.get("container")
-    if not container:
-        return f"服务「{service}」不是容器化部署，无容器状态可查"
-    state = await _run_blocking(inspect_container, container)
-    if state is None:
-        return f"docker inspect {container} 失败（容器不存在或 Docker 不可用）"
-    return format_container_state(state)
+    return await _invoke('check_container_state', {'service': service})
 
 
 @server.tool(
@@ -135,7 +139,7 @@ async def check_container_state(service: str) -> str:
     description="读取某服务最近 N 行日志",
 )
 async def read_logs(service: str, lines: int = 50) -> str:
-    return await _run_blocking(read_service_logs, _descriptor(), service, max(1, min(int(lines), 300)))
+    return await _invoke('read_logs', {'service': service, 'lines': max(1, min(lines, 300))})
 
 
 @server.tool(
@@ -143,9 +147,7 @@ async def read_logs(service: str, lines: int = 50) -> str:
     description="在某服务日志中按关键词搜索（最近 500 行内）",
 )
 async def search_logs(service: str, keyword: str, lines: int = 200) -> str:
-    return await _run_blocking(
-        search_service_logs, _descriptor(), service, keyword, max(1, min(int(lines), 500))
-    )
+    return await _invoke('search_logs', {'service': service, 'keyword': keyword, 'lines': max(1, min(lines, 500))})
 
 
 @server.tool(
@@ -153,35 +155,7 @@ async def search_logs(service: str, keyword: str, lines: int = 200) -> str:
     description="执行 PromQL 即时查询（最多返回 8 条序列）",
 )
 async def query_prometheus(promql: str) -> str:
-    import httpx
-
-    d = _descriptor()
-    base = None
-    for svc in d.get("services", []):
-        if svc.get("connector") == "prometheus":
-            url_cfg = svc.get("health_url") or svc.get("url") or ""
-            base = url_cfg.replace("/metrics", "").rstrip("/")
-    if not base:
-        return "该系统未注册 Prometheus 服务"
-    try:
-        resp = httpx.get(f"{base}/api/v1/query", params={"query": promql}, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("status") != "success":
-            return f"Prometheus 返回错误: {data.get('error', data)}"
-        results = data["data"]["result"]
-        if not results:
-            return f"查询 `{promql}` 无数据（指标可能不存在或目标未被抓取）"
-        lines = []
-        for r in results[:8]:
-            metric = r.get("metric", {})
-            labels = ", ".join(f'{k}="{v}"' for k, v in metric.items() if k not in ("__name__", "job"))
-            name = metric.get("__name__", promql.split("{")[0])
-            lines.append(f"{name}{'{' + labels + '}' if labels else ''} = {r['value'][1]}")
-        note = f"（其余 {len(results) - 8} 条省略）" if len(results) > 8 else ""
-        return f"PromQL: `{promql}` ({len(results)} 条){note}\n" + "\n".join(lines)
-    except Exception as exc:  # noqa: BLE001
-        return f"Prometheus 查询失败: {exc}"
+    return await _invoke('query_prometheus', {'promql': promql})
 
 
 @server.tool(
@@ -189,25 +163,7 @@ async def query_prometheus(promql: str) -> str:
     description="在 Redis 上执行只读命令（INFO/DBSIZE/CONFIG GET/SLOWLOG 等，写命令一律拒绝）",
 )
 async def run_redis_command(command: str) -> str:
-    import subprocess
-
-    denied = redis_command_denied(command)
-    if denied:
-        return denied
-    d = _descriptor()
-    svc = next((s for s in d.get("services", []) if s.get("name", "").upper() == "REDIS"), None)
-    if not svc:
-        return "该系统未注册 Redis 服务"
-    host, port = svc.get("host", "127.0.0.1"), int(svc.get("port", 6379))
-    container = svc.get("container") or ""
-    base = ["docker", "exec", container, "redis-cli"] if container else ["redis-cli"]
-    cmd = base + ["-h", host, "-p", str(port), *shlex.split(command)]
-    proc = await _run_blocking(
-        lambda: subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-    )
-    if proc.returncode != 0:
-        return f"Redis 命令执行失败: {(proc.stderr or '').strip()[:200]}"
-    return "\n".join(proc.stdout.splitlines()[:80]) or proc.stdout[:500]
+    return await _invoke('run_redis_command', {'command': command})
 
 
 @server.tool(
@@ -215,32 +171,7 @@ async def run_redis_command(command: str) -> str:
     description="在 Kafka 容器内执行只读命令（consumer-groups --describe / topics --list）",
 )
 async def run_kafka_command(command: str) -> str:
-    import subprocess
-
-    denied = kafka_command_denied(command)
-    if denied:
-        return denied
-    d = _descriptor()
-    svc = next((s for s in d.get("services", []) if s.get("name", "").upper() == "KAFKA"), None)
-    if not svc:
-        return "该系统未注册 Kafka 服务"
-    container = svc.get("container") or ""
-    if not container:
-        return f"服务「{svc.get('name')}」未配置 Kafka 容器名"
-
-    parts = shlex.split(command)
-    if parts[0] == "consumer-groups":
-        script = "/opt/kafka/bin/kafka-consumer-groups.sh"
-    else:
-        script = "/opt/kafka/bin/kafka-topics.sh"
-    args = [script, "--bootstrap-server", "localhost:9092", *parts[1:]]
-    proc = await _run_blocking(
-        lambda: subprocess.run(["docker", "exec", container, *args],
-                               capture_output=True, text=True, timeout=30)
-    )
-    if proc.returncode != 0:
-        return f"Kafka 命令执行失败: {(proc.stderr or '').strip()[:300]}"
-    return "\n".join(proc.stdout.splitlines()[:80]) or proc.stdout[:500]
+    return await _invoke('run_kafka_command', {'subcommand': command})
 
 
 async def _startup() -> None:
@@ -260,7 +191,8 @@ def main() -> None:
         if args.transport == "sse":
             import uvicorn
 
-            uvicorn.run(server.sse_app(), host="0.0.0.0", port=args.port)
+            config = uvicorn.Config(server.sse_app(), host="127.0.0.1", port=args.port)
+            await uvicorn.Server(config).serve()
         else:
             await server.run_stdio_async()
 

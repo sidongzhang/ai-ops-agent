@@ -1,5 +1,6 @@
 """AI 诊断端点：对已注册系统跑 Pydantic AI agent。"""
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
 from ..core.database import get_session
@@ -23,7 +24,6 @@ from ..services.diagnostics.attachments import (
     parse_image_data_urls,
 )
 from ..services.diagnostics.service import (
-    complete_diagnosis_report,
     list_diagnostic_templates,
     start_diagnosis,
     update_diagnostic_templates,
@@ -42,7 +42,6 @@ router = APIRouter(prefix="/systems", tags=["agent"])
 def diagnose_system(
     system_id: int,
     body: DiagnoseRequest,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
     user: User = Depends(get_current_user),
@@ -56,6 +55,13 @@ def diagnose_system(
     if cancel_bus.is_shutting_down():
         # 关停中：拒绝新诊断（避免"刚提交就被杀"的坏体验）
         raise HTTPException(503, "服务正在关停，请稍后重试", headers={"Retry-After": "5"})
+    from ..services.diagnostics.routing import decision, NeedsDiagnosis
+    try:
+        route=decision(session,system_id,org_id,body.question,chat_id=body.chat_id or '',special=bool(images))
+    except LookupError as exc:
+        raise HTTPException(404,str(exc))
+    if route['resolved']=='blocked':
+        raise HTTPException(409,{'code':'diagnosis_required','message':str(NeedsDiagnosis(route)),'interaction':route})
     from ..agent.llm import LocalModelUnavailable, ensure_model_ready
 
     try:
@@ -66,6 +72,13 @@ def diagnose_system(
     except LocalModelUnavailable as exc:
         raise HTTPException(409, str(exc))
     from ..services.diagnostics.usage import BudgetExceeded
+    from ..agent.runtime.factory import get_runtime
+    from ..agent.runtime.contracts import RuntimeCompatibilityError
+    if body.runtime_engine == "pi":
+        try:
+            get_runtime("pi").preflight({"images": images, "model_mode": body.model_mode, "model_name": body.model_name})
+        except RuntimeCompatibilityError as exc:
+            raise HTTPException(409, str(exc))
 
     try:
         started = start_diagnosis(
@@ -73,29 +86,18 @@ def diagnose_system(
             system_id,
             org_id,
             body.question,
+            job_options={"model_mode": body.model_mode, "model_name": body.model_name,
+                "runtime_engine": body.runtime_engine, "images": images,
+                "follow_up_report_id": body.follow_up_report_id},
             actor_id=str(user.id),
-            business_context={"images": describe_images(images)} if images else None,
+            **({"chat_id": body.chat_id} if body.chat_id else {}),
+            business_context={"runtime_engine": body.runtime_engine, "images": describe_images(images)} if body.runtime_engine == "pi" else ({"images": describe_images(images)} if images else None),
         )
         if started.id is None:
             raise HTTPException(500, "诊断任务创建失败")
-        complete_kwargs = {
-            "actor_id": str(user.id),
-            "model_mode": body.model_mode,
-            "model_name": body.model_name,
-        }
-        if images:
-            complete_kwargs["images"] = images
-        if body.follow_up_report_id:
-            complete_kwargs["follow_up_report_id"] = body.follow_up_report_id
-        background_tasks.add_task(
-            complete_diagnosis_report,
-            started.id,
-            system_id,
-            org_id,
-            body.question,
-            **complete_kwargs,
-        )
         return started
+    except NeedsDiagnosis as exc:
+        raise HTTPException(409,{'code':'diagnosis_required','message':str(exc),'interaction':exc.route})
     except BudgetExceeded as exc:
         raise HTTPException(429, str(exc), headers={"Retry-After": "30"})
     except LookupError as exc:
@@ -157,11 +159,12 @@ def cancel_diagnosis(
         input={"newly_set": newly, "local_token_hit": cancelled_locally},
         commit=True,
     )
-    # 状态仍是 running：前端据此显示"正在停止"，等运行方落 cancelled
+    session.refresh(report)
+    # 排队取消可立即落终态；已执行任务等待运行方确认。
     return {
         "report_id": report_id,
-        "status": "running",
-        "stopping": True,
+        "status": report.status,
+        "stopping": report.status == "running",
         "noop": False,
         "newly_set": newly,
         "local_token_hit": cancelled_locally,
@@ -175,7 +178,6 @@ def cancel_diagnosis(
 def resume_diagnosis(
     system_id: int,
     report_id: int,
-    background_tasks: BackgroundTasks,
     body: ResumeRequest | None = None,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
@@ -198,6 +200,17 @@ def resume_diagnosis(
         ensure_model_ready(opts.model_mode, opts.model_name)
     except LocalModelUnavailable as exc:
         raise HTTPException(409, str(exc))
+    from ..models.run_state import DiagnosisRunState
+    state=session.get(DiagnosisRunState,report_id)
+    if state is not None and state.engine=="pi":
+        try:
+            get_diagnosis_report(session,system_id,org_id,report_id)
+            from ..agent.runtime.factory import get_runtime
+            get_runtime("pi").preflight({"model_mode":opts.model_mode,"model_name":opts.model_name})
+        except LookupError:
+            raise HTTPException(404,"诊断报告不存在")
+        except ValueError as exc:
+            raise HTTPException(409,str(exc))
     try:
         started, payload = start_resume(
             session,
@@ -206,6 +219,7 @@ def resume_diagnosis(
             org_id,
             actor_id=str(user.id) if user else "",
             force_refresh=opts.force_refresh,
+            job_options={"model_mode": opts.model_mode, "model_name": opts.model_name},
         )
     except ResumeNotPossible as exc:
         raise HTTPException(409, str(exc))
@@ -214,18 +228,6 @@ def resume_diagnosis(
     except LookupError as exc:
         raise HTTPException(404, str(exc))
 
-    if payload is not None and started.id is not None:
-        background_tasks.add_task(
-            complete_diagnosis_report,
-            started.id,
-            system_id,
-            org_id,
-            "",
-            actor_id=str(user.id) if user else "",
-            model_mode=opts.model_mode,
-            model_name=opts.model_name,
-            resume_payload=payload,
-        )
     return started
 
 
@@ -361,6 +363,8 @@ def clear_diagnosis_history(
     try:
         deleted = clear_diagnosis_reports(session, system_id, org_id)
         return DiagnosisHistoryClearOut(deleted=deleted)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
     except LookupError as exc:
         raise HTTPException(404, str(exc))
 
@@ -411,3 +415,32 @@ def download_diagnosis_artifact(system_id: int, token: str):
         raise HTTPException(404, "附件不存在或已失效")
     path, name = found
     return FileResponse(path, filename=name, media_type="application/octet-stream")
+
+
+@router.get('/{system_id}/diagnosis-reports/{report_id}/events')
+def diagnosis_events(system_id: int, report_id: int, after_sequence: int = 0,
+                     session: Session = Depends(get_session), org_id: int = Depends(get_current_org_id)):
+    # Existing report lookup performs org/system authorization before returning events.
+    try:
+        get_diagnosis_report(session, system_id, org_id, report_id)
+    except LookupError:
+        raise HTTPException(404,"诊断报告不存在")
+    from app.services.diagnostics.runtime_events import replay_events
+    rows=replay_events(session,str(report_id),org_id,system_id,max(0,after_sequence))
+    return {'events':[{'run_id':row.run_id,'sequence':row.sequence,'kind':row.kind,'payload':row.payload,
+                       'timestamp':row.created_at.isoformat()} for row in rows]}
+
+
+@router.get('/{system_id}/diagnosis-reports/{report_id}/stream')
+def diagnosis_answer_stream(request: Request, system_id: int, report_id: int,
+                            session: Session = Depends(get_session),
+                            org_id: int = Depends(get_current_org_id)):
+    try:
+        get_diagnosis_report(session, system_id, org_id, report_id)
+    except LookupError:
+        raise HTTPException(404, "诊断报告不存在")
+    from app.services.diagnostics.stream import report_events
+    return StreamingResponse(report_events(request, report_id, system_id, org_id,
+                                           request.headers.get('last-event-id', '')),
+                             media_type='text/event-stream',
+                             headers={'Cache-Control':'no-cache', 'X-Accel-Buffering':'no'})

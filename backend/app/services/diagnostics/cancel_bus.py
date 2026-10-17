@@ -40,7 +40,7 @@ PHASE_TOOL = "tool_exec"
 @dataclass
 class CancelRegistration:
     report_id: int
-    token: object                      # pydantic_ai.CancellationToken
+    token: object                      # opaque runtime cancellation handle; supports cancel()
     done: threading.Event = field(default_factory=threading.Event)
     phase: str = PHASE_IDLE
     cancelled_locally: bool = False
@@ -64,14 +64,35 @@ def is_shutting_down() -> bool:
 
 
 # ── 注册表 ──────────────────────────────────────────────────────────────
-def register(report_id: int, token) -> CancelRegistration:
-    """注册本轮运行的取消令牌；注册后**立即自检** DB 标志（堵"取消早于注册"）。"""
+def register(report_id: int, token, *, org_id=None, system_id=None) -> CancelRegistration | None:
+    """Claim an unowned report once, then bind its local cancellation handle.
+
+    A duplicate dispatch must not replace another run's token or start a second
+    model loop. Lost owners are finalized by reaper, never silently reclaimed.
+    """
+    from datetime import datetime, timezone
+    from sqlalchemy import or_, update
+    from app.models.diagnostics import DiagnosisReport
+
     reg = CancelRegistration(report_id=report_id, token=token)
     with _registry_lock:
+        if report_id in _registry or is_shutting_down():
+            return None
+        conditions=[DiagnosisReport.id==report_id,DiagnosisReport.status=='running',
+                    or_(DiagnosisReport.runner_id=='',DiagnosisReport.runner_id.is_(None))]
+        if org_id is not None:
+            conditions.append(DiagnosisReport.org_id==org_id)
+        if system_id is not None:
+            conditions.append(DiagnosisReport.system_id==system_id)
+        with _session() as session:
+            claimed=session.execute(update(DiagnosisReport).where(*conditions).values(
+                runner_id=INSTANCE_ID,runner_heartbeat_at=datetime.now(timezone.utc)))
+            if claimed.rowcount!=1:
+                return None
+            session.commit()
         _registry[report_id] = reg
     ensure_subscriber()
-    touch_heartbeat(report_id)          # 注册即打一次心跳（reaper 才能区分"活着的"与"失联的"）
-    if is_cancel_requested(report_id):
+    if is_shutting_down() or is_cancel_requested(report_id):
         _cancel_token(reg)
     return reg
 
@@ -118,15 +139,15 @@ def request_local_cancel(report_id: int) -> bool:
 
 
 def cancel_all_and_wait(grace_seconds: float | None = None) -> dict:
-    """关停用：主动取消本进程所有在跑诊断，**有界等待**它们落库。
+    """关停用：主动取消本进程所有在跑诊断，**有界等待**工作线程退出。
 
-    返回 {"cancelled": n, "persisted": n, "unpersisted": [report_id...]}。
+    persisted/unpersisted 是旧字段名，只表示线程是否退出；调用方必须核对 DB。
     """
     grace = settings.diagnosis_shutdown_grace_seconds if grace_seconds is None else grace_seconds
     with _registry_lock:
         regs = list(_registry.values())
     if not regs:
-        return {"cancelled": 0, "persisted": 0, "unpersisted": []}
+        return {"cancelled": 0, "persisted": 0, "unpersisted": [], "report_ids": []}
 
     for reg in regs:
         _cancel_token(reg)
@@ -141,8 +162,9 @@ def cancel_all_and_wait(grace_seconds: float | None = None) -> dict:
         else:
             unpersisted.append(reg.report_id)
     if unpersisted:
-        log.warning("[cancel] 关停宽限期 %.1fs 内未落库: %s", grace, unpersisted)
-    return {"cancelled": len(regs), "persisted": persisted, "unpersisted": unpersisted}
+        log.warning("[cancel] 关停宽限期 %.1fs 内未完成线程收尾: %s", grace, unpersisted)
+    return {"cancelled": len(regs), "persisted": persisted, "unpersisted": unpersisted,
+            "report_ids": [reg.report_id for reg in regs]}
 
 
 # ── DB 标志（真相来源）──────────────────────────────────────────────────
@@ -198,17 +220,14 @@ def touch_heartbeat(report_id: int) -> None:
     """
     from datetime import datetime, timezone
 
-    from sqlalchemy import text
+    from sqlalchemy import update
+    from app.models.diagnostics import DiagnosisReport
 
     try:
         with _session() as session:
-            session.execute(
-                text(
-                    "UPDATE diagnosis_reports SET runner_id = :rid, runner_heartbeat_at = :ts "
-                    "WHERE id = :id AND status = 'running'"
-                ),
-                {"id": report_id, "rid": INSTANCE_ID, "ts": datetime.now(timezone.utc)},
-            )
+            session.execute(update(DiagnosisReport).where(DiagnosisReport.id==report_id,
+                DiagnosisReport.status=='running',DiagnosisReport.runner_id==INSTANCE_ID).values(
+                runner_heartbeat_at=datetime.now(timezone.utc)))
             session.commit()
     except Exception as exc:  # noqa: BLE001
         log.debug("[cancel] 心跳续期失败 report=%s: %s", report_id, exc)
@@ -223,6 +242,9 @@ def set_cancel_requested(report_id: int) -> bool:
 
     from sqlalchemy import text
 
+    from .jobs import cancel_pending
+    if cancel_pending(report_id):
+        return True
     try:
         with _session() as session:
             result = session.execute(
@@ -303,6 +325,7 @@ def start_poller(report_id: int, reg: CancelRegistration) -> threading.Thread:
                 break
             try:
                 if is_terminal(report_id):
+                    _cancel_token(reg)          # owner失联收尾后，不再允许旧执行继续下一轮
                     break
                 touch_heartbeat(report_id)      # 每轮续期：reaper 据此知道本 worker 还活着
                 if is_cancel_requested(report_id):
@@ -315,7 +338,8 @@ def start_poller(report_id: int, reg: CancelRegistration) -> threading.Thread:
                 if failures >= 3:            # 连续失败降级为低频，避免打爆 DB
                     interval = 30.0
             if time.monotonic() > deadline:
-                log.warning("[cancel] report=%s 超过单次运行上限，停止巡检（交 reaper）", report_id)
+                log.warning("[cancel] report=%s 超过单次运行上限，已请求取消", report_id)
+                _cancel_token(reg)
                 break
 
     thread = threading.Thread(target=_loop, name=f"diagnosis-cancel-poll-{report_id}", daemon=True)

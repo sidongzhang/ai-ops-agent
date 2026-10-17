@@ -4,7 +4,8 @@
 用途：演示「接一个 MCP server，agent 立刻能用它的工具」——不写一行 agent 代码。
 配置（.env）：
   MCP_SERVERS=[{"name":"k8s","command":"{python}","args":["deploy/mcp/demo_k8s_server.py"],
-                "description":"K8s 集群只读查询（Pod/事件/日志）"}]
+                "description":"K8s 集群只读查询（Pod/事件/日志）",
+                "allowed_tools":["list_pods","recent_events"],"org_ids":[1],"system_ids":[2]}]
 
 用官方 mcp SDK 的 MCPServer（mcp 2.x，原名 FastMCP），stdio 传输；所有工具只读。
 替换成真实 server 时，把 command/args 指向真实实现（如 npx @modelcontextprotocol/server-kubernetes）。

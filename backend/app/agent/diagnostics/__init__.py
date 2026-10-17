@@ -1,4 +1,4 @@
 """Diagnosis agent package."""
-from .runner import diagnose
+from app.agent.runtime.entrypoint import diagnose
 
 __all__ = ["diagnose"]

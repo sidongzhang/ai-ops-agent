@@ -153,7 +153,9 @@ def _deliver_processed_message(session: Session, message: SystemMessage) -> None
 
 
 def _production_report_with_ai(session: Session, message: SystemMessage) -> tuple[str, list[str]]:
-    from app.agent.diagnostics.runner import diagnose_with_details
+    from app.agent.runtime.entrypoint import diagnose_with_details
+    from app.agent.harness.context_data import external_block
+    from app.services.diagnostics.service import _tool_audit_recorder
     from app.repositories.systems import list_enabled_services_for_system
     from app.services.descriptors.builder import system_to_descriptor
     from app.services.systems.service import require_system
@@ -171,10 +173,8 @@ def _production_report_with_ai(session: Session, message: SystemMessage) -> tupl
         "1. 先给出整体结论；2. 总结关键产量/成功失败/异常趋势；"
         "3. 结合系统知识库和上下文指出风险；4. 给出下一步处理建议；"
         "5. 不要编造数据，没有的数据明确说明。\n\n"
-        f"报告标题：{message.title}\n"
-        f"摘要：{message.summary}\n"
-        f"生产数据：\n{message.content}\n\n"
-        f"上下文：{related.get('context', {})}"
+        + external_block('外部生产报告', {'title': message.title, 'summary': message.summary,
+            'content': message.content, 'context': related.get('context', {})})
     )
     try:
         run = diagnose_with_details(
@@ -182,6 +182,8 @@ def _production_report_with_ai(session: Session, message: SystemMessage) -> tupl
             prompt,
             org_id=message.org_id,
             system_id=message.system_id,
+            intent_text=f"根据生产数据生成{report_name}",
+            tool_audit_sink=_tool_audit_recorder(message.org_id, message.system_id, 'production_report', None),
             trace_question=f"外部生产数据加工：{message.title}",
             skill_steps=(
                 "## 排查剧本：生产报告加工\n"

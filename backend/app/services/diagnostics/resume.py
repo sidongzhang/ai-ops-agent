@@ -17,7 +17,6 @@ from datetime import datetime, timezone
 
 from sqlmodel import Session, select
 
-from app.core.config import settings
 from app.models.diagnostics import DiagnosisReport
 
 log = logging.getLogger(__name__)
@@ -27,31 +26,7 @@ RESUME_KIND = "resume"
 RESUMABLE_STATUSES = ("cancelled", "failed")
 
 # 工具 → 证据时效类别（决定"多久算过期"）
-_TOOL_CLASS = {
-    "list_services": "health",
-    "check_service": "health",
-    "check_container_state": "health",
-    "read_logs": "health",
-    "search_logs": "health",
-    "query_prometheus": "metrics",
-    "run_kafka_command": "metrics",
-    "run_redis_command": "metrics",
-    "query_business_data": "business",
-    "query_business_dataset": "business",
-    "list_archive_files": "business",
-    "read_archive_file": "business",
-    "fetch_archive_file": "business",
-    "get_service_topology": "static",
-    "analyze_root_cause": "static",
-    "recent_changes": "static",
-    "search_knowledge_base": "static",
-    "load_runbook": "static",
-    "run_python_analysis": "business",
-    "investigate": "metrics",
-    "consult_specialists": "metrics",
-    "mcp_list_tools": "static",
-    "mcp_call": "metrics",
-}
+from app.agent.harness.freshness import ttl_seconds as _ttl_seconds
 
 
 class ResumeNotPossible(RuntimeError):
@@ -60,24 +35,6 @@ class ResumeNotPossible(RuntimeError):
     def __init__(self, message: str, reason: str = "not_resumable") -> None:
         super().__init__(message)
         self.reason = reason
-
-
-def _ttl_seconds(tool: str) -> int:
-    table = settings.evidence_stale_ttl or {}
-    return int(table.get(_TOOL_CLASS.get(tool, "metrics"), 300))
-
-
-def _aware(value: datetime | None) -> datetime | None:
-    if value is None:
-        return None
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
-
-def _age_minutes(stamp) -> float | None:
-    moment = _aware(stamp if isinstance(stamp, datetime) else None)
-    if moment is None:
-        return None
-    return max(0.0, (datetime.now(timezone.utc) - moment).total_seconds() / 60.0)
 
 
 def prepare_resume(
@@ -90,8 +47,8 @@ def prepare_resume(
 
     返回 {"history_json", "history", "prior_usage", "baseline_json", "note", "stale"}。
     """
-    from pydantic_ai.messages import ModelMessagesTypeAdapter, repair_messages
-    from pydantic_ai.usage import RunUsage
+    from app.agent.runtime.contracts import RuntimeCheckpoint, RuntimeCompatibilityError, UsageBaseline
+    from app.agent.runtime.factory import get_runtime
 
     from app.models.run_state import DiagnosisRunState
     from app.services.diagnostics.run_state import resumable_of
@@ -109,60 +66,34 @@ def prepare_resume(
         )
 
     state = session.get(DiagnosisRunState, source.id)
-    history = ModelMessagesTypeAdapter.validate_json(state.messages_json)
-    history = repair_messages(history)                 # 关掉悬空工具调用，保证历史合法
-    history, stale = _annotate_stale(history, force_refresh=force_refresh)
+    checkpoint = RuntimeCheckpoint(
+        state.messages_json, state.framework_cumulative_json,
+        state.engine, state.engine_version, state.history_schema_version,
+    )
+    try:
+        history_json, stale = get_runtime(state.engine).prepare_resume(
+            checkpoint, force_refresh=force_refresh, ttl_for_tool=_ttl_seconds,
+        )
+    except RuntimeCompatibilityError as exc:
+        raise ResumeNotPossible(str(exc), reason="incompatible_runtime") from exc
 
     baseline_json = state.framework_cumulative_json or ""
-    prior = RunUsage()
-    if baseline_json:
-        try:
-            raw = json.loads(baseline_json)
-            prior.input_tokens = int(raw.get("input_tokens") or 0)
-            prior.output_tokens = int(raw.get("output_tokens") or 0)
-            prior.cache_read_tokens = int(raw.get("cache_read_tokens") or 0)
-            prior.cache_write_tokens = int(raw.get("cache_write_tokens") or 0)
-            prior.requests = int(raw.get("requests") or 0)
-            prior.tool_calls = int(raw.get("tool_calls") or 0)
-        except Exception as exc:  # noqa: BLE001 - baseline 解析失败按 0 起算并留痕
-            log.warning("[resume] baseline 解析失败 report=%s: %s", source.id, exc)
-
-    note = _build_resume_note(source, stale)
+    try:
+        raw = json.loads(baseline_json or "{}")
+        prior = UsageBaseline(**{key: int(raw.get(key) or 0) for key in UsageBaseline.__dataclass_fields__})
+    except Exception as exc:
+        log.warning("[resume] baseline 解析失败 report=%s: %s", source.id, exc)
+        prior = UsageBaseline()
     return {
-        "history_json": ModelMessagesTypeAdapter.dump_json(history).decode("utf-8"),
-        "history": history,
+        "history_json": history_json,
         "prior_usage": prior,
         "baseline_json": baseline_json,
-        "note": note,
+        "note": _build_resume_note(source, stale),
         "stale": stale,
+        "engine": state.engine,
+        "engine_version": state.engine_version,
+        "history_schema_version": state.history_schema_version,
     }
-
-
-def _annotate_stale(history: list, *, force_refresh: bool) -> tuple[list, list[dict]]:
-    """标注过期证据；force_refresh 时把过期结果**替换为需重新取证的标记**。
-
-    只改 ToolReturnPart 的 content，保留 tool_call_id 配对 → 历史依然对 provider 合法。
-    """
-    from pydantic_ai.messages import ModelRequest, ToolReturnPart
-
-    stale: list[dict] = []
-    for message in history:
-        if not isinstance(message, ModelRequest):
-            continue
-        for part in message.parts:
-            if not isinstance(part, ToolReturnPart):
-                continue
-            age = _age_minutes(getattr(part, "timestamp", None))
-            ttl = _ttl_seconds(part.tool_name)
-            if age is None or age * 60 <= ttl:
-                continue
-            stale.append({"tool": part.tool_name, "age_minutes": round(age, 1), "ttl_seconds": ttl})
-            if force_refresh:
-                part.content = (
-                    f"（该证据采集于约 {age:.0f} 分钟前，已超过 {ttl // 60} 分钟时效，"
-                    "可能过期——需要时请重新调用工具取证）"
-                )
-    return history, stale
 
 
 def _build_resume_note(source: DiagnosisReport, stale: list[dict]) -> str:
@@ -189,15 +120,5 @@ def find_existing_resume(session: Session, source_report_id: int) -> DiagnosisRe
 
 
 def load_history_for_run(payload: dict):
-    """从载荷取回反序列化好的历史（供 runner 使用）。"""
-    if not payload:
-        return None
-    history = payload.get("history")
-    if history:
-        return history
-    json_str = payload.get("history_json") or ""
-    if not json_str:
-        return None
-    from pydantic_ai.messages import ModelMessagesTypeAdapter
-
-    return ModelMessagesTypeAdapter.validate_json(json_str)
+    """Return opaque history; native message decoding belongs to the selected runtime."""
+    return (payload or {}).get("history_json") or None

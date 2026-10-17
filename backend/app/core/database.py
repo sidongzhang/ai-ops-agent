@@ -13,6 +13,12 @@ _connect_args = {"check_same_thread": False} if settings.database_url.startswith
 engine = create_engine(settings.database_url, echo=False, connect_args=_connect_args)
 
 _SQLITE_REQUIRED_COLUMNS = {
+    "diagnosis_chat": {"interaction_mode": "VARCHAR(16) DEFAULT 'auto' NOT NULL"},
+    "diagnosis_run_state": {
+        "engine": "VARCHAR DEFAULT 'pydantic' NOT NULL",
+        "engine_version": "VARCHAR DEFAULT '' NOT NULL",
+        "history_schema_version": "INTEGER DEFAULT 1 NOT NULL",
+    },
     "systems": {
         "restart_policy": "JSON DEFAULT '{}'",
     },
@@ -26,6 +32,7 @@ _SQLITE_REQUIRED_COLUMNS = {
         "executed_at": "DATETIME",
     },
     "diagnosis_reports": {
+        "answer_draft": "JSON",
         "knowledge_refs": "JSON DEFAULT '[]'",
         "feedback": "VARCHAR DEFAULT ''",
         "feedback_note": "VARCHAR DEFAULT ''",
@@ -41,6 +48,7 @@ _SQLITE_REQUIRED_COLUMNS = {
         "cancel_phase": "VARCHAR DEFAULT ''",
         "resumed_from_report_id": "INTEGER",
     },
+    "diagnosis_usage_ledger": {"attempt_id": "VARCHAR(100)"},
     "system_messages": {
         "incident_id": "INTEGER",
     },
@@ -59,6 +67,10 @@ def _ensure_sqlite_schema() -> None:
                 if column_name in existing_columns:
                     continue
                 conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
+        if "diagnosis_reports" in table_names:
+            conn.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS uq_diagnosis_resumed_from ON diagnosis_reports (resumed_from_report_id)")
+        if "diagnosis_usage_ledger" in table_names:
+            conn.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_diagnosis_usage_ledger_attempt_id ON diagnosis_usage_ledger(attempt_id)")
 
 
 def init_db():

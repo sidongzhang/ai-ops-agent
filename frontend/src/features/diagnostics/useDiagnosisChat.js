@@ -1,6 +1,8 @@
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '../../api'
+import DOMPurify from 'dompurify'
+import { subscribeDiagnosis } from './answerStream'
 
 let markedParser = null
 
@@ -37,11 +39,21 @@ async function ensureMarked() {
   return markedParser
 }
 
+function runningDiagnosisText(report) {
+  const execution = (report.business_context || {}).execution || {}
+  if (execution.phase === 'queued') return `排队中，已等待 ${execution.wait_seconds || 0} 秒（最多 15 分钟，可停止排队）`
+  if (execution.phase === 'stopping' || report.cancel_requested_at) return '停止中，等待执行方确认…'
+  const steps = report.evidence || []
+  if (report.business_context?.interaction?.resolved === 'chat') return '执行中，正在回复…'
+  return steps.length ? `执行中，已完成 ${steps.filter(s => s.status !== 'started').length}/${steps.length} 步取证…` : '执行中，正在收集实时证据…'
+}
+
 function buildAgentMessageFromDiagnose(data) {
   return {
     role: 'agent',
     reportId: data.id,
     reportType: 'diagnose',
+    interaction: data.business_context?.interaction,
     status: data.status || 'success',
     text: data.answer,
     templateName: data.template_name,
@@ -63,7 +75,11 @@ function buildAgentMessageFromReport(report) {
     reportId: report.id,
     reportType: report.report_type,
     status: report.status || 'success',
-    text: report.answer,
+    interaction: (report.business_context || {}).interaction,
+    performance: (report.business_context || {}).performance,
+    evidenceValidation: (report.business_context || {}).evidence_validation,
+    answerStream: (report.business_context || {}).answer_stream,
+    text: report.status === 'running' ? runningDiagnosisText(report) : (report.error_message || report.answer),
     templateName: report.template_name,
     templateDescription: report.template_description,
     model: report.model,
@@ -92,7 +108,7 @@ function buildAgentMessageFromReport(report) {
 }
 
 const DIAGNOSIS_POLL_INTERVAL_MS = 2500
-const DIAGNOSIS_POLL_TIMEOUT_MS = 10 * 60 * 1000
+const DIAGNOSIS_POLL_TIMEOUT_MS = 27 * 60 * 1000
 const DEFAULT_MODEL_OPTIONS = [
   { value: 'auto', label: '自动', description: '按问题自动选择模型', mode: '', model: '' },
   { value: 'local', label: '本地模型', description: '使用本地部署模型', mode: 'local', model: '' },
@@ -104,10 +120,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitForDiagnosisReport(systemId, reportId, onRunningUpdate) {
+async function pollDiagnosisReport(systemId, reportId, onRunningUpdate, signal) {
   const startedAt = Date.now()
   while (Date.now() - startedAt < DIAGNOSIS_POLL_TIMEOUT_MS) {
+    if (signal?.aborted) throw new Error('页面已关闭，任务仍在后台执行')
     await sleep(DIAGNOSIS_POLL_INTERVAL_MS)
+    if (signal?.aborted) throw new Error('页面已关闭，任务仍在后台执行')
     const { data } = await api.get(`/systems/${systemId}/diagnosis-reports/${reportId}`)
     if (data.status === 'success' || data.status === 'failed' || data.status === 'cancelled') {
       return data
@@ -116,6 +134,29 @@ async function waitForDiagnosisReport(systemId, reportId, onRunningUpdate) {
     if (onRunningUpdate) onRunningUpdate(data)
   }
   throw new Error('诊断超时，请稍后在诊断历史中查看结果')
+}
+
+function openReportStream(systemId, reportId, onRunningUpdate, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new Error('页面已关闭，任务仍在后台执行')); return }
+    let close = () => {}
+    let settled = false
+    const polling = new AbortController()
+    const cleanup = () => { clearTimeout(timer); signal.removeEventListener('abort', abort); close(); polling.abort() }
+    const fail = error => { if (settled) return; settled = true; cleanup(); reject(error) }
+    const abort = () => fail(new Error('页面已关闭，任务仍在后台执行'))
+    const timer = setTimeout(() => fail(new Error('诊断等待超时，请从历史查看')), DIAGNOSIS_POLL_TIMEOUT_MS)
+    signal.addEventListener('abort', abort, { once: true })
+    const finish = report => { if (settled) return; settled = true; cleanup(); resolve(report) }
+    const update = report => { if (!settled) onRunningUpdate?.(report) }
+    const url = `${api.defaults.baseURL || ''}/systems/${systemId}/diagnosis-reports/${reportId}/stream`
+    close = subscribeDiagnosis(url, report => {
+      if (['success', 'failed', 'cancelled'].includes(report.status)) finish(report)
+      else update(report)
+    }, () => {
+      if (!settled) pollDiagnosisReport(systemId, reportId, update, polling.signal).then(finish, fail)
+    })
+  })
 }
 
 function buildActionMessageFromWorkflow(workflow) {
@@ -141,9 +182,18 @@ function mergeTimelineMessages(reportMessages, workflowMessages) {
 }
 
 export function useDiagnosisChat(systemId) {
+  const streamLifecycle = new AbortController()
+  onUnmounted(() => streamLifecycle.abort())
+  const waitForDiagnosisReport = (sid, rid, callback) => openReportStream(sid, rid, callback, streamLifecycle.signal)
   const question = ref('')
   const messages = ref([])
   const historyLoading = ref(false)
+  const historyReports = ref([])
+  const chats = ref([])
+  const activeChatId = ref(null)
+  const chatManaging = ref(false)
+  const workflowHistory = ref([])
+  const imageReads = ref(0)
   const diagnosing = ref(false)
   const stopping = ref(false)
   const activeReportId = ref(null)
@@ -157,6 +207,7 @@ export function useDiagnosisChat(systemId) {
   const modelOptions = ref(DEFAULT_MODEL_OPTIONS)
   // 多模态：随问题上传的截图（data URL），最多 MAX_IMAGES 张
   const images = ref([])
+  let attachmentGeneration = 0
   const MAX_IMAGES = 3
   const MAX_IMAGE_BYTES = 2 * 1024 * 1024
   const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
@@ -166,13 +217,15 @@ export function useDiagnosisChat(systemId) {
   }
 
   function clearImages() {
+    attachmentGeneration += 1
     images.value = []
   }
 
   async function addImageFiles(fileList) {
+    const generation = attachmentGeneration
     const files = Array.from(fileList || [])
     for (const file of files) {
-      if (images.value.length >= MAX_IMAGES) {
+      if (images.value.length + imageReads.value >= MAX_IMAGES) {
         message.warning(`最多上传 ${MAX_IMAGES} 张图片`)
         break
       }
@@ -184,6 +237,7 @@ export function useDiagnosisChat(systemId) {
         message.warning(`图片「${file.name}」超过 ${MAX_IMAGE_BYTES / 1024 / 1024}MB`)
         continue
       }
+      imageReads.value += 1
       try {
         const dataUrl = await new Promise((resolve, reject) => {
           const reader = new FileReader()
@@ -191,9 +245,11 @@ export function useDiagnosisChat(systemId) {
           reader.onerror = () => reject(new Error('读取失败'))
           reader.readAsDataURL(file)
         })
-        images.value.push({ name: file.name || '截图', dataUrl })
+        if (generation === attachmentGeneration) images.value.push({ name: file.name || '图片', dataUrl })
       } catch {
         message.warning(`图片「${file.name}」读取失败`)
+      } finally {
+        imageReads.value -= 1
       }
     }
   }
@@ -212,37 +268,121 @@ export function useDiagnosisChat(systemId) {
     }
   }
 
-  async function loadHistory() {
-    historyLoading.value = true
+  async function openHistoryReport(id) {
+    if (diagnosing.value || fixing.value || chatManaging.value) return
+    chatManaging.value = true
     try {
-      const [{ data: reports }, { data: workflows }] = await Promise.all([
-        api.get(`/systems/${systemId}/diagnosis-reports`, { params: { limit: 50 } }),
-        api.get(`/systems/${systemId}/workflow`),
+      const { data: reports } = await api.get(`/systems/${systemId}/diagnosis-chats/${id}/reports`)
+      activeChatId.value = id
+      messages.value = (reports || []).flatMap((report) => [
+        { role: 'user', text: report.question, imageMeta: report.business_context?.images || [] },
+        buildAgentMessageFromReport(report),
       ])
-      const rebuilt = []
-      for (const report of reports) {
-        rebuilt.push({ role: 'user', text: report.question, createdAt: report.created_at })
-        rebuilt.push({ ...buildAgentMessageFromReport(report), createdAt: report.created_at })
+      historyReports.value = reports || []
+      const latest = [...(reports || [])].reverse().find((report) => report.status === 'success')
+      lastReportId.value = latest?.id || null
+      lastQuestion.value = reports.at(-1)?.question || ''
+      question.value = ''; clearImages()
+      const runningIndex = messages.value.findIndex((item) => item.role === 'agent' && item.status === 'running')
+      if (runningIndex >= 0) watchExistingRun(messages.value[runningIndex].reportId, runningIndex)
+      await scrollBottom()
+    } catch (error) { message.error(extractErrorMessage(error, '加载对话失败')) }
+    finally { chatManaging.value = false }
+  }
+
+  async function ensureActiveChat() {
+    if (activeChatId.value) return
+    const { data } = await api.post(`/systems/${systemId}/diagnosis-chats`, { title: '新对话' })
+    activeChatId.value = data.id
+    chats.value.unshift({ ...data, report_count: 0, running: false })
+  }
+
+  async function renameChat(id, title) {
+    if (chatManaging.value) return false
+    chatManaging.value = true
+    try {
+      const { data } = await api.patch(`/systems/${systemId}/diagnosis-chats/${id}`, { title: title.trim() })
+      const chat = chats.value.find((item) => item.id === id)
+      if (chat) Object.assign(chat, data)
+      return true
+    } catch (error) { message.error(extractErrorMessage(error, '改名失败')); return false }
+    finally { chatManaging.value = false }
+  }
+
+  async function deleteChat(id) {
+    if (chatManaging.value) return false
+    chatManaging.value = true
+    try {
+      await api.delete(`/systems/${systemId}/diagnosis-chats/${id}`)
+      chats.value = chats.value.filter((item) => item.id !== id)
+      if (activeChatId.value === id) {
+        activeChatId.value = null; messages.value = []; historyReports.value = []
+        lastReportId.value = null; lastQuestion.value = ''; question.value = ''; clearImages()
       }
-      const workflowMessages = workflows.map(buildActionMessageFromWorkflow)
-      messages.value = mergeTimelineMessages(rebuilt, workflowMessages)
-      const latestReport = [...reports].reverse().find((report) => report.status === 'success' && report.id)
-      lastReportId.value = latestReport?.id || null
-      const lastUser = [...rebuilt].reverse().find((item) => item.role === 'user')
-      if (lastUser?.text) lastQuestion.value = lastUser.text
+      message.success('对话及对应历史已删除')
+      return true
+    } catch (error) { message.error(extractErrorMessage(error, '删除失败')); return false }
+    finally { chatManaging.value = false }
+  }
+
+  function openWorkflowHistory(id) {
+    if (diagnosing.value || fixing.value) return
+    const workflow = workflowHistory.value.find((item) => item.wfId === id)
+    if (workflow) messages.value = [{ ...workflow }]
+  }
+
+  function showRunning(index, partial) {
+    const box = chatBox.value
+    const pinned = !box || box.scrollHeight - box.clientHeight - box.scrollTop < 80
+    stopping.value = !!partial.stopping || !!partial.cancel_requested_at || stopping.value
+    messages.value[index] = { ...buildAgentMessageFromReport(partial), liveSteps: partial.evidence || [] }
+    if (pinned) scrollBottom()
+  }
+
+  async function watchExistingRun(reportId, messageIndex = 1) {
+    diagnosing.value = true
+    activeReportId.value = reportId
+    try {
+      const report = await waitForDiagnosisReport(systemId, reportId, (partial) => {
+        showRunning(messageIndex, partial)
+      })
+      messages.value[messageIndex] = buildAgentMessageFromReport(report)
+      if (report.status === 'success') lastReportId.value = reportId
+      await loadHistory()
     } catch (error) {
-      message.error(extractErrorMessage(error, '诊断历史加载失败'))
+      messages.value[messageIndex] = { role: 'agent', reportId, status: 'failed', text: extractErrorMessage(error, '读取进度失败，请从历史重新查看') }
     } finally {
-      historyLoading.value = false
+      diagnosing.value = false
+      stopping.value = false
+      activeReportId.value = null
+      await scrollBottom()
     }
   }
 
-  function startNewChat() {
-    // 只清空本地对话视图；服务端诊断历史保留（点「历史」可随时查看）
-    messages.value = []
-    lastQuestion.value = ''
-    lastReportId.value = null
-    message.success('已开启新对话（服务端诊断历史仍保留）')
+  async function loadHistory(selectLatest = false) {
+    historyLoading.value = true
+    try {
+      const [{ data: list }, { data: workflows }] = await Promise.all([
+        api.get(`/systems/${systemId}/diagnosis-chats`), api.get(`/systems/${systemId}/workflow`),
+      ])
+      chats.value = list || []
+      workflowHistory.value = (workflows || []).filter((item) => item.proposed_action).map(buildActionMessageFromWorkflow)
+      if (selectLatest === true && !diagnosing.value && !messages.value.length && chats.value.length) await openHistoryReport(chats.value[0].id)
+    } catch (error) { message.error(extractErrorMessage(error, '对话历史加载失败')) }
+    finally { historyLoading.value = false }
+  }
+
+  async function startNewChat() {
+    if (diagnosing.value || fixing.value || chatManaging.value) return
+    chatManaging.value = true
+    try {
+      const { data } = await api.post(`/systems/${systemId}/diagnosis-chats`, { title: '新对话' })
+      chats.value.unshift({ ...data, report_count: 0, running: false })
+      activeChatId.value = data.id
+      messages.value = []; historyReports.value = []; question.value = ''; clearImages()
+      lastQuestion.value = ''; lastReportId.value = null
+    } catch (error) { message.error(extractErrorMessage(error, '创建对话失败')) }
+    finally { chatManaging.value = false }
   }
 
   async function exportHistoryBackup() {
@@ -277,6 +417,8 @@ export function useDiagnosisChat(systemId) {
     }
     messages.value = []
     lastQuestion.value = ''
+    lastReportId.value = null
+    historyReports.value = []
     message.success('诊断历史已清空')
   }
 
@@ -285,8 +427,8 @@ export function useDiagnosisChat(systemId) {
   }
 
   function renderMd(text) {
-    if (markdownReady.value && markedParser) return markedParser.parse(text)
-    return escapeHtml(text).replaceAll('\n', '<br />')
+    if (markdownReady.value && markedParser) return DOMPurify.sanitize(markedParser.parse(text || ''))
+    return escapeHtml(text || '').replaceAll('\n', '<br />')
   }
 
   async function scrollBottom() {
@@ -295,10 +437,14 @@ export function useDiagnosisChat(systemId) {
   }
 
   async function ask() {
+    if (diagnosing.value || fixing.value || chatManaging.value || imageReads.value) return
     const q = question.value.trim()
     const attached = images.value.map((item) => item.dataUrl)
     const attachedMeta = images.value.map((item) => ({ name: item.name, dataUrl: item.dataUrl }))
     if (!q && !attached.length) return
+    diagnosing.value = true
+    try { await ensureActiveChat() }
+    catch (error) { diagnosing.value = false; message.error(extractErrorMessage(error, '创建对话失败')); return }
     localStorage.setItem('diagnosis:model-choice', modelChoice.value)
     lastQuestion.value = q
     messages.value.push({ role: 'user', text: q, images: attachedMeta })
@@ -309,11 +455,11 @@ export function useDiagnosisChat(systemId) {
     messages.value.push({
       role: 'agent',
       status: 'running',
-      text: '诊断进行中，正在收集健康检查、日志和指标证据…',
+      text: '正在处理你的问题…',
     })
     await scrollBottom()
     try {
-      const body = { question: q, model_mode: modelChoice.value }
+      const body = { question: q, model_mode: modelChoice.value, chat_id: activeChatId.value }
       if (attached.length) body.images = attached
       // 会话式追问：开启追问且有上一轮报告时，携带 follow_up_report_id
       if (followUp.value && lastReportId.value) {
@@ -323,16 +469,7 @@ export function useDiagnosisChat(systemId) {
       activeReportId.value = data.id || null
       if (data.status === 'running' && data.id) {
         const report = await waitForDiagnosisReport(systemId, data.id, (partial) => {
-          const steps = partial.evidence || []
-          if (steps.length) {
-            const done = steps.filter((s) => s.status !== 'started').length
-            messages.value[pendingIndex] = {
-              role: 'agent',
-              status: 'running',
-              text: `诊断进行中，已完成 ${done}/${steps.length} 步取证…`,
-              liveSteps: steps,
-            }
-          }
+          showRunning(pendingIndex, partial)
         })
         messages.value[pendingIndex] = buildAgentMessageFromReport(report)
         if (report.status === 'failed') {
@@ -343,15 +480,11 @@ export function useDiagnosisChat(systemId) {
       } else {
         messages.value[pendingIndex] = buildAgentMessageFromDiagnose(data)
       }
-      if (data.id) {
-        lastReportId.value = data.id
-      }
+      const completed = messages.value[pendingIndex]
+      if (completed.status === 'success' && completed.reportId) lastReportId.value = completed.reportId
+      await loadHistory()
     } catch (error) {
-      messages.value[pendingIndex] = {
-        role: 'agent',
-        status: 'failed',
-        text: `⚠️ 诊断失败：${extractErrorMessage(error, '诊断失败')}`,
-      }
+      messages.value[pendingIndex] = { role: 'agent', status: 'failed', text: `⚠️ ${extractErrorMessage(error, '提交或读取失败，请先查看历史记录')}` }
     } finally {
       diagnosing.value = false
       stopping.value = false
@@ -378,10 +511,12 @@ export function useDiagnosisChat(systemId) {
   async function resumeDiagnosis(msgIndex, forceRefresh = false) {
     const msg = messages.value[msgIndex]
     const srcId = msg?.reportId
-    if (!srcId) return
+    if (!srcId || diagnosing.value || fixing.value) return
     diagnosing.value = true
     const holder = { role: 'agent', status: 'running', text: '正在继续上次被中断的诊断…' }
-    messages.value[msgIndex] = holder
+    const targetIndex = messages.value.length
+    messages.value.push({ role: 'user', text: forceRefresh ? '刷新证据后继续上次诊断' : '继续上次诊断' }, holder)
+    const responseIndex = targetIndex + 1
     await scrollBottom()
     try {
       const { data } = await api.post(
@@ -391,21 +526,19 @@ export function useDiagnosisChat(systemId) {
       activeReportId.value = data.id
       if (data.status === 'running' && data.id) {
         const report = await waitForDiagnosisReport(systemId, data.id, (partial) => {
-          const steps = partial.evidence || []
-          if (steps.length) {
-            const done = steps.filter((s) => s.status !== 'started').length
-            messages.value[msgIndex] = { ...holder, text: `继续执行中，已完成 ${done}/${steps.length} 步取证…`, liveSteps: steps }
-          }
+          showRunning(responseIndex, partial)
         })
-        messages.value[msgIndex] = buildAgentMessageFromReport(report)
+        messages.value[responseIndex] = buildAgentMessageFromReport(report)
         if (report.status === 'failed') message.error(report.error_message || '继续执行失败')
       } else {
         // 已经有人继续过：直接渲染那条报告
-        messages.value[msgIndex] = buildAgentMessageFromReport(data)
+        messages.value[responseIndex] = buildAgentMessageFromReport(data)
       }
-      if (data.id) lastReportId.value = data.id
+      const completed = messages.value[responseIndex]
+      if (completed.status === 'success' && completed.reportId) lastReportId.value = completed.reportId
+      await loadHistory()
     } catch (error) {
-      messages.value[msgIndex] = {
+      messages.value[responseIndex] = {
         role: 'agent', status: 'failed', text: `⚠️ 继续失败：${extractErrorMessage(error, '继续失败')}`,
       }
     } finally {
@@ -474,7 +607,7 @@ export function useDiagnosisChat(systemId) {
     await ensureMarked()
     markdownReady.value = true
     await loadModelOptions()
-    await loadHistory()
+    await loadHistory(true)
     await scrollBottom()
   })
 
@@ -491,6 +624,17 @@ export function useDiagnosisChat(systemId) {
     diagnosing,
     fixing,
     historyLoading,
+    historyReports,
+    chats,
+    activeChatId,
+    chatManaging,
+    renameChat,
+    deleteChat,
+    workflowHistory,
+    openWorkflowHistory,
+    openHistoryReport,
+    activeReportId,
+    imageReads,
     messages,
     question,
     images,

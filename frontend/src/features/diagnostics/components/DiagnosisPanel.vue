@@ -1,7 +1,10 @@
 <script setup>
+import AnswerDraft from './AnswerDraft.vue'
+import EvidenceValidation from './EvidenceValidation.vue'
+import DiagnosisPerformance from './DiagnosisPerformance.vue'
+import api from '../../../api'
 import { computed, ref, watch } from 'vue'
 import { useDiagnosisChat } from '../useDiagnosisChat'
-import { parseAnswer } from '../parseAnswer'
 import DiagnosisEvidenceChain from './DiagnosisEvidenceChain.vue'
 
 const props = defineProps({
@@ -12,6 +15,18 @@ const props = defineProps({
 
 const {
   ask,
+  startNewChat,
+  historyReports,
+  chats,
+  activeChatId,
+  chatManaging,
+  renameChat,
+  deleteChat,
+  workflowHistory,
+  openWorkflowHistory,
+  openHistoryReport,
+  activeReportId,
+  imageReads,
   cancelDiagnosis,
   resumeDiagnosis,
   stopping,
@@ -42,6 +57,21 @@ const {
 import { message } from 'ant-design-vue'
 
 const imageInput = ref(null)
+const historyOpen = ref(false)
+const previewUrl = ref('')
+const orderedHistory = computed(() => [...chats.value].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)))
+const activeTitle = computed(() => chats.value.find((item) => item.id === activeChatId.value)?.title || '新对话')
+const editingChat = ref(null)
+const editingTitle = ref('')
+const deletingChat = ref(null)
+function editTitle(chat) { editingChat.value = chat; editingTitle.value = chat.title }
+async function saveTitle() { if (!editingChat.value) return; if (await renameChat(editingChat.value.id, editingTitle.value)) editingChat.value = null }
+async function confirmDelete() { if (!deletingChat.value) return; if (await deleteChat(deletingChat.value.id)) deletingChat.value = null }
+function chooseHistory(id) { openHistoryReport(id); historyOpen.value = false }
+function onDropImages(event) { addImageFiles(event.dataTransfer?.files) }
+function onComposerKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); ask() }
+}
 
 function triggerPickImage() {
   imageInput.value?.click()
@@ -64,14 +94,14 @@ function onPasteImage(event) {
 
 // 成本展示：0 且有用量 → 说明框架没给出成本（不能显示成"免费"）
 function costText(cost, tokens) {
-  if (cost == null) return ''
+  if (cost == null) return '费用未知'
   if (!tokens) return ''
-  if (cost > 0) return `≈¥${(cost * 7.2).toFixed(4)}`
+  if (cost > 0) return `≈$${Number(cost).toFixed(6)}`
   return '≈成本未知'
 }
 
 function previewImage(url) {
-  if (url) window.open(url, '_blank')
+  if (url) previewUrl.value = url
 }
 
 const followUpAvailable = computed(() =>
@@ -80,17 +110,6 @@ const followUpAvailable = computed(() =>
 
 // 与 SVOM 浮窗一致的展示骨架：把回答拆成 结论/影响/建议/关键证据/待确认，
 // 拆不出来时回退为整段 markdown（structured=false → null）。
-const parsedAnswers = computed(() =>
-  messages.value.map((m) =>
-    m.role === 'agent' && m.text && m.status !== 'running' ? parseAnswer(m.text) : null,
-  ),
-)
-
-// 关键证据里含 Markdown 表格（明细）时默认展开，避免"查到了却看不到"。
-function hasTable(text) {
-  return /\|/.test(String(text || ''))
-}
-
 async function onClearHistoryConfirmed() {
   // 二次确认通过后：先自动导出备份，再执行清空
   const count = await exportHistoryBackup()
@@ -177,42 +196,46 @@ function modelOptionLabel(option) {
 </script>
 
 <template>
-  <a-card class="panel-card diagnose-card" title="AI 智能诊断">
-    <template #extra>
-      <a-tooltip title="重新加载服务端诊断历史">
-        <a-button
-          size="small"
-          :loading="historyLoading"
-          @click="loadHistory"
-          style="margin-right:6px"
-        >历史</a-button>
-      </a-tooltip>
-      <a-tooltip title="AI 分析并提出修复方案（需审批后执行）">
-        <a-button
-          size="small"
-          :loading="fixing"
-          :disabled="diagnosing || fixing || messages.length === 0"
-          @click="requestFix"
-          style="margin-right:6px"
-        >🔧 申请修复</a-button>
-      </a-tooltip>
-      <a-tooltip title="开启新对话（服务端诊断历史仍保留）">
-        <a-button size="small" :disabled="diagnosing || messages.length === 0" @click="startNewChat"
-          style="margin-right:6px">🆕 新对话</a-button>
-      </a-tooltip>
-      <a-tooltip title="导出备份并清空服务端诊断历史（不可恢复）">
-        <a-popconfirm
-          title="将先自动导出 JSON 备份，然后永久清空服务端诊断历史，确认？"
-          ok-text="导出备份并清空"
-          cancel-text="取消"
-          :ok-button-props="{ danger: true }"
-          @confirm="onClearHistoryConfirmed"
-        >
-          <a-button type="text" size="small" danger :disabled="messages.length === 0">🗑 清空历史</a-button>
-        </a-popconfirm>
-      </a-tooltip>
-    </template>
-
+  <section class="panel-card diagnose-card" aria-label="AI 诊断对话">
+    <header class="diagnosis-header">
+      <div><strong>{{ activeTitle }}</strong><span class="diagnosis-subtitle">AI 诊断</span></div>
+      <div class="header-actions">
+        <button type="button" class="toolbar-button" title="诊断历史" aria-label="诊断历史" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen; historyOpen && loadHistory()">历史</button>
+        <button type="button" class="toolbar-button" title="新对话" :disabled="diagnosing || fixing || chatManaging" @click="startNewChat(); historyOpen = false">新对话</button>
+        <details class="chat-menu">
+          <summary aria-label="更多操作" title="更多操作">···</summary>
+          <div class="chat-menu__items">
+            <a-button type="text" :loading="fixing" :disabled="diagnosing || fixing || !messages.length" @click="requestFix">申请修复</a-button>
+            <a-button type="text" @click="exportHistoryBackup">导出历史</a-button>
+            <a-button type="text" :disabled="!activeChatId || chatManaging" @click="editTitle(chats.find(item => item.id === activeChatId))">重命名</a-button>
+            <a-button type="text" danger :disabled="!activeChatId || diagnosing || chatManaging" @click="deletingChat = chats.find(item => item.id === activeChatId)">删除对话</a-button>
+          </div>
+        </details>
+      </div>
+    </header>
+    <div class="diagnosis-workspace">
+      <aside v-if="historyOpen" class="diagnosis-history" aria-label="历史诊断">
+        <div class="history-heading">最近诊断</div>
+        <a-spin v-if="historyLoading" size="small" />
+        <div v-for="chat in orderedHistory" :key="chat.id" :class="['history-chat', { 'is-active': chat.id === activeChatId }]">
+          <button type="button" class="history-entry" :disabled="diagnosing || fixing || chatManaging" @click="chooseHistory(chat.id)">
+            <span>{{ chat.title }}</span><small>{{ chat.running ? '执行中' : `${chat.report_count} 次诊断` }}</small>
+          </button>
+          <a-dropdown :trigger="['click']">
+            <button type="button" class="history-chat__menu" :aria-label="`管理对话：${chat.title}`" title="对话操作" :disabled="chatManaging">···</button>
+            <template #overlay><a-menu>
+              <a-menu-item @click="editTitle(chat)">重命名</a-menu-item>
+              <a-menu-item :disabled="chat.running" danger @click="deletingChat = chat">删除对话</a-menu-item>
+            </a-menu></template>
+          </a-dropdown>
+        </div>
+        <div v-if="workflowHistory.length" class="history-heading">修复提案</div>
+        <button v-for="workflow in workflowHistory" :key="`workflow:${workflow.wfId}`" type="button" class="history-entry" :disabled="diagnosing || fixing" @click="openWorkflowHistory(workflow.wfId); historyOpen = false">
+          <span>{{ workflow.action?.description || `修复提案 #${workflow.wfId}` }}</span><small>{{ STATUS_LABELS[workflow.status] || workflow.status }}</small>
+        </button>
+        <span v-if="!historyLoading && !orderedHistory.length" class="history-heading">暂无历史</span>
+      </aside>
+      <div class="diagnosis-conversation">
     <div ref="chatBox" class="chat-box chat-box--tall">
       <a-spin v-if="historyLoading && messages.length === 0" class="history-spin" tip="加载诊断历史..." />
 
@@ -251,26 +274,19 @@ function modelOptionLabel(option) {
             </div>
             <span class="bubble bubble--user">{{ message.text }}</span>
             <div v-if="message.imageMeta?.length" class="user-images-note">
-              含 {{ message.imageMeta.length }} 张截图（已作为视觉证据）
+              含 {{ message.imageMeta.length }} 张图片附件
             </div>
           </div>
           <div v-else class="agent-response">
             <div v-if="message.unverifiedReason" class="unverified-hint">
-              ⚠️ 本次**未做任何工具取证**（无工具调用、无证据步，结论也未引用知识库文档），
+              ⚠️ 本次未做任何工具取证（无工具调用、无证据步，结论也未引用知识库文档），
               内容可能缺少实时证据支撑，请人工核实后再采信。
             </div>
+            <AnswerDraft :stream="message.answerStream" :status="message.status" :render-md="renderMd" />
             <div :class="['agent-answer', message.status === 'running' ? 'agent-answer--running' : '']">
               <template v-if="message.status === 'running'">
                 <a-spin size="small" class="bubble__spin" />
                 <span v-html="renderMd(message.text)" />
-                <a-button
-                  class="stop-btn"
-                  size="small"
-                  danger
-                  :loading="stopping"
-                  :disabled="stopping"
-                  @click="cancelDiagnosis"
-                >{{ stopping ? '正在停止…' : '停止' }}</a-button>
                 <ul v-if="message.liveSteps?.length" class="bubble__live-steps">
                   <li
                     v-for="step in message.liveSteps"
@@ -284,35 +300,11 @@ function modelOptionLabel(option) {
                 </ul>
               </template>
 
-              <template v-else-if="parsedAnswers[index] && parsedAnswers[index].structured">
-                <div class="verdict-line">
-                  <span :class="['verdict-dot', 'verdict-dot--' + (parsedAnswers[index].confidence || 'unknown')]" />
-                  <div class="verdict-body">
-                    <p class="verdict-text">{{ parsedAnswers[index].conclusion }}</p>
-                    <p v-if="parsedAnswers[index].impact" class="verdict-impact">影响：{{ parsedAnswers[index].impact }}</p>
-                  </div>
-                  <span v-if="parsedAnswers[index].confidenceText" class="confidence-pill">{{ parsedAnswers[index].confidenceText }}</span>
-                </div>
-
-                <div v-if="parsedAnswers[index].advice" class="answer-section">
-                  <div class="answer-section__title">建议</div>
-                  <div class="md" v-html="renderMd(parsedAnswers[index].advice)" />
-                </div>
-
-                <details v-if="parsedAnswers[index].evidence" class="answer-details" :open="hasTable(parsedAnswers[index].evidence)">
-                  <summary>关键证据</summary>
-                  <div class="md answer-details__body" v-html="renderMd(parsedAnswers[index].evidence)" />
-                </details>
-
-                <details v-if="parsedAnswers[index].pending" class="answer-details">
-                  <summary>待确认</summary>
-                  <div class="md answer-details__body" v-html="renderMd(parsedAnswers[index].pending)" />
-                </details>
-              </template>
-
-              <span v-else v-html="renderMd(message.text)" />
+              <div v-else class="md" v-html="renderMd(message.text)" />
             </div>
 
+            <DiagnosisPerformance v-if="message.role === 'agent'" :key="message.reportId" :performance="message.performance" :load-details="async () => { const { data } = await api.get(`/systems/${systemId}/diagnosis-reports/${message.reportId}`); return data.business_context.performance }" />
+            <EvidenceValidation v-if="message.status === 'success'" :validation="message.evidenceValidation" :report-id="message.reportId" />
             <DiagnosisEvidenceChain
               v-if="message.role === 'agent' && message.status !== 'running' && (message.evidence?.length || message.evidenceSources?.length || message.templateDescription || message.knowledgeRefs?.length)"
               :system-id="systemId"
@@ -334,21 +326,22 @@ function modelOptionLabel(option) {
                 已停止<template v-if="message.cancelPhase === 'model_request'">（当时正在等模型回复）</template>
               </span>
               <template v-if="message.canResume">
-                <a-button size="small" type="primary" :loading="diagnosing" @click="resumeDiagnosis(index)">继续</a-button>
-                <a-button size="small" :loading="diagnosing" @click="resumeDiagnosis(index, true)">强制刷新继续</a-button>
+                <button type="button" class="resume-button" :disabled="diagnosing || fixing" @click="resumeDiagnosis(index)">继续</button>
+                <button type="button" class="resume-button" :disabled="diagnosing || fixing" @click="resumeDiagnosis(index, true)">刷新证据后继续</button>
               </template>
               <span v-else class="cancelled-note">未取得可恢复历史，无法继续</span>
             </div>
 
             <!-- 用量/成本：本次 vs 会话累计；cost 为价格表估算（界面标 ≈，含估算时标注） -->
-            <div v-if="message.status !== 'running' && message.totalTokens" class="usage-line">
-              本次 {{ message.totalTokens }} tokens
+            <div v-if="message.status !== 'running' && (message.totalTokens || message.usageComplete === false)" class="usage-line">
+              <span v-if="message.totalTokens">本次 {{ message.totalTokens }} tokens</span>
+              <span v-else>用量未确认</span>
               <template v-if="costText(message.costUsd, message.totalTokens)"> · {{ costText(message.costUsd, message.totalTokens) }}</template>
               <template v-if="message.conversationTokens && message.conversationTokens !== message.totalTokens">
                 ｜本会话累计 {{ message.conversationTokens }} tokens
                 <template v-if="costText(message.conversationCostUsd, message.conversationTokens)"> {{ costText(message.conversationCostUsd, message.conversationTokens) }}</template>
               </template>
-              <span v-if="message.usageComplete === false" class="usage-warn" :title="message.usageGapReason">（含估算部分）</span>
+              <span v-if="message.usageComplete === false" class="usage-warn" :title="message.usageGapReason">（用量或费用未完整确认）</span>
               <span class="usage-note">费用为估算值</span>
             </div>
           </div>
@@ -423,65 +416,44 @@ function modelOptionLabel(option) {
       </template>
     </div>
 
-    <div class="chat-input-row">
-      <div v-if="images.length" class="image-tray">
-        <div v-for="(img, index) in images" :key="index" class="image-chip">
-          <img :src="img.dataUrl" :alt="img.name" />
-          <button type="button" class="image-chip__remove" title="移除" @click="removeImage(index)">×</button>
-        </div>
-        <span class="image-tray__hint">{{ images.length }}/{{ maxImages }} 张截图</span>
-      </div>
-      <input
-        ref="imageInput"
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        multiple
-        hidden
-        @change="onPickImage"
-      />
-      <a-button
-        class="image-pick-btn"
-        :disabled="diagnosing || fixing || images.length >= maxImages"
-        title="上传截图（也可直接粘贴）"
-        @click="triggerPickImage"
-      >📷 截图</a-button>
-      <label v-if="followUpAvailable" class="followup-switch">
-        <input type="checkbox" v-model="followUp" />
-        追问（基于上一轮结论）
-      </label>
-      <a-select
-        v-model:value="modelChoice"
-        class="model-select"
-        option-label-prop="label"
-        :disabled="diagnosing || fixing"
-        @dropdown-visible-change="(open) => open && loadModelOptions()"
-      >
-        <a-select-option
-          v-for="option in modelOptions"
-          :key="option.value"
-          :value="option.value"
-          :label="modelOptionLabel(option)"
-          :disabled="option.available === false"
-          :title="option.available === false ? (option.reason || '该模型当前不可用') : ''"
-        >
-          <div class="model-option">
-            <span>{{ modelOptionLabel(option) }}</span>
-            <small>{{ option.available === false ? (option.reason || '当前不可用') : option.description }}</small>
+    <footer class="diagnosis-input" @dragover.prevent @drop.prevent="onDropImages">
+      <div class="composer">
+        <div v-if="images.length" class="image-tray">
+          <div v-for="(img, index) in images" :key="index" class="image-chip">
+            <img :src="img.dataUrl" :alt="img.name" @click="previewImage(img.dataUrl)" />
+            <button type="button" class="image-chip__remove" aria-label="移除图片" @click="removeImage(index)">×</button>
           </div>
-        </a-select-option>
-      </a-select>
-      <a-input-search
-        v-model:value="question"
-        placeholder="例如：Redis 内存多少？或直接粘贴一张告警/大盘截图再问我"
-        enter-button="发 送"
-        :loading="diagnosing"
-        :disabled="fixing"
-        @search="ask"
-        @paste="onPasteImage"
-        class="chat-input"
-      />
+          <span class="image-tray__hint">{{ images.length }}/{{ maxImages }} 张图片</span>
+        </div>
+        <input ref="imageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden @change="onPickImage" />
+        <a-textarea v-model:value="question" :auto-size="{ minRows: 2, maxRows: 7 }" aria-label="诊断问题" :disabled="fixing"
+          placeholder="描述问题，或直接粘贴、拖入图片…" @keydown="onComposerKey" @paste="onPasteImage" />
+        <div class="composer-toolbar">
+          <div class="composer-options">
+            <button type="button" class="toolbar-button attachment-button" aria-label="添加图片" title="添加图片（也可粘贴或拖入）" :disabled="fixing || images.length + imageReads >= maxImages" @click="triggerPickImage">＋</button>
+            <a-select v-model:value="modelChoice" class="model-select" :bordered="false" aria-label="选择模型" option-label-prop="label" :disabled="diagnosing || fixing" @dropdown-visible-change="(open) => open && loadModelOptions()">
+              <a-select-option v-for="option in modelOptions" :key="option.value" :value="option.value" :label="modelOptionLabel(option)" :disabled="option.available === false">{{ modelOptionLabel(option) }}</a-select-option>
+            </a-select>
+            <label v-if="followUpAvailable" class="followup-switch"><input type="checkbox" v-model="followUp" />接着聊</label>
+          </div>
+          <button v-if="diagnosing" type="button" class="composer-send" :disabled="stopping || !activeReportId" :aria-label="stopping ? '正在停止' : '停止诊断'" :title="stopping ? '正在停止，等待执行结束' : '停止诊断'" @click="cancelDiagnosis"><span class="stop-square" /></button>
+          <button v-else type="button" class="composer-send" aria-label="发送诊断" title="发送（Enter）" :disabled="fixing || chatManaging || imageReads > 0 || (!question.trim() && !images.length)" @click="ask">↑</button>
+        </div>
+      </div>
+      <div class="composer-caption" aria-live="polite">{{ stopping ? '正在停止，等待执行方确认' : (diagnosing ? '诊断进行中 · 可以先写下一条问题' : (imageReads ? '正在读取图片…' : 'Enter 发送 · Shift+Enter 换行 · 图片随消息发送')) }}</div>
+    </footer>
+      </div>
     </div>
-  </a-card>
+    <a-modal :open="!!editingChat" title="重命名对话" ok-text="保存" cancel-text="取消" :confirm-loading="chatManaging" :ok-button-props="{ disabled: !editingTitle.trim() }" @ok="saveTitle" @cancel="editingChat = null">
+      <a-input v-model:value="editingTitle" :maxlength="120" aria-label="对话名称" placeholder="输入对话名称" @press-enter="saveTitle" />
+    </a-modal>
+    <a-modal :open="!!deletingChat" title="删除对话" ok-text="删除" cancel-text="取消" :confirm-loading="chatManaging" :ok-button-props="{ danger: true }" @ok="confirmDelete" @cancel="deletingChat = null">
+      <p>删除「{{ deletingChat?.title }}」及全部消息、诊断报告和续跑历史？此操作无法恢复。</p>
+    </a-modal>
+    <a-modal :open="!!previewUrl" title="图片预览" :footer="null" width="min(900px, calc(100vw - 32px))" @cancel="previewUrl = ''">
+      <img v-if="previewUrl" :src="previewUrl" alt="图片预览" style="display:block;max-width:100%;max-height:70vh;object-fit:contain;margin:auto" />
+    </a-modal>
+  </section>
 </template>
 
 <style scoped>
@@ -854,4 +826,76 @@ function modelOptionLabel(option) {
     flex-basis: auto;
   }
 }
+
+.diagnose-card { display: flex; flex-direction: column; height: min(820px, calc(100dvh - 230px)); min-height: 480px; overflow: hidden; background: var(--card-bg); }
+.diagnosis-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-color); }
+.diagnosis-header strong { font-size: 15px; }
+.diagnosis-subtitle { color: var(--text-subtle); font-size: 12px; margin-left: 12px; }
+.header-actions { display: flex; align-items: center; gap: 6px; }
+.toolbar-button { padding: 5px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-subtle); cursor: pointer; font-size: 12px; }
+.toolbar-button:hover { background: var(--body-bg); color: var(--text); }
+.toolbar-button:disabled { opacity: .4; cursor: not-allowed; }
+.chat-menu { position: relative; }
+.chat-menu summary { list-style: none; cursor: pointer; padding: 4px 8px; font-size: 18px; }
+.chat-menu summary::-webkit-details-marker { display: none; }
+.chat-menu__items { position: absolute; right: 0; top: 32px; z-index: 4; width: 150px; padding: 6px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--card-bg); display: flex; flex-direction: column; }
+.diagnosis-workspace { display: flex; flex: 1; min-height: 0; }
+.diagnosis-history { flex: 0 0 190px; padding: 12px 8px; border-right: 1px solid var(--border-color); overflow-y: auto; background: var(--body-bg); }
+.history-heading { display: block; font-size: 12px; color: var(--text-subtle); padding: 8px; }
+.history-entry { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; color: var(--text); cursor: pointer; }
+.history-entry:hover { background: var(--card-bg); }
+.history-entry span { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+.history-entry small { font-size: 11px; color: var(--text-subtle); }
+.diagnosis-conversation { display: flex; flex-direction: column; min-width: 0; flex: 1; min-height: 0; }
+.chat-box, .chat-box--tall { height: auto; min-height: 0; flex: 1; margin: 0; padding: 24px; }
+.msg-row { margin: 0 0 24px; }
+.agent-answer { font-size: 14px; line-height: 1.85; overflow: visible; }
+.agent-answer--running { display: block; color: var(--text-subtle); }
+.bubble__spin { margin-right: 8px; }
+.bubble--user { white-space: pre-wrap; }
+.cancelled-bar { border: 0; background: transparent; padding: 8px 0; }
+.usage-line { line-height: 1.6; }
+.diagnosis-input { padding: 12px 20px 14px; flex-shrink: 0; }
+.composer { border: 1px solid var(--border-color); border-radius: 16px; background: var(--body-bg); padding: 12px; }
+.composer:focus-within { border-color: var(--text-subtle); }
+.composer :deep(textarea.ant-input) { background: transparent; border: 0; box-shadow: none; padding: 0 2px 10px; resize: none; }
+.composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.composer-options { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.attachment-button { font-size: 22px; padding: 0 8px; }
+.model-select { width: 180px; flex: 0 1 180px; font-size: 12px; }
+.composer-send { flex-shrink: 0; display: flex; align-items: center; justify-content: center; padding: 0; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--text); color: var(--card-bg); font-size: 22px; cursor: pointer; }
+.composer-send:disabled { opacity: .3; cursor: not-allowed; }
+.stop-square { width: 11px; height: 11px; border-radius: 2px; background: currentColor; }
+.composer-caption { text-align: center; color: var(--text-subtle); font-size: 10px; margin-top: 8px; }
+.image-tray { border: 0; background: transparent; padding: 0 0 12px; }
+.image-chip { width: 64px; height: 64px; border-radius: 10px; }
+.image-chip__remove { width: 20px; height: 20px; line-height: 18px; }
+.agent-answer :deep(table) { display: block; overflow-x: auto; }
+.agent-answer :deep(td), .agent-answer :deep(th) { white-space: normal; min-width: 90px; }
+.agent-answer :deep(h1), .agent-answer :deep(h2), .agent-answer :deep(h3) { font-size: 15px; margin: 18px 0 8px; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--text-subtle); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .diagnose-card { height: calc(100dvh - 180px); min-height: 420px; }
+  .diagnosis-subtitle { display: none; }
+  .diagnosis-history { flex-basis: 140px; }
+  .history-entry span { max-width: 120px; }
+  .chat-box { padding: 16px; }
+  .diagnosis-input { padding: 10px; }
+  .model-select { width: 130px; flex-basis: 130px; }
+}
+
+.resume-button { border: 1px solid var(--border-color); border-radius: 8px; padding: 5px 10px; background: var(--card-bg); color: var(--text); font-size: 12px; cursor: pointer; }
+.resume-button:disabled { opacity: .4; cursor: not-allowed; }
+.diagnosis-workspace { position: relative; }
+.agent-answer .md { overflow-x: auto; }
+.agent-answer :deep(table) { display: table; width: 100%; }
+@media (max-width: 720px) {
+  .diagnosis-history { position: absolute; left: 0; top: 0; bottom: 0; z-index: 3; width: min(240px, 78%); }
+  .history-entry span { max-width: 210px; }
+}
+.history-chat { display: flex; align-items: center; border-radius: 8px; }
+.history-chat.is-active { background: var(--card-bg); }
+.history-chat .history-entry { flex: 1; min-width: 0; }
+.history-chat .history-entry span { max-width: 130px; }
+.history-chat__menu { flex-shrink: 0; padding: 8px; border: 0; background: transparent; color: var(--text-subtle); cursor: pointer; font-size: 16px; }
 </style>

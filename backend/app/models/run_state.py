@@ -21,6 +21,10 @@ class DiagnosisRunState(SQLModel, table=True):
     messages_json: str = Field(default="")
     conversation_id: str = Field(default="", max_length=64)
     run_id: str = Field(default="", max_length=64)
+    # Legacy rows have blank engine_version and remain owned by Pydantic.
+    engine: str = Field(default="pydantic", max_length=32)
+    engine_version: str = Field(default="", max_length=64)
+    history_schema_version: int = Field(default=1)
     # 框架返回的**累计**用量（resume 时作为 baseline；会话累计由 ledger 的增量推导，不重复累加）
     framework_cumulative_json: str = Field(default="")
     # false = 进程被硬杀/宽限期耗尽，历史没拿到（不得对外宣称"可继续"）

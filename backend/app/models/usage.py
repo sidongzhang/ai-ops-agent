@@ -18,6 +18,7 @@ class DiagnosisUsageLedger(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     org_id: int = Field(index=True)
     system_id: int = Field(index=True)
+    attempt_id: str | None = Field(default=None, unique=True, index=True, max_length=100)
     report_id: int = Field(index=True)
     conversation_id: str = Field(default="", max_length=64, index=True)
     # initial / resume / fallback_model / text_fallback
@@ -58,3 +59,19 @@ class DiagnosisBudgetLedger(SQLModel, table=True):
     reserved_cost: float = Field(default=0.0)
     settled_cost: float = Field(default=0.0)
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class DiagnosisBudgetReservation(SQLModel, table=True):
+    """Immutable origin window and reserved amounts; settlement/release is one transition."""
+    __tablename__ = 'diagnosis_budget_reservation'
+    id: str = Field(primary_key=True,max_length=64)
+    org_id: int = Field(index=True)
+    user_id: int = Field(index=True)
+    system_id: int = Field(index=True)
+    window_started_at: datetime
+    reserved_tokens: int
+    reserved_cost: float
+    status: str = Field(default='reserved',max_length=24)
+    settled_tokens: int = 0
+    settled_cost: float = 0.0
+    report_id: int | None = Field(default=None,index=True)

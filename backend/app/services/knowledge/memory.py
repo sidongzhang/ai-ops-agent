@@ -102,6 +102,14 @@ def save_memory(
             return None   # 无向量则检索不可达，写入无意义
         qv = "[" + ",".join(f"{x:.7g}" for x in vec) + "]"
         with Session(engine) as session:
+            if report_id is not None:
+                # Embedding may finish after a user deletes the terminal chat.
+                from app.services.diagnostics.chats import lock_system
+                from app.models.diagnostics import DiagnosisReport
+                lock_system(session,system_id,org_id)
+                report=session.get(DiagnosisReport,report_id)
+                if not report or report.org_id!=org_id or report.system_id!=system_id:
+                    return None
             # 近重复：语义上几乎同一条经验 → 合并（提升置信度），避免记忆堆积/污染
             near = session.execute(
                 text(

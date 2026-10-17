@@ -1,3 +1,6 @@
+from .diagnosis_performance import DiagnosisPerformance
+from .diagnosis_jobs import DiagnosisJob
+from .chats import DiagnosisChat
 from .audit import AuditLog
 from .auth import Org, User
 from .changes import ChangeEvent
@@ -9,7 +12,9 @@ from .knowledge import KnowledgeMemory
 from .messages import SystemMessage
 from .monitoring import MetricSample
 from .run_state import DiagnosisRunState
-from .usage import DiagnosisBudgetLedger, DiagnosisUsageLedger
+from .usage import DiagnosisBudgetLedger, DiagnosisUsageLedger, DiagnosisBudgetReservation
+from .runtime_events import DiagnosisRuntimeEvent
+from .submissions import DiagnosisSubmission
 from .notifications import NotificationDelivery
 from .systems import MonitoredSystem, Service
 from .tokens import SystemToken

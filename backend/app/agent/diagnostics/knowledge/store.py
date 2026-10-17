@@ -23,6 +23,7 @@ from sqlalchemy import text
 from app.agent.llm import embedding_endpoint
 from app.core.config import settings
 from .rerank import rerank_documents
+from ...harness.performance import measured
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ _lock = threading.Lock()
 
 # ── Embedding API ──────────────────────────────────────────────
 
+@measured('preparation', 'embedding')
 def _embed(texts: list[str]) -> list[list[float]] | None:
     """调 OpenAI 兼容 embedding 接口（分批，避免大请求超时），失败返回 None。"""
     if not texts:
@@ -197,6 +199,7 @@ def _as_int_system_id(system_id: str | int) -> int | None:
 
 # ── 索引构建（同步到 PG）─────────────────────────────────────
 
+@measured('preparation', 'knowledge_index_sync')
 def _sync_index(system_id: str) -> bool:
     """指纹变更时把磁盘文档分块+embedding 同步进 knowledge_chunks。成功返回 True。"""
     docs_dir = _docs_dir(system_id)
@@ -298,6 +301,7 @@ def get_relevant_context(query: str, system_id: str, max_chars: int = MAX_CHARS)
     return "\n\n".join(hit["snippet"] for hit in hits)
 
 
+@measured('preparation', 'knowledge_retrieval')
 def get_relevant_context_with_memories(query: str, system_id: str, max_chars: int = MAX_CHARS) -> str:
     """知识库 + 结构化记忆联合版：记忆条目带置信度标注注入上下文。"""
     hits = search_with_memories(query, system_id, max_chars=max_chars)

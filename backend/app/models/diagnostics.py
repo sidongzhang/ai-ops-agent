@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, Index, text
 from sqlmodel import Field, SQLModel
 
 from .common import utcnow
@@ -10,6 +10,8 @@ from .common import utcnow
 
 class DiagnosisReport(SQLModel, table=True):
     __tablename__ = "diagnosis_reports"
+    __table_args__ = (Index("uq_diagnosis_resumed_from", "resumed_from_report_id", unique=True,
+                           postgresql_where=text("resumed_from_report_id IS NOT NULL")),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     org_id: int = Field(foreign_key="orgs.id", index=True)
@@ -30,6 +32,7 @@ class DiagnosisReport(SQLModel, table=True):
     tool_calls: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     evidence: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
     knowledge_refs: list[dict] = Field(default_factory=list, sa_column=Column(JSON))
+    answer_draft: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     business_context: dict = Field(default_factory=dict, sa_column=Column(JSON))
     error_message: str = ""
     # 中断（stopping 是**派生**状态：cancel_requested_at 非空且 status == "running"，
@@ -71,6 +74,8 @@ class DiagnosisReport(SQLModel, table=True):
         """
         if self.status != "success" or not (self.answer or "").strip():
             return ""
+        if (self.business_context or {}).get('interaction',{}).get('resolved')=='chat':
+            return ''
         if self.tool_calls or self.evidence or self.evidence_sources:
             return ""
         if _answer_cites_knowledge(self.answer, self.knowledge_refs):

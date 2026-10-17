@@ -6,13 +6,16 @@ from datetime import datetime, timezone
 
 from sqlmodel import Session
 
-from app.agent.diagnostics.runner import diagnose_with_details
+from app.agent.runtime.entrypoint import diagnose_with_details
+from app.agent.runtime.contracts import RuntimeCompatibilityError, RuntimeBudgetExceeded, RuntimeExecutionError
+from app.agent.runtime.factory import get_runtime
 from app.agent.diagnostics.skill_router import match_skill
 from app.agent.diagnostics.knowledge.store import get_relevant_context_with_memories as get_relevant_context
 from app.repositories.systems import list_enabled_services_for_system
 from app.services.collectors.exec import select_online_collector
 from app.schemas import DiagnoseResponse
 from app.services.audit import record_audit_event
+from app.agent.harness.gateway import ToolAuditError
 from app.services.data_analysis import (
     analyze_system_data,
     describe_readonly_datasets,
@@ -320,13 +323,19 @@ def _user_id_from_actor(actor_id: str) -> int | None:
 def _progress_recorder(report_id: int, org_id: int, system_id: int):
     """Persist each tool call into the report's evidence list while it runs.
 
-    The frontend already polls this report, so writing here gives a live tool
-    chain without adding a new streaming channel. Failures are swallowed on
-    purpose: progress reporting must never break a diagnosis.
+    Tool events update evidence; user-facing text has a separate bounded stream.
+    Observer failures must not change diagnosis execution or trigger fallbacks.
     """
     from app.core.database import engine
+    from .answer_stream import AnswerRecorder
+    answers = AnswerRecorder(report_id, org_id, system_id)
 
     def record(event: dict) -> None:
+        if event.get("kind") == "tool_start":
+            answers.record({"kind": "answer_tools"})
+        if str(event.get("kind", "")).startswith("answer_"):
+            answers.record(event)
+            return
         try:
             with Session(engine) as session:
                 report = session.get(DiagnosisReport, report_id)
@@ -380,6 +389,7 @@ def _progress_recorder(report_id: int, org_id: int, system_id: int):
         except Exception as exc:  # noqa: BLE001
             log.debug("[diagnose] 进度写入失败（不影响诊断）: %s", exc)
 
+    record.close = answers.close
     return record
 
 
@@ -392,36 +402,71 @@ def start_diagnosis(
     actor_id: str = "",
     external_request_id: str = "",
     business_context: dict | None = None,
+    chat_id: str = "",
+    submission_id: str | None = None,
+    job_question: str | None = None,
+    job_options: dict | None = None,
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
+    if not chat_id and business_context:
+        business_context = {key: value for key, value in business_context.items() if key != "chat_id"}
+    if chat_id:
+        from .chats import attach_chat
+        attach_chat(session, system_id, org_id, chat_id, question)
+        business_context = {**(business_context or {}), "chat_id": chat_id}
+    from .routing import decision,NeedsDiagnosis,recent_messages
+    route=decision(session,system_id,org_id,question,chat_id=chat_id,
+        special=bool(external_request_id or (job_options or {}).get('images') or
+            {k:v for k,v in (business_context or {}).items() if k not in ('chat_id','runtime_engine','interaction','budget_reservation_id') and v}))
+    if route['resolved']=='blocked':raise NeedsDiagnosis(route)
+    business_context={**(business_context or {}),'interaction':route}
+    job_options={**(job_options or {}),'interaction_kind':route['resolved'],
+        'chat_context':recent_messages(session,system_id,org_id,chat_id) if route['resolved']=='chat' else []}
+    if route['resolved']=='chat':job_question=question
     # 会话预算：提交前**原子预留**（并发安全）。未知用量按保守预留计入，绝不当免费。
     from app.services.diagnostics.usage import BudgetExceeded, reserve_budget
 
     user_id = _user_id_from_actor(actor_id) or 0
-    budget = reserve_budget(org_id=org_id, user_id=user_id, system_id=system.id)
+    budget = reserve_budget(org_id=org_id, user_id=user_id, system_id=system.id, transaction=session)
     if not budget["allowed"]:
         raise BudgetExceeded(
             "会话预算不足（滚动窗口内累计用量已达上限），请稍后再试或调整预算",
             budget,
         )
-    report = save_diagnosis_report(
-        session,
-        org_id=org_id,
-        system_id=system.id,
-        user_id=_user_id_from_actor(actor_id),
-        external_request_id=external_request_id,
-        report_type="diagnose",
-        question=question,
-        business_context=business_context,
-        answer="",
-        status="running",
-        commit=True,
-    )
+    try:
+        report = save_diagnosis_report(
+            session,
+            org_id=org_id,
+            system_id=system.id,
+            user_id=_user_id_from_actor(actor_id),
+            external_request_id=external_request_id,
+            report_type="diagnose",
+            question=question,
+            business_context={**(business_context or {}), "budget_reservation_id": budget["reservation_id"]},
+            answer="",
+            status="running",
+            commit=False,
+        )
+        if submission_id:
+            from app.models.submissions import DiagnosisSubmission
+            submission = session.get(DiagnosisSubmission, submission_id)
+            if submission is None or submission.report_id is not None:
+                raise RuntimeError("诊断提交身份不再有效")
+            submission.report_id = report.id
+            session.add(submission)
+        from .jobs import add_job
+        add_job(session, report, job_question if job_question is not None else question,
+                {"actor_id": actor_id, **(job_options or {})})
+        session.commit()
+        session.refresh(report)
+    except BaseException:
+        session.rollback()
+        raise
     return _build_diagnose_response(
         report_id=report.id,
         system_id=system.id,
         status="running",
-        answer="诊断进行中，正在收集健康检查、日志和指标证据…",
+        answer="排队中，等待诊断执行资源（最多等待 15 分钟）…",
     )
 
 
@@ -433,6 +478,7 @@ def start_resume(
     *,
     actor_id: str = "",
     force_refresh: bool = False,
+    job_options: dict | None = None,
 ) -> tuple[DiagnoseResponse, dict | None]:
     """继续一个被中断的诊断（**幂等**）。
 
@@ -450,6 +496,9 @@ def start_resume(
     if not source or source.org_id != org_id or source.system_id != system.id:
         raise LookupError("诊断报告不存在")
 
+    if (source.business_context or {}).get("chat_id"):
+        from .chats import attach_chat
+        attach_chat(session, system_id, org_id, source.business_context["chat_id"])
     # 幂等：同一源报告只允许被继续一次
     existing = find_existing_resume(session, source.id)
     if existing is not None:
@@ -465,7 +514,7 @@ def start_resume(
 
     payload = prepare_resume(session, source, force_refresh=force_refresh)
     user_id = _user_id_from_actor(actor_id) or 0
-    budget = reserve_budget(org_id=org_id, user_id=user_id, system_id=system.id)
+    budget = reserve_budget(org_id=org_id, user_id=user_id, system_id=system.id, transaction=session)
     if not budget["allowed"]:
         raise BudgetExceeded("会话预算不足（滚动窗口内累计用量已达上限）", budget)
 
@@ -481,15 +530,17 @@ def start_resume(
             question=source.question or "（继续上次诊断）",
             status="running",
             answer="",
-            business_context={"resume": {"from_report_id": source.id, "force_refresh": force_refresh},
+            business_context={**({"chat_id": source.business_context["chat_id"]} if (source.business_context or {}).get("chat_id") else {}), "interaction": (source.business_context or {}).get("interaction", {"requested":"auto","resolved":"diagnosis","reason":"legacy_resume","version":1}), "runtime_engine": payload["engine"], "budget_reservation_id": budget["reservation_id"], "resume": {"from_report_id": source.id, "force_refresh": force_refresh},
                               "images": (source.business_context or {}).get("images", [])},
             resumed_from_report_id=source.id,      # 唯一约束：并发/重复点击只有一个赢
-            commit=True,
+            commit=False,
         )
+        from .jobs import add_job
+        add_job(session, report, "", {"actor_id": actor_id, **(job_options or {}), "resume_payload": payload, "interaction_kind": (source.business_context or {}).get("interaction",{}).get("resolved","diagnosis")})
+        session.commit()
     except IntegrityError:
         # 并发点击：另一个请求刚插入成功 → 回滚预算、返回已存在的那条
         session.rollback()
-        release_budget(org_id=org_id, user_id=user_id, system_id=system.id)
         existing = find_existing_resume(session, source.id)
         if existing is None:
             raise
@@ -519,7 +570,7 @@ def start_resume(
             report_id=report.id,
             system_id=system.id,
             status="running",
-            answer="正在继续上次被中断的诊断…",
+            answer="排队中，等待继续上次诊断…",
         ),
         payload,
     )
@@ -546,6 +597,7 @@ def _finalize_report(
     UPDATE 的 WHERE 里，由数据库保证**只有一个**写者成功（先到先赢）。
     """
     from sqlalchemy import func, update
+    from app.services.diagnostics import cancel_bus
 
     from app.core.database import engine
 
@@ -574,7 +626,7 @@ def _finalize_report(
                 "cancelled_at": datetime.now(timezone.utc),
                 "cancel_phase": cancel_phase or "",
                 # 仅在 answer 为空时写占位文案（不覆盖已有的部分内容）
-                "answer": func.coalesce(func.nullif(DiagnosisReport.answer, ""), "（诊断已被用户中断）"),
+                "answer": func.coalesce(func.nullif(DiagnosisReport.answer, ""), "（诊断已被中断）"),
             }
         )
         if result is not None:
@@ -589,6 +641,8 @@ def _finalize_report(
                 }
             )
     else:
+        if "账本" in error:
+            values.update(usage_complete=False,usage_gap_reason="accounting_unavailable")
         values.update(
             {
                 "error_message": error,
@@ -598,6 +652,13 @@ def _finalize_report(
             }
         )
 
+    from app.agent.harness.performance import current as current_performance
+    performance=current_performance()
+    if performance:
+        for event in list(performance.events):
+            if event['stage'] in ('context','report') and event['duration_ms'] is None:
+                performance.end(event['id'], 'success' if status=='success' else status)
+        performance.finish(status=status)
     with Session(engine) as session:
         stmt = (
             update(DiagnosisReport)
@@ -606,10 +667,18 @@ def _finalize_report(
                 DiagnosisReport.org_id == org_id,
                 DiagnosisReport.system_id == system_id,
                 DiagnosisReport.status == "running",   # ← 原子条件：先到先赢
+                DiagnosisReport.runner_id == cancel_bus.INSTANCE_ID,
             )
             .values(**values)
         )
         rowcount = session.execute(stmt).rowcount
+        if rowcount:
+            report=session.get(DiagnosisReport,report_id)
+            record_audit_event(session,org_id=org_id,system_id=system_id,
+                event_type={'success':'diagnosis.completed','cancelled':'diagnosis.cancelled'}.get(status,'diagnosis.failed'),
+                actor_type='platform',actor_id=str(report.user_id or ''),
+                target_type='diagnosis',target_id=str(report_id),status=status,
+                output={'status':status,'error':error,'cancel_phase':cancel_phase})
         session.commit()
     return bool(rowcount)
 
@@ -626,6 +695,9 @@ def complete_diagnosis_report(
     follow_up_report_id: int | None = None,
     images: list[tuple[str, bytes]] | None = None,
     resume_payload: dict | None = None,
+    runtime_engine: str = "pydantic",
+    interaction_kind: str = "diagnosis",
+    chat_context: list | None = None,
 ) -> None:
     from app.core.database import engine
     from app.services.diagnostics import cancel_bus
@@ -633,11 +705,24 @@ def complete_diagnosis_report(
 
     # 本轮的原生取消令牌：单次使用（一旦取消就保持取消，传入已取消的 token 会让 run 不启动，
     # 正好堵住"取消早于启动"的竞态）。注册后立即自检 DB 标志，并启动兜底轮询。
-    from pydantic_ai import CancellationToken
-
-    token = CancellationToken()
-    registration = cancel_bus.register(report_id, token)
+    token = get_runtime((resume_payload or {}).get("engine", runtime_engine)).create_cancellation()
+    registration = cancel_bus.register(report_id, token,org_id=org_id,system_id=system_id)
+    if registration is None:
+        log.info('[diagnose] 未取得运行所有权，不重复启动 report=%s',report_id)
+        return
     cancel_bus.start_poller(report_id, registration)
+    progress = _progress_recorder(report_id, org_id, system_id)
+    from app.agent.harness.performance import current as current_performance
+    performance=current_performance()
+    if performance:
+        original_progress=progress
+        def observed_progress(payload):
+            if payload.get('kind')=='answer_delta' and payload.get('text'): performance.text()
+            if payload.get('kind')=='answer_attempt':
+                ident=performance.begin('attempt',name='fallback');performance.end(ident)
+            original_progress(payload)
+        observed_progress.close=original_progress.close
+        progress=observed_progress
 
     try:
         with Session(engine) as session:
@@ -658,7 +743,8 @@ def complete_diagnosis_report(
                     existing_report_id=report_id,
                     model_mode=model_mode,
                     model_name=model_name,
-                    on_progress=_progress_recorder(report_id, org_id, system_id),
+                    interaction_kind=interaction_kind, chat_context=chat_context,
+                    on_progress=progress,
                     follow_up_report_id=follow_up_report_id,
                     intent_text=original_question,
                     images=images,
@@ -667,9 +753,21 @@ def complete_diagnosis_report(
                     message_history=_resume_history(resume_payload),
                     prior_usage=_resume_prior_usage(resume_payload),
                     prompt_override=(resume_payload or {}).get("note"),
+                    runtime_engine=(resume_payload or {}).get("engine", runtime_engine),
+                    runtime_engine_version=(resume_payload or {}).get("engine_version", ""),
+                    history_schema_version=(resume_payload or {}).get("history_schema_version", 1),
                 )
             except Exception as exc:  # noqa: BLE001
                 log.exception("[diagnose] 诊断执行失败 report_id=%s", report_id)
+                progress.close()
+                partial = getattr(exc, "partial_result", None)
+                if partial is not None:
+                    _record_usage_and_settle(report_id=report_id, org_id=org_id, system_id=system_id,
+                        actor_id=actor_id, result=partial, cancelled=bool(partial.cancelled), cancel_phase=cancel_bus.current_phase(report_id),
+                        run_kind="resume" if resume_payload else "initial", baseline_json=(resume_payload or {}).get("baseline_json") or "")
+                    save_run_state(report_id, messages_json=partial.messages_json, usage_json=partial.usage_json,
+                        run_id=partial.run_id, conversation_id=partial.conversation_id, engine=partial.engine,
+                        engine_version=partial.engine_version, history_schema_version=partial.history_schema_version, resumable=partial.resume_safe)
                 try:
                     _finalize_report(report_id, org_id, system_id, status="failed", error=str(exc))
                 except Exception:  # noqa: BLE001
@@ -680,18 +778,28 @@ def complete_diagnosis_report(
                 capture_failure(report_id, str(exc))
                 return
 
+        progress.close()
+
         # ── 记账：必须在覆盖 run_state 的"框架累计"之前算增量 ──────────────
-        usage_summary = _record_usage_and_settle(
-            report_id=report_id,
-            org_id=org_id,
-            system_id=system_id,
-            actor_id=actor_id,
-            result=result,
-            cancelled=bool(getattr(result, "cancelled", False)),
-            cancel_phase=cancel_bus.current_phase(report_id),
-            run_kind="resume" if resume_payload else "initial",
-            baseline_json=(resume_payload or {}).get("baseline_json") or "",
-        )
+        try:
+            usage_summary = _record_usage_and_settle(
+                report_id=report_id,
+                org_id=org_id,
+                system_id=system_id,
+                actor_id=actor_id,
+                result=result,
+                cancelled=bool(getattr(result, "cancelled", False)),
+                cancel_phase=cancel_bus.current_phase(report_id),
+                run_kind="resume" if resume_payload else "initial",
+                baseline_json=(resume_payload or {}).get("baseline_json") or "",
+            )
+        except RuntimeExecutionError as exc:
+            save_run_state(report_id,messages_json=result.messages_json,usage_json=result.usage_json,
+                conversation_id=result.conversation_id,run_id=result.run_id,engine=result.engine,
+                engine_version=result.engine_version,history_schema_version=result.history_schema_version,resumable=result.resume_safe)
+            _finalize_report(report_id,org_id,system_id,status="failed",error=str(exc))
+            return
+
 
         # 中断：原生 RunCancelled 已转成可恢复结果 → 落 cancelled + 保存完整消息历史，且**不写记忆**
         if getattr(result, "cancelled", False):
@@ -703,7 +811,10 @@ def complete_diagnosis_report(
                 conversation_id=getattr(result, "conversation_id", "") or "",
                 run_id=getattr(result, "run_id", "") or "",
                 usage_json=getattr(result, "usage_json", "") or "",
-                resumable=bool(getattr(result, "messages_json", "")),
+                resumable=bool(getattr(result, "messages_json", "")) and getattr(result, "resume_safe", True),
+                engine=getattr(result, "engine", "pydantic"),
+                engine_version=getattr(result, "engine_version", ""),
+                history_schema_version=getattr(result, "history_schema_version", 1),
             )
             try:
                 _finalize_report(
@@ -726,7 +837,10 @@ def complete_diagnosis_report(
             conversation_id=getattr(result, "conversation_id", "") or "",
             run_id=getattr(result, "run_id", "") or "",
             usage_json=getattr(result, "usage_json", "") or "",
-            resumable=bool(getattr(result, "messages_json", "")),
+            resumable=bool(getattr(result, "messages_json", "")) and getattr(result, "resume_safe", True),
+            engine=getattr(result, "engine", "pydantic"),
+            engine_version=getattr(result, "engine_version", ""),
+            history_schema_version=getattr(result, "history_schema_version", 1),
         )
         try:
             _finalize_report(
@@ -737,11 +851,12 @@ def complete_diagnosis_report(
             log.exception("[diagnose] 写入成功状态失败 report_id=%s", report_id)
     finally:
         # 结束时注销注册表并放行 poller（done 事件），避免线程与内存泄漏
+        progress.close()
         cancel_bus.unregister(report_id)
     # 结构化记忆：诊断成功后沉淀经验（污染受控：置信度 0.5、待回查验证）
     from app.core.config import settings as app_settings
 
-    if app_settings.diagnosis_memory_enabled and result:
+    if app_settings.diagnosis_memory_enabled and result and interaction_kind != "chat":
         from app.services.knowledge.memory import save_memory
 
         # 记忆的 symptom 必须是「用户原始问题」：外部链路会把只读快照拼进
@@ -765,7 +880,7 @@ def _resume_history(payload: dict | None):
 
 
 def _resume_prior_usage(payload: dict | None):
-    return (payload or {}).get("prior_usage")
+    return (payload or {}).get("baseline_json") if payload else None
 
 
 def _clock_hint() -> str:
@@ -788,55 +903,52 @@ def _record_usage_and_settle(
     run_kind: str = "initial",
     baseline_json: str = "",
 ) -> dict:
-    """增量记账 + 结算会话预算（未知用量按保守预留，不当免费）。
-
-    必须在覆盖 `diagnosis_run_state.framework_cumulative_json` **之前**调用，
-    否则 after==before、增量会被算成 0（重复/漏记的根源）。
-    """
-    from app.core.database import engine
-    from app.models.run_state import DiagnosisRunState
+    """Commit the attempt ledger and original-window budget in one transaction."""
+    import time
+    from app.services.diagnostics.session import session as db_session
     from app.services.diagnostics.usage import record_run_usage, settle_budget
-
-    try:
-        prev_cumulative = baseline_json or ""
-        prev_conversation = ""
-        with Session(engine) as session:
-            state = session.get(DiagnosisRunState, report_id)
-            if state is not None:
-                if not prev_cumulative:
-                    prev_cumulative = state.framework_cumulative_json or ""
-                prev_conversation = state.conversation_id or ""
-            elif baseline_json:
-                # 续跑：新报告还没有 run_state，会话标识沿用源报告的
-                from app.models.diagnostics import DiagnosisReport as _R
-
-                _report = session.get(_R, report_id)
-                if _report is not None and _report.resumed_from_report_id:
-                    src_state = session.get(DiagnosisRunState, _report.resumed_from_report_id)
-                    if src_state is not None:
-                        prev_conversation = src_state.conversation_id or ""
-        summary = record_run_usage(
-            report_id=report_id,
-            org_id=org_id,
-            system_id=system_id,
-            conversation_id=getattr(result, "conversation_id", "") or prev_conversation,
-            run_kind=run_kind,
-            usage_json=getattr(result, "usage_json", "") or "",
-            cancelled=cancelled,
-            cancel_phase=cancel_phase,
-            before_json=prev_cumulative,
-        )
-        settle_budget(
-            org_id=org_id,
-            user_id=_user_id_from_actor(actor_id) or 0,
-            system_id=system_id,
-            tokens=summary.get("settle_tokens", 0),
-            cost_usd=summary.get("cost_delta", 0.0),
-        )
-        return summary
-    except Exception:  # noqa: BLE001 - 记账失败不能影响诊断收尾
-        log.exception("[diagnose] 用量记账失败 report_id=%s", report_id)
-        return {}
+    from app.models.run_state import DiagnosisRunState
+    from app.agent.harness.performance import current as current_performance
+    performance=current_performance()
+    if performance:
+        try:
+            usage=json.loads(getattr(result,'usage_json','') or '{}')
+            with performance.lock:
+                for kind,key in (('request','reported_requests'),('tool','reported_tool_calls')):
+                    performance.budgets.setdefault(kind,{})['framework_reported']=usage.get(key)
+        except Exception: performance.gap('framework_usage_missing')
+    for attempt in range(3):
+        try:
+            with db_session() as db:
+                report=db.get(DiagnosisReport,report_id)
+                if report is None:
+                    raise LookupError("诊断不存在")
+                state=db.get(DiagnosisRunState,report_id)
+                baseline=baseline_json
+                summary=record_run_usage(report_id=report_id,org_id=org_id,system_id=system_id,
+                    conversation_id=getattr(result,"conversation_id","") or (state.conversation_id if state else ""),
+                    run_kind=run_kind,usage_json=getattr(result,"usage_json","") or "",cancelled=cancelled,
+                    cancel_phase=cancel_phase,before_json=baseline,session=db,commit=False)
+                reservation_id=(report.business_context or {}).get("budget_reservation_id","")
+                if reservation_id and not summary.get("usage_complete"):
+                    from app.models.usage import DiagnosisBudgetReservation
+                    reservation=db.get(DiagnosisBudgetReservation,reservation_id)
+                    if reservation is None:
+                        raise ValueError("预算预留缺失")
+                    summary["settle_tokens"]=max(summary.get("tokens_delta",0),reservation.reserved_tokens)
+                    summary["settle_cost"]=max(summary.get("cost_delta",0),reservation.reserved_cost)
+                if reservation_id or not summary.get("duplicate"):
+                    settle_budget(org_id=org_id,user_id=_user_id_from_actor(actor_id) or 0,system_id=system_id,
+                        tokens=summary.get("settle_tokens",0),cost_usd=summary.get("settle_cost",summary.get("cost_delta",0.0)),
+                        reservation_id=reservation_id,moment=report.created_at,session=db if reservation_id else None)
+                db.commit()
+                return summary
+        except Exception:
+            log.exception("[diagnose] 账本事务失败 report=%s attempt=%s",report_id,attempt+1)
+            if attempt<2:
+                time.sleep(.1*(attempt+1))
+    # Do not claim zero or success after an accounting failure. Reservation stays held.
+    raise RuntimeExecutionError("用量账本/预算未能落库；预留保留，需要重试结算")
 
 
 def diagnose_system(
@@ -859,13 +971,35 @@ def diagnose_system(
     prior_usage=None,
     prompt_override: str | None = None,
     clock_hint: str = "",
+    runtime_engine: str = "pydantic",
+    runtime_engine_version: str = "",
+    history_schema_version: int = 1,
+    interaction_kind: str = "diagnosis",
+    chat_context: list | None = None,
 ) -> DiagnoseResponse:
     system = require_system(session, system_id, org_id)
+    if interaction_kind=='chat':
+        return _run_chat(system,question,org_id=org_id,existing_report_id=existing_report_id,
+            model_mode=model_mode,model_name=model_name,on_progress=on_progress,on_phase=on_phase,
+            cancel_token=cancel_token,message_history=message_history,prior_usage=prior_usage,
+            prompt_override=prompt_override,runtime_engine=runtime_engine,
+            runtime_engine_version=runtime_engine_version,history_schema_version=history_schema_version,
+            chat_context=chat_context)
     started_at = time.monotonic()
     user_id = _user_id_from_actor(actor_id)
-    template = match_skill(question, _disabled_template_names(system))
+    from app.agent.harness.request_profile import is_availability_question, AVAILABILITY_STEPS
+
+    intent = intent_text or question
+    availability_only = is_availability_question(intent) and not images and not follow_up_report_id and not message_history
+    template = match_skill(intent, _disabled_template_names(system))
+    if availability_only and template and template["name"] == "health_check":
+        template = {**template, "steps": AVAILABILITY_STEPS}
+    else:
+        availability_only = False
     descriptor = system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
-    knowledge_context = get_relevant_context(question, str(system.id))
+    # Current availability comes from live probes. Knowledge remains available
+    # through tools; detailed, historical and follow-up requests retain retrieval.
+    knowledge_context = "" if availability_only else get_relevant_context(intent, str(system.id))
     clock_hint = _clock_hint()
     conversation_context = ""
     if follow_up_report_id:
@@ -929,36 +1063,49 @@ def diagnose_system(
 
     from app.services.topology import failure_context as _failure_context
 
-    def _live_failing() -> list[str]:
+    health_remote = _remote_command(session, system)
+
+    def _live_failing() -> list[str] | None:
         """与 agent 的 list_services 同源：优先经采集器实时探活，否则本地直接探测。"""
         try:
-            remote = _remote_command(session, system)
+            remote = health_remote
             if remote:
                 resp = remote("health_check", {}) or {}
-                items = resp.get("result") if resp.get("ok") else []
+                if not resp.get("ok"):
+                    return None
+                items = resp.get("result")
             else:
                 from app.services.descriptors.health import collect_health
 
-                items = collect_health(
-                    system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
-                )
+                items = collect_health(descriptor)
+            if not items:
+                return None
             return [i.get("name") for i in (items or []) if isinstance(i, dict) and not i.get("ok")]
         except Exception:  # noqa: BLE001
-            return []
+            return None
 
-    live_failing = _live_failing()
-    failure_catalog = _failure_context(topology, live_failing)
+    # Defer this extra probe until failure analysis is actually requested.
+    # list_services remains the normal audited source of current availability.
+    failure_catalog = ""
 
     from app.agent.diagnostics import mcp as mcp_client
 
-    mcp_catalog = mcp_client.catalog()
+    mcp_catalog = mcp_client.catalog(org_id=org_id, system_id=system.id)
 
     def _failure_query() -> str:
+        live_failing = _live_failing()
+        if live_failing is None:
+            return "实时探活未取得有效结果，不能判断当前是否有异常服务。"
         return (
             _failure_context(topology, live_failing)
             or "当前没有探测到异常服务，或未配置服务依赖拓扑。"
         )
 
+    from app.agent.harness.performance import current as current_performance
+    performance=current_performance()
+    if performance:
+        for event in list(performance.events):
+            if event['stage']=='context' and event['duration_ms'] is None: performance.end(event['id'])
     try:
         run = diagnose_with_details(
             descriptor,
@@ -968,7 +1115,7 @@ def diagnose_system(
             skill_steps=template["steps"] if template else "",
             knowledge_context=knowledge_context,
             conversation_context=conversation_context,
-            remote_command=_remote_command(session, system),
+            remote_command=health_remote,
             business_data_query=_business_data_query(session, system, org_id, actor_id),
             business_dataset_query=dataset_query,
             archive_list=archive_list,
@@ -989,6 +1136,9 @@ def diagnose_system(
             model_mode=model_mode,
             model_name=model_name,
             on_progress=on_progress,
+            tool_audit_sink=_tool_audit_recorder(org_id, system.id, actor_id, existing_report_id),
+            on_runtime_event=(lambda event: _persist_runtime_event(event, org_id, system.id)) if runtime_engine == "pi" else None,
+            runtime_run_id=str(existing_report_id or ""),
             images=images,
             clock_hint=clock_hint,
             cancel_token=cancel_token,
@@ -996,7 +1146,12 @@ def diagnose_system(
             message_history=message_history,
             prior_usage=prior_usage,
             prompt_override=prompt_override,
+            runtime_engine=runtime_engine,
+            runtime_engine_version=runtime_engine_version,
+            history_schema_version=history_schema_version,
         )
+    except (RuntimeCompatibilityError, ToolAuditError, RuntimeBudgetExceeded, RuntimeExecutionError):
+        raise  # compatibility, audit, and budget failures must never restart through fallback
     except Exception as exc:
         if _is_kafka_lag_question(question):
             try:
@@ -1013,7 +1168,7 @@ def diagnose_system(
                     session,
                     org_id=org_id,
                     system_id=system.id,
-                    event_type="diagnosis.completed",
+                    event_type="diagnosis.result_ready" if existing_report_id else "diagnosis.completed",
                     actor_type="user",
                     actor_id=actor_id,
                     target_type="diagnosis",
@@ -1039,7 +1194,7 @@ def diagnose_system(
             session,
             org_id=org_id,
             system_id=system.id,
-            event_type="diagnosis.failed",
+            event_type="diagnosis.result_failed" if existing_report_id else "diagnosis.failed",
             actor_type="user",
             actor_id=actor_id,
             target_type="diagnosis",
@@ -1073,28 +1228,41 @@ def diagnose_system(
             )
         raise
 
-    from app.agent.diagnostics.evidence_guard import apply_evidence_guard
+    if performance: performance.begin('report')
+    from app.agent.harness.evidence import apply_evidence_guard
     from app.core.config import settings as app_settings
 
+    from .verification import verification_calls as scoped_verification_calls
+    verification_calls = scoped_verification_calls(session, existing_report_id, org_id, system.id, run.tool_calls)
     answer_text, guard_meta = apply_evidence_guard(
         run.answer,
-        run.tool_calls,
+        verification_calls,
         enabled=app_settings.diagnosis_evidence_guard,
     )
+
+    if availability_only:
+        from app.agent.harness.evidence import evidence_available
+
+        health_calls = [call for call in run.tool_calls if call.get("tool") == "list_services"]
+        if not evidence_available(health_calls) and not getattr(run, "cancelled", False):
+            guard_meta.update(flagged=True, reason="live_health_evidence_missing")
 
     evidence_sources = _evidence_sources(template["steps"] if template else "", run.tool_calls)
     evidence_items = build_evidence_from_tool_calls(run.tool_calls)
     evidence_steps = build_evidence_steps(run.tool_calls)
-    knowledge_refs = build_knowledge_refs(system.id, run.tool_calls, question=question)
+    knowledge_refs = build_knowledge_refs(system.id, run.tool_calls, question="" if availability_only else intent)
+    total_duration_ms = round((time.monotonic() - started_at) * 1000)
+    log.info("[diagnosis-timing] report=%s total_ms=%s engine_ms=%s availability_only=%s",
+             existing_report_id, total_duration_ms, run.duration_ms, availability_only)
     record_audit_event(
         session,
         org_id=org_id,
         system_id=system.id,
-        event_type="diagnosis.completed",
+        event_type="diagnosis.result_ready" if existing_report_id else "diagnosis.completed",
         actor_type="user",
         actor_id=actor_id,
         target_type="diagnosis",
-        target_id="",
+        target_id=str(existing_report_id or ""),
         status="success",
         input={
             "question": question,
@@ -1106,7 +1274,7 @@ def diagnose_system(
         output={
             "answer": answer_text,
             "model": run.model,
-            "duration_ms": run.duration_ms,
+            "duration_ms": total_duration_ms,
             "total_tokens": run.total_tokens,
             "evidence_sources": evidence_sources,
             "tool_calls": run.tool_calls,
@@ -1118,6 +1286,16 @@ def diagnose_system(
         report = session.get(DiagnosisReport, existing_report_id)
         if not report:
             raise LookupError("诊断报告不存在")
+        session.refresh(report)
+        from sqlalchemy import update
+        session.execute(update(DiagnosisReport).where(
+            DiagnosisReport.id == report.id, DiagnosisReport.org_id == org_id,
+            DiagnosisReport.system_id == system.id, DiagnosisReport.status == 'running',
+            DiagnosisReport.cancel_requested_at == report.cancel_requested_at,
+        ).values(business_context={**(report.business_context or {}), 'evidence_validation': guard_meta}))
+        # Result-stage evidence/audit must survive this Session closing. The
+        # authoritative completed/failed event is written with terminal state.
+        session.commit()
     else:
         report = save_diagnosis_report(
             session,
@@ -1130,13 +1308,14 @@ def diagnose_system(
             template_name=template["name"] if template else "",
             template_description=template["description"] if template else "自由诊断",
             model=run.model,
-            duration_ms=run.duration_ms,
+            duration_ms=total_duration_ms,
             total_tokens=run.total_tokens,
             evidence_sources=evidence_sources,
             evidence_steps=evidence_steps,
             tool_calls=run.tool_calls,
             evidence=evidence_items,
             knowledge_refs=knowledge_refs,
+            business_context={"evidence_validation": guard_meta},
             commit=True,
         )
     return _build_diagnose_response(
@@ -1146,7 +1325,7 @@ def diagnose_system(
         template_name=template["name"] if template else "",
         template_description=template["description"] if template else "自由诊断",
         model=run.model,
-        duration_ms=run.duration_ms,
+        duration_ms=total_duration_ms,
         total_tokens=run.total_tokens,
         evidence_sources=evidence_sources,
         tool_calls=run.tool_calls,
@@ -1158,4 +1337,52 @@ def diagnose_system(
         conversation_id=getattr(run, "conversation_id", "") or "",
         run_id=getattr(run, "run_id", "") or "",
         usage_json=getattr(run, "usage_json", "") or "",
+        resume_safe=getattr(run, "resume_safe", True),
+        engine=getattr(run, "engine", "pydantic"),
+        engine_version=getattr(run, "engine_version", ""),
+        history_schema_version=getattr(run, "history_schema_version", 1),
+        business_context={"evidence_validation": guard_meta},
     )
+
+
+def _tool_audit_recorder(org_id, system_id, actor_id, report_id):
+    """Own session per record: no live request Session shared with tool threads."""
+    from app.core.database import engine
+
+    def record(payload):
+        with Session(engine) as audit_session:
+            record_audit_event(
+                audit_session, org_id=org_id, system_id=system_id,
+                actor_type="agent", actor_id=actor_id, event_type="agent.tool",
+                target_type="diagnosis_report", target_id=str(report_id or ""),
+                status=payload["status"],
+                input={"tool": payload["tool"], "call_id": payload["call_id"],
+                       "arguments": payload["input"], "scope": payload["scope"]},
+                output={key: payload.get(key) for key in ("error_code", "duration_ms")},
+                commit=True,
+            )
+    return record
+
+
+def _persist_runtime_event(event, org_id, system_id):
+    from app.services.diagnostics.runtime_events import persist_event
+    persist_event(event, org_id, system_id)
+
+
+def _run_chat(system,question,*,org_id,existing_report_id,chat_context=None,**options):
+    """Only skip diagnostic preparation; all lifecycle/settlement stays in the caller."""
+    from app.agent.harness.performance import current
+    performance=current()
+    if performance:
+        for event in list(performance.events):
+            if event['stage']=='context' and event['duration_ms'] is None:performance.end(event['id'])
+    options['on_runtime_event']=(lambda event:_persist_runtime_event(event,org_id,system.id)) if options.get('runtime_engine')=='pi' else None
+    run=diagnose_with_details({},question,org_id=org_id,system_id=system.id,
+        interaction_kind='chat',chat_context=chat_context or [],runtime_run_id=str(existing_report_id or ''),**options)
+    if performance:performance.begin('report')
+    return _build_diagnose_response(report_id=existing_report_id,system_id=system.id,answer=run.answer,
+        template_description='日常聊天（未查询实时系统数据）',model=run.model,duration_ms=run.duration_ms,
+        total_tokens=run.total_tokens,tool_calls=[],evidence=[],evidence_sources=[],evidence_steps=[],knowledge_refs=[],
+        cancelled=run.cancelled,messages_json=run.messages_json,conversation_id=run.conversation_id,
+        run_id=run.run_id,usage_json=run.usage_json,resume_safe=run.resume_safe,engine=run.engine,
+        engine_version=run.engine_version,history_schema_version=run.history_schema_version)

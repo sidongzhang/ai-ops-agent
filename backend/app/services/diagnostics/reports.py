@@ -71,7 +71,7 @@ def save_diagnosis_report(
     return report
 
 
-def _report_out(row: DiagnosisReport) -> DiagnosisReportOut:
+def _report_out(row: DiagnosisReport, session: Session | None = None, *, performance_detail=False) -> DiagnosisReportOut:
     """构造出参：`model_dump()` 不包含派生属性，这里把「未取证」标记补上。
 
     `unverified_reason` 是读取时派生的（见 models.diagnostics），用于把
@@ -79,6 +79,40 @@ def _report_out(row: DiagnosisReport) -> DiagnosisReportOut:
     """
     payload = row.model_dump()
     payload["unverified_reason"] = row.unverified_reason
+    # Keep the existing Java map contract; display drafts never enter prompt context.
+    context = dict(payload.get("business_context") or {})
+    draft = row.answer_draft
+    if row.status == "running":
+        from .answer_stream import read_cached
+        cached = read_cached(row.id)
+        if cached and (not draft or cached.get("sequence", 0) >= draft.get("sequence", 0)):
+            draft = cached
+    if draft: context["answer_stream"] = draft
+    payload["business_context"] = context
+    if session is not None:
+        from .jobs import execution_context
+        payload["business_context"] = {**execution_context(session, row), **({"answer_stream": draft} if draft else {})}
+        if row.status == "cancelled" and (row.business_context or {}).get("execution_stop_reason") == "run_timeout":
+            payload["answer"] = "运行超过 10 分钟，已请求取消并确认停止。可在有可恢复历史时选择继续。"
+            payload["error_message"] = "运行超时，已停止"
+    if session is not None:
+        # Queries and SSE must expose the same checkpoint eligibility as chat
+        # history. Schema defaults are not evidence that history was lost.
+        from .run_state import resumable_of
+        from .resume import RESUMABLE_STATUSES
+        from .usage import session_usage
+        from app.models.run_state import DiagnosisRunState
+
+        resumable = resumable_of(row.id, session=session)
+        payload.update(resumable=resumable, can_resume=bool(resumable and row.status in RESUMABLE_STATUSES))
+        state = session.get(DiagnosisRunState, row.id)
+        if state and state.conversation_id:
+            totals = session_usage(row.org_id, row.system_id, conversation_id=state.conversation_id, session=session)
+            if totals:
+                payload.update(conversation_tokens=totals["tokens"], conversation_cost_usd=totals["cost_usd"])
+    if session is not None:
+        from .performance import read as read_performance
+        payload['business_context']['performance']=read_performance(session,row,detail=performance_detail)
     return DiagnosisReportOut(**payload)
 
 
@@ -104,7 +138,7 @@ def list_diagnosis_reports(
         .limit(limit)
     ).all()
     rows.reverse()
-    return [_report_out(row) for row in rows]
+    return [_report_out(row, session) for row in rows]
 
 
 def get_diagnosis_report(
@@ -117,7 +151,7 @@ def get_diagnosis_report(
     report = session.get(DiagnosisReport, report_id)
     if not report or report.org_id != org_id or report.system_id != system_id:
         raise LookupError("诊断报告不存在")
-    return _report_out(report)
+    return _report_out(report, session, performance_detail=True)
 
 
 def _safe_doc_name(name: str) -> str:
@@ -187,8 +221,19 @@ def clear_diagnosis_reports(session: Session, system_id: int, org_id: int) -> in
             DiagnosisReport.system_id == system_id,
         )
     ).all()
+    if any(row.status == "running" for row in rows):
+        raise ValueError("存在排队或执行中的诊断，请先停止并等待结束后清理历史")
+    from sqlalchemy import delete
+    from app.models.diagnosis_jobs import DiagnosisJob
+    ids = [row.id for row in rows]
+    if ids:
+        from app.models.diagnosis_performance import DiagnosisPerformance
+        session.execute(delete(DiagnosisPerformance).where(DiagnosisPerformance.report_id.in_(ids)))
+        session.execute(delete(DiagnosisJob).where(DiagnosisJob.report_id.in_(ids)))
     count = len(rows)
     for row in rows:
         session.delete(row)
     session.commit()
+    from .answer_stream import discard_cached
+    discard_cached(ids)
     return count

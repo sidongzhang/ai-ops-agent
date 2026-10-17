@@ -43,7 +43,7 @@ PID_DIR="$RUN_DIR/pids"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 export JAVA_HOME="/opt/homebrew/opt/openjdk@17"
-export PATH="$JAVA_HOME/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="$JAVA_HOME/bin:$HOME_DIR/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export DOCKER_HOST="unix://$HOME_DIR/.colima/default/docker.sock"
 export NO_PROXY="127.0.0.1,localhost,::1,0.0.0.0${NO_PROXY:+,$NO_PROXY}"
 export no_proxy="$NO_PROXY"
@@ -58,7 +58,7 @@ P_SVOM=9084
 P_HXMT=8096
 P_DATAFINDER=9040
 APP_PORTS="$P_BACKEND $P_FRONTEND $P_CADDY $P_ALGP $P_SVOM $P_HXMT $P_DATAFINDER 9098 22222 20880 2019 8080"
-SCREENS="aiops-backend aiops-frontend aiops-celery-worker aiops-celery-beat aiops-caddy demo-algp-backend demo-svom-frontend demo-hxmt-worker"
+SCREENS="aiops-backend aiops-frontend aiops-celery-worker aiops-diagnosis-worker aiops-celery-beat aiops-caddy demo-algp-backend demo-svom-frontend demo-hxmt-worker"
 
 if [ -t 1 ]; then
   B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; D=$'\033[2m'; N=$'\033[0m'
@@ -262,7 +262,9 @@ start_apps() {
   wait_port "$P_FRONTEND" "前端 Vite" 60
 
   start_service aiops-celery-worker "$ROOT/backend" \
-    ".venv/bin/celery -A app.workers.celery.celery worker --loglevel=info --concurrency=2" "$red_env"
+    ".venv/bin/celery -A app.workers.celery.celery worker -Q celery --loglevel=info --concurrency=2" "$red_env"
+  start_service aiops-diagnosis-worker "$ROOT/backend" \
+    ".venv/bin/celery -A app.workers.celery.celery worker -Q diagnoses -n diagnosis@%h --loglevel=info --concurrency=2" "$red_env"
   start_service aiops-celery-beat "$ROOT/backend" \
     ".venv/bin/celery -A app.workers.celery.celery beat --loglevel=info" "$red_env"
 
@@ -507,14 +509,20 @@ do_up() {
   say "${B}║      AIOps 本地开发栈 一键启动            ║${N}"
   say "${B}╚══════════════════════════════════════════╝${N}"
   preflight
-  start_docker
+  start_docker || return 1
+  step "准备最新依赖、页面与数据库备份"
+  if ! "$ROOT/backend/.venv/bin/python" "$ROOT/scripts/prepare-local-stack.py" > "$LOG_DIR/prepare.log" 2>&1; then
+    bad "启动准备失败，查看 $LOG_DIR/prepare.log；未继续启动应用"
+    return 1
+  fi
+  ok "依赖和控制台页面已更新；数据库升级前备份已检查"
   start_apps
   start_algp
   start_launchd
 
   status
   say ""
-  say "${G}${B}全部服务已启动。${N}"
+  say "${G}${B}启动流程完成，请以上方服务状态为准。${N}"
   show_links
   say ""
   say "${Y}${B}按 Ctrl+C 停止全部并退出${N}  ${D}(关闭窗口亦可)${N}"

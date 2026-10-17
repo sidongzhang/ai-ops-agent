@@ -28,6 +28,11 @@ def build_diagnose_response(
     conversation_id: str = "",
     run_id: str = "",
     usage_json: str = "",
+    resume_safe: bool = True,
+    engine: str = "pydantic",
+    engine_version: str = "",
+    history_schema_version: int = 1,
+    business_context: dict | None = None,
 ) -> DiagnoseResponse:
     tool_calls = tool_calls or []
     evidence = evidence or build_evidence_from_tool_calls(tool_calls)
@@ -36,6 +41,7 @@ def build_diagnose_response(
         id=report_id,
         system_id=system_id,
         status=status,
+        business_context=business_context or {},
         answer=answer,
         template_name=template_name,
         template_description=template_description,
@@ -53,6 +59,10 @@ def build_diagnose_response(
         conversation_id=conversation_id,
         run_id=run_id,
         usage_json=usage_json,
+        resume_safe=resume_safe,
+        engine=engine,
+        engine_version=engine_version,
+        history_schema_version=history_schema_version,
     )
 
 

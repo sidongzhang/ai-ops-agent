@@ -45,9 +45,16 @@ class ConnectionManager:
         future: asyncio.Future = loop.create_future()
         self._pending[request_id] = future
         try:
-            await ws.send_json({"cmd": cmd, "args": args or {}, "request_id": request_id})
+            try:
+                await ws.send_json({"cmd": cmd, "args": args or {}, "request_id": request_id})
+            except Exception:
+                from app.agent.harness.execution import mark_current_execution_unconfirmed
+                mark_current_execution_unconfirmed()
+                raise
             return await asyncio.wait_for(asyncio.shield(future), timeout=timeout)
         except asyncio.TimeoutError:
+            from app.agent.harness.execution import mark_current_execution_unconfirmed
+            mark_current_execution_unconfirmed()
             raise RuntimeError(f"采集器 {collector_id} 命令超时（{timeout}s）")
         finally:
             self._pending.pop(request_id, None)
@@ -72,6 +79,10 @@ class ConnectionManager:
         )
         try:
             return future.result(timeout=timeout + 1)
+        except TimeoutError:
+            from app.agent.harness.execution import mark_current_execution_unconfirmed
+            mark_current_execution_unconfirmed()
+            raise
         except RuntimeError as exc:
             if "Event loop is closed" in str(exc):
                 raise RuntimeError("平台事件循环已重启，请等待采集器 WebSocket 重新连接后再试") from exc

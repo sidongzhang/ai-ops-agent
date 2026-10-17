@@ -1,8 +1,8 @@
 """AI diagnosis schemas."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class DiagnosisEvidenceItem(BaseModel):
@@ -25,6 +25,8 @@ class KnowledgeRefOut(BaseModel):
 
 
 class DiagnoseRequest(BaseModel):
+    chat_id: str = Field(default="", max_length=64)
+    runtime_engine: Literal["pydantic", "pi"] = "pydantic"
     question: str
     model_mode: Literal["auto", "default", "local", "api", "advanced"] = "auto"
     model_name: str = Field(default="", max_length=128)
@@ -65,9 +67,23 @@ class DiagnoseResponse(BaseModel):
     conversation_id: str = Field(default="", exclude=True)
     run_id: str = Field(default="", exclude=True)
     usage_json: str = Field(default="", exclude=True)
+    resume_safe: bool = Field(default=True, exclude=True)
+    engine: str = Field(default="pydantic", exclude=True)
+    engine_version: str = Field(default="", exclude=True)
+    history_schema_version: int = Field(default=1, exclude=True)
 
 
 class DiagnosisReportOut(BaseModel):
+    @field_serializer("created_at", "cancel_requested_at", "cancelled_at", when_used="json")
+    def serialize_utc_timestamp(self, value: datetime | None):
+        if value is None:
+            return None
+        # SQL timestamp columns may return naive UTC. The OpenAPI date-time
+        # contract requires an offset, including for generated Java clients.
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
+
     id: int
     system_id: int
     user_id: int | None = None

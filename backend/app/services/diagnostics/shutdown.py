@@ -5,11 +5,11 @@
   1. 标记 shutting_down（拒绝新提交，见 API 层）；
   2. 对本进程注册表内所有 in-flight token 调 `token.cancel()`
      （官方：这是中断阻塞中的 run_sync 的唯一方式）；
-  3. 按 `diagnosis_shutdown_grace_seconds` 有界等待"已落库"事件；
-  4. 宽限期到仍未落库 → 标记 `resumable=false`（不谎称可继续）并写审计。
+  3. 按 `diagnosis_shutdown_grace_seconds` 有界等待工作线程退出，再核对数据库；
+  4. 仍在 running → 标记失败、停止未确认、不可继续，保留费用预留。
 
-注意：这里拿到的是**我们主动取消的 token** → 运行方抛 `RunCancelled`（可恢复）；
-硬杀（SIGKILL）拿不到任何东西，只能靠 reaper。
+取消令牌只表达请求；只有运行方确认执行结束并保存有效历史，才能声明可继续。
+硬杀（SIGKILL）只能靠 reaper；数据库不可用时关停写入也可能失败。
 """
 import asyncio
 import logging
@@ -35,18 +35,26 @@ async def graceful_shutdown_diagnoses() -> dict:
 def shutdown_sync(grace_seconds: float | None = None) -> dict:
     """同步版关停：取消在跑诊断 → 有界等待落库 → **自己给未落库的写终态**。
 
-    信号处理器（不能阻塞）与 lifespan 都走这里，保证无论进程何时退出，
-    报告都不会停留在 running。
+    信号处理器与 lifespan 都走这里。有界等待线程收尾后核对数据库；
+    数据库不可用或进程被硬杀时，仍需启动后的 reaper 补收尾。
     """
     from app.services.diagnostics import cancel_bus
 
     grace = settings.diagnosis_shutdown_grace_seconds if grace_seconds is None else grace_seconds
     result = cancel_bus.cancel_all_and_wait(grace)
-    for report_id in result.get("unpersisted", []) or []:
+    result['workers_finished'] = result['persisted']
+    result['persisted'] = 0
+    result['unpersisted'] = []
+    # done means the worker exited, not that its final DB write succeeded.
+    for report_id in result.get("report_ids", []) or []:
         try:
-            _force_terminal_on_shutdown(report_id)
+            if _force_terminal_on_shutdown(report_id):
+                result['persisted'] += 1
+            else:
+                result['unpersisted'].append(report_id)
         except Exception as exc:  # noqa: BLE001
             log.warning("[shutdown] 写终态失败 report=%s: %s", report_id, exc)
+            result['unpersisted'].append(report_id)
     if result["cancelled"]:
         log.info(
             "[shutdown] 诊断关停：cancelled=%s persisted=%s unpersisted=%s grace=%ss",
@@ -55,34 +63,26 @@ def shutdown_sync(grace_seconds: float | None = None) -> dict:
     return result
 
 
-def _force_terminal_on_shutdown(report_id: int) -> None:
-    """把关停时未落库的诊断收成 cancelled + resumable=false（无历史可取）。"""
-    from datetime import datetime, timezone
-
-    from sqlmodel import Session
-
-    from app.core.database import engine
+def _force_terminal_on_shutdown(report_id: int) -> bool:
+    """关停宽限期耗尽只证明未完成收尾，不能推断已停止或允许继续。"""
+    from sqlmodel import select
     from app.models.diagnostics import DiagnosisReport
-    from app.models.run_state import DiagnosisRunState
-    from app.services.diagnostics import cancel_bus
+    from app.services.diagnostics.session import session as db_session
+    from app.services.diagnostics.termination import mark_execution_unknown
 
-    with Session(engine) as session:
-        report = session.get(DiagnosisReport, report_id)
-        if report is None or report.status != "running":
-            return
-        report.status = "cancelled"
-        report.cancelled_at = datetime.now(timezone.utc)
-        report.cancel_phase = cancel_bus.current_phase(report_id) or report.cancel_phase or "idle"
-        report.answer = report.answer or "（服务关停，诊断已中断；本次未取得可恢复历史）"
-        session.add(report)
-        state = session.get(DiagnosisRunState, report_id)
-        if state is None:
-            state = DiagnosisRunState(report_id=report_id, messages_json="", resumable=False)
-        else:
-            state.resumable = False
-        session.add(state)
+    with db_session() as session:
+        report=session.exec(select(DiagnosisReport).where(DiagnosisReport.id==report_id).with_for_update()).first()
+        if report is None:
+            return False
+        if report.status!='running':
+            return True
+        from app.services.diagnostics import cancel_bus
+        if report.runner_id not in ('',None,cancel_bus.INSTANCE_ID):
+            return False
+        if not mark_execution_unknown(session,report,'shutdown_execution_unknown'):
+            return False
+        # Keep the reservation for the existing accounting reconciler. Grace
+        # expiry does not prove zero consumption or authorize a budget refund.
         session.commit()
-        from app.services.diagnostics.usage import release_for_report
-
-        release_for_report(report)
-    log.warning("[shutdown] report=%s 已标记 cancelled 且不可恢复（关停时未落库）", report_id)
+    log.warning('[shutdown] report=%s 停止未确认，已标记失败且不可继续',report_id)
+    return True

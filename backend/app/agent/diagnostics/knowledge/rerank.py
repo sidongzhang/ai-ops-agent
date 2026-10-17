@@ -13,6 +13,7 @@ import logging
 import re
 
 from app.core.config import settings
+from ...harness.performance import measured
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ def _timeout() -> float:
         return 8.0
 
 
+@measured('preparation', 'rerank_api')
 def _rerank_via_api(query: str, docs: list[dict]) -> list[dict] | None:
     import httpx
 
@@ -84,6 +86,7 @@ def _parse_scores(text: str, count: int) -> dict[int, float] | None:
     return scores or None
 
 
+@measured('preparation', 'rerank_model')
 def _rerank_via_llm(query: str, docs: list[dict]) -> list[dict] | None:
     import httpx
 
