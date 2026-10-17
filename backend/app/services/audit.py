@@ -1,4 +1,7 @@
 """Audit logging service."""
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import delete as sa_delete
 from sqlmodel import Session
 
 from app.models.audit import AuditLog
@@ -73,3 +76,13 @@ def list_audit_logs(
         offset=offset,
         limit=limit,
     )
+
+
+def purge_old_audit_logs(session: Session, retention_days: int) -> int:
+    """删除超过保留期的审计日志，返回删除条数。retention_days <= 0 表示关闭。"""
+    if retention_days <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    result = session.execute(sa_delete(AuditLog).where(AuditLog.created_at < cutoff))
+    session.commit()
+    return int(result.rowcount or 0)

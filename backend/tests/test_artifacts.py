@@ -67,3 +67,19 @@ def test_save_purges_expired_artifacts(artifact_dir, monkeypatch) -> None:
 
     assert not (artifact_dir / f"{old}.meta.json").exists()
     assert not list(artifact_dir.glob(f"{old}__*"))
+
+
+def test_legacy_artifact_without_metadata_is_purged_by_mtime(artifact_dir, monkeypatch) -> None:
+    import os
+
+    from app.services.diagnostics.artifacts import purge_expired
+
+    token = "b" * 32
+    legacy = artifact_dir / f"{token}__legacy.txt"
+    legacy.write_bytes(b"old")
+    old_ts = time.time() - 10 * 24 * 3600
+    os.utime(legacy, (old_ts, old_ts))
+
+    monkeypatch.setattr(settings, "artifact_ttl_hours", 168)
+    assert purge_expired() == 1
+    assert not legacy.exists()

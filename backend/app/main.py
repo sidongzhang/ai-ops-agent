@@ -83,6 +83,31 @@ def _install_shutdown_signal_handlers() -> None:
 
 
 @asynccontextmanager
+def _housekeeping_once() -> None:
+    """审计日志保留期 + 过期附件清理（启动时与每日一次）。"""
+    from sqlmodel import Session
+
+    from .core.database import engine
+    from .services.audit import purge_old_audit_logs
+    from .services.diagnostics.artifacts import purge_expired
+
+    try:
+        with Session(engine) as session:
+            removed = purge_old_audit_logs(session, settings.audit_retention_days)
+        if removed:
+            log.info(
+                "[housekeeping] 已清理 %s 条超过 %s 天的审计日志",
+                removed,
+                settings.audit_retention_days,
+            )
+    except Exception:  # noqa: BLE001 - 清理失败不能影响服务启动
+        log.exception("[housekeeping] 审计日志清理失败")
+    try:
+        purge_expired()
+    except Exception:  # noqa: BLE001
+        log.exception("[housekeeping] 过期附件清理失败")
+
+
 async def lifespan(app: FastAPI):
     # uvicorn 已用 dictConfig 配置过日志，这里再挂一次确保 app.* 不被禁用（见函数注释）。
     _setup_app_logging()
@@ -93,6 +118,7 @@ async def lifespan(app: FastAPI):
         )
     _install_shutdown_signal_handlers()
     init_db()
+    await asyncio.to_thread(_housekeeping_once)
     # 收尸：上次进程被硬杀/关停超时留下的 running 报告，启动时收成终态（可恢复性如实标注）
     from .services.diagnostics.reaper import reap_stale_diagnoses
 
@@ -118,12 +144,20 @@ async def lifespan(app: FastAPI):
             except Exception:
                 log.exception("[ledger] 账本补记暂不可用，下轮重试")
     reaper_task=asyncio.create_task(reap_periodically())
+    async def housekeeping_periodically():
+        while True:
+            await asyncio.sleep(24 * 3600)
+            await asyncio.to_thread(_housekeeping_once)
+    housekeeping_task = asyncio.create_task(housekeeping_periodically())
     try:
         yield
     finally:
         dispatcher.cancel()
         with suppress(asyncio.CancelledError):
             await dispatcher
+        housekeeping_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await housekeeping_task
         # 关停：先拒绝新诊断，再主动取消在跑诊断、有界等待它们把可恢复历史落库。
         # （硬杀 SIGKILL / 宽限期耗尽 → 由 reaper 标 failed 且 resumable=false，不谎称可恢复）
         from .services.diagnostics.shutdown import graceful_shutdown_diagnoses

@@ -46,8 +46,9 @@ def _meta_path(token: str) -> Path:
     return _artifact_dir() / f"{token}.meta.json"
 
 
-def _purge_expired() -> None:
-    """顺手清理过期附件（best-effort，失败不影响主流程）。"""
+def purge_expired() -> int:
+    """清理过期附件，返回删除的附件数（best-effort，失败不影响主流程）。"""
+    removed = 0
     try:
         ttl = _ttl_seconds()
         now = time.time()
@@ -61,9 +62,26 @@ def _purge_expired() -> None:
                 continue
             for path in _artifact_dir().glob(f"{token}__*"):
                 path.unlink(missing_ok=True)
+                removed += 1
             meta.unlink(missing_ok=True)
+
+        # 旧实现留下的无元数据附件：按 mtime 判断过期（否则永远无人清理）
+        for path in _artifact_dir().iterdir():
+            if "__" not in path.name or not path.is_file():
+                continue
+            token = path.name.split("__", 1)[0]
+            if (_artifact_dir() / f"{token}.meta.json").exists():
+                continue
+            try:
+                if ttl and now - path.stat().st_mtime <= ttl:
+                    continue
+                path.unlink()
+                removed += 1
+            except OSError:
+                continue
     except Exception:  # noqa: BLE001
         pass
+    return removed
 
 
 def save_artifact(file_name: str, content: bytes, *, org_id: int, system_id: int) -> str:
@@ -84,7 +102,7 @@ def save_artifact(file_name: str, content: bytes, *, org_id: int, system_id: int
         ),
         encoding="utf-8",
     )
-    _purge_expired()
+    purge_expired()
     return token
 
 
