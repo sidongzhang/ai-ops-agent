@@ -100,10 +100,16 @@ class CancelDuringToolExecutionTests(unittest.TestCase):
         runner.pick_model = lambda *a, **k: TestModel(call_tools="all")   # 触发真实工具链
         token = CancellationToken()
         phases: list[str] = []
-        slow_tool = patch(
-            "app.services.descriptors.health.collect_health",
-            side_effect=lambda *a, **k: (time.sleep(6) or []),
-        )
+        entered = threading.Event()
+
+        def slow_health(*_a, **_k):
+            entered.set()          # 通知"工具已真正开始执行"
+            time.sleep(3)          # 保持工具在途，等外部取消
+            return []
+
+        # 注意：tools.py 在导入时就绑定了 collect_health，必须 patch 这个引用点；
+        # patch 源模块（health.collect_health）不会生效。
+        slow_tool = patch("app.agent.diagnostics.tools.collect_health", side_effect=slow_health)
         try:
             with slow_tool:
                 result, still_alive = _run_in_thread(
@@ -111,8 +117,9 @@ class CancelDuringToolExecutionTests(unittest.TestCase):
                         DESCRIPTOR, QUESTION, cancel_token=token, on_phase=phases.append,
                         skill_steps="",
                     ),
-                    delay=1.5,
+                    delay=0,
                     token=token,
+                    gate=entered,      # 等工具真正开始再取消（确定性，不赌 sleep）
                 )
         finally:
             runner.pick_model = original
