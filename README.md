@@ -48,6 +48,10 @@ backend/.venv/bin/python evals/run_eval.py --run --gate --thresholds evals/thres
 backend/.venv/bin/python evals/run_eval.py --run --judge --gate --thresholds evals/thresholds.judge.json
 ```
 
+> ⚠️ `--run` 会按用例**真实注入故障**（stop/start MySQL / Redis / Prometheus 等容器），
+> 期间相关端口与依赖会短暂不可用，进程本身不会退出（PID 不变、无 traceback）。
+> **不要与现场演示同时跑**；需要时用 `--limit` 分批。
+
 口径说明：`tool_selection_f1` 只作信息指标——`required_tools` 是**最低要求**，
 额外的只读取证是期望行为；门禁看「必要工具覆盖率 recall」+「平均调用上限」。
 
