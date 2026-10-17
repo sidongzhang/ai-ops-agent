@@ -1,0 +1,17 @@
+{
+  "ablation": "full",
+  "_comment": "真实评测（--run）门禁。工具选择用「必要工具覆盖率 recall」+「平均调用上限」：required_tools 是**最低要求**，额外的只读取证（读日志/查容器/查知识库）是期望行为；用 F1 会把'多查'当错误扣分（实测 F1 0.539 但必要工具 recall 0.853）。tool_selection_f1 仍输出，仅作信息指标。 本文件额外要求 LLM 裁判指标（需 --judge，产生额外模型费用，建议发布前跑）。",
+  "min": {
+    "task_success_rate": 70,
+    "rca_accuracy": 0.7,
+    "tool_selection_recall": 0.8,
+    "evidence_coverage_rate": 60,
+    "judge_faithfulness": 0.65,
+    "judge_correctness": 0.65
+  },
+  "max": {
+    "hallucination_rate": 15,
+    "errors": 0,
+    "avg_tool_calls": 10
+  }
+}

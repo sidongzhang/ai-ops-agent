@@ -70,7 +70,8 @@ METRIC_FORMULAS: dict[str, str] = {
 }
 
 
-def build_summary(records: Sequence[dict], cases: Sequence[dict], meta: dict) -> dict:
+def build_summary(records: Sequence[dict], cases: Sequence[dict], meta: dict,
+                  *, judge_fn=None) -> dict:
     """把运行记录 + 用例打成可序列化的 summary。"""
     cases_by_id = {case.get("id"): case for case in cases}
     rows: list[dict] = []
@@ -78,7 +79,10 @@ def build_summary(records: Sequence[dict], cases: Sequence[dict], meta: dict) ->
         case = cases_by_id.get(record.get("case_id"))
         if not case:
             continue
-        rows.append(score_case(case, record))
+        row = score_case(case, record)
+        if judge_fn is not None:
+            row.update(judge_fn(case, record))
+        rows.append(row)
 
     groups: dict[str, list[dict]] = {}
     for row in rows:
@@ -247,11 +251,12 @@ def render_markdown(summary: dict) -> str:
     return "\n".join(lines)
 
 
-def write_report(records: Sequence[dict], cases: Sequence[dict], meta: dict, out_dir: str | Path) -> dict:
+def write_report(records: Sequence[dict], cases: Sequence[dict], meta: dict, out_dir: str | Path,
+                  *, judge_fn=None) -> dict:
     """写出三件套，返回路径与 summary。"""
     target = Path(out_dir)
     target.mkdir(parents=True, exist_ok=True)
-    summary = build_summary(records, cases, meta)
+    summary = build_summary(records, cases, meta, judge_fn=judge_fn)
     summary_path = write_summary_json(summary, target)
     markdown_path = target / "summary.md"
     markdown_path.write_text(render_markdown(summary), encoding="utf-8")

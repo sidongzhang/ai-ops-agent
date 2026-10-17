@@ -251,6 +251,12 @@ def score_case(case: dict, record: dict) -> dict:
     return row
 
 
+def _mean_or_none(values: Iterable[float | None]) -> float | None:
+    """只对非空值求均值；全为空返回 None（区别于 0 分）。"""
+    present = [value for value in values if value is not None]
+    return round(sum(present) / len(present), 3) if present else None
+
+
 def _mean(values: Iterable[float]) -> float:
     values = list(values)
     return sum(values) / len(values) if values else 0.0
@@ -273,6 +279,8 @@ def aggregate(rows: Sequence[dict]) -> dict:
         "errors": len(errors),
         "task_success_rate": _pct(row.get("task_success", 0) for row in rows),
         "rca_accuracy": round(_mean(row.get("rca_accuracy", 0.0) for row in rows), 3),
+        "judge_faithfulness": _mean_or_none(row.get("judge_faithfulness") for row in rows),
+        "judge_correctness": _mean_or_none(row.get("judge_correctness") for row in rows),
         "tool_selection_f1": round(_mean([row.get("tool_f1") for row in rows if row.get("tool_f1") is not None]), 3),
         "tool_selection_precision": round(_mean([row.get("tool_precision") for row in rows if row.get("tool_precision") is not None]), 3),
         "tool_selection_recall": round(_mean([row.get("tool_recall") for row in rows if row.get("tool_recall") is not None]), 3),

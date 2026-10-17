@@ -74,6 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rag-mode", choices=["keyword", "auto"], default="",
                         help="RAG 检索模式：keyword=强制关键词（离线、确定性），auto=允许 embedding API")
     parser.add_argument("--verbose", "-v", action="store_true", help="打印每条用例的进度与结果摘要")
+    parser.add_argument("--judge", action="store_true",
+                        help="对每条答案调用 LLM 裁判打分（faithfulness / correctness，产生额外模型费用）")
     parser.add_argument("--gate", action="store_true", help="把结果与阈值对比；未达标则非零退出（CI 门禁）")
     parser.add_argument("--thresholds", default="evals/thresholds.json", help="门禁阈值文件（配合 --gate）")
     return parser
@@ -299,7 +301,12 @@ def cmd_eval(args, cases: list[dict]) -> int:
     }
 
     try:
-        result = reporting.write_report(records, selected, meta, out_dir)
+        judge_fn = None
+        if getattr(args, "judge", False):
+            import judge as judge_mod  # evals/judge.py
+            judge_fn = judge_mod.judge_case
+            print(f"  [judge] 将对 {len(records)} 条答案调用 LLM 裁判（产生额外模型费用）")
+        result = reporting.write_report(records, selected, meta, out_dir, judge_fn=judge_fn)
     except Exception:  # noqa: BLE001 - 报告失败要给出完整上下文
         traceback.print_exc()
         return 4
