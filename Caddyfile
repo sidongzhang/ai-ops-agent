@@ -1,4 +1,13 @@
 :80 {
+	# 基础安全响应头（所有响应）
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+	}
+
 	# 压缩：经过 cloudflared 隧道访问时，前端资源 1.4MB -> ~440KB（省 68%）
 	encode zstd gzip
 

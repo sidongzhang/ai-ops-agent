@@ -4,12 +4,16 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
 from ..core.database import get_session
+from ..core.config import settings
+from ..core.ratelimit import SlidingWindowLimiter
 from ..core.deps import get_current_user
 from ..models.auth import Org, User
 from ..schemas import RegisterRequest, TokenResponse, UserOut
 from ..core.security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_login_limiter = SlidingWindowLimiter(settings.login_max_failures, settings.login_window_seconds)
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -34,9 +38,20 @@ def register(body: RegisterRequest, session: Session = Depends(get_session)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(form: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
+    # 按账号限流：连续失败达到阈值后返回 429，阻断在线爆破/撞库。
+    key = (form.username or "").strip().lower()
+    allowed, retry_after = _login_limiter.check(key)
+    if not allowed:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "登录尝试过于频繁，请稍后再试",
+            headers={"Retry-After": str(retry_after)},
+        )
     user = session.exec(select(User).where(User.email == form.username)).first()
     if not user or not verify_password(form.password, user.hashed_password):
+        _login_limiter.hit(key)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "邮箱或密码错误")
+    _login_limiter.reset(key)
     return TokenResponse(access_token=create_access_token(user.id, user.org_id))
 
 

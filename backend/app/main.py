@@ -142,10 +142,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# 鉴权走 Authorization Bearer，不依赖 Cookie：默认放开来源但不允许凭证。
+# 配置了 CORS_ORIGINS（逗号分隔）后收敛到白名单，并允许 credentials。
+_cors_origins = [item.strip() for item in (settings.cors_origins or "").split(",") if item.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins or ["*"],
+    allow_credentials=bool(_cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { Modal, message } from 'ant-design-vue'
 import { CheckOutlined, CloseOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import api from '../api'
 
@@ -128,6 +128,18 @@ function onProcessedPageChange(page, size) {
   load()
 }
 
+function confirmApprove(item) {
+  // 批准即对生产下发处置动作（含重启 / Redis 命令），不能裸点击执行
+  Modal.confirm({
+    title: '批准并立即执行该处置提案？',
+    content: `${actionSummary(item)}${item.question ? `\n触发问题：${item.question}` : ''}`,
+    okText: '批准并执行',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: () => decide(item, true),
+  })
+}
+
 async function decide(item, approved) {
   actionKey.value = `${item.id}-${approved ? 'approve' : 'reject'}`
   try {
@@ -243,7 +255,7 @@ onMounted(load)
             size="small"
             type="primary"
             :loading="actionKey === `${item.id}-approve`"
-            @click="decide(item, true)"
+            @click="confirmApprove(item)"
           >
             <template #icon><CheckOutlined /></template>
             批准执行

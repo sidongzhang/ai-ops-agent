@@ -108,6 +108,10 @@ backups/20261017-160623/
 | 凭据加密 | dev 无密钥时静默明文落库 | 启动时打印告警（生产已直接拒绝启动） |
 | 归档附件下载 | token 永久有效、不校验系统 | `ARTIFACT_TTL_HOURS`（默认 168h）+ `system_id` 绑定 + `no-store`；无元数据 fail-closed |
 | `collector/exec` | 只校验登录，viewer 也能下发 SQL/Redis/Kafka 命令 | 要求 owner/operator，viewer 返回 403 |
+| 登录接口 | 无限次尝试（可在线爆破） | 按账号 5 次 / 5 分钟 → 429 + `Retry-After`；成功登录清零 |
+| CORS | `allow_origins=*` + `allow_credentials=True` | 默认不带凭证；配置 `CORS_ORIGINS` 后收敛白名单 |
+| 响应头 | 无 | Caddy 统一加 `nosniff` / `X-Frame-Options: DENY` / `no-referrer` / `Permissions-Policy`，移除 `Server` |
+| 审批执行 | 「批准执行」裸点击即下发生产动作 | 前端二次确认（危险操作样式），展示动作与触发问题 |
 
 ## 6. 平台自身指标
 

@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
+    # 登录失败限流（按账号，滑动窗口）。多 worker 时额度按 worker 数放大。
+    login_max_failures: int = 5
+    login_window_seconds: int = 300
+    # CORS 允许来源（逗号分隔）。留空 = *（且不携带凭证）；填了才启用 credentials。
+    cors_origins: str = ""
 
     # Agent 模型（OpenAI 兼容）。推荐新配置：LLM_MODE=api/local。
     pi_price_profile: str = ""
