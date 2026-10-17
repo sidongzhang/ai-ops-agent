@@ -5,9 +5,9 @@ from app.services.diagnostics import artifacts as art
 
 def test_save_and_find(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "diagnosis_artifact_dir", str(tmp_path))
-    token = art.save_artifact("a_loc.fits", b"hello-bytes")
+    token = art.save_artifact("a_loc.fits", b"hello-bytes", org_id=1, system_id=2)
     assert len(token) == 32
-    found = art.find_artifact(token)
+    found = art.find_artifact(token, system_id=2)
     assert found is not None
     path, name = found
     assert name == "a_loc.fits"

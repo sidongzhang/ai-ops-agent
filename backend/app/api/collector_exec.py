@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from ..core.database import get_session
-from ..core.deps import get_current_org_id
+from ..core.deps import get_current_org_id, require_operator
 from ..schemas import CollectorExecRequest, CollectorExecResponse
 from ..services.collectors.exec import execute_collector_command
 
@@ -31,7 +31,10 @@ async def collector_exec(
     body: CollectorExecRequest,
     session: Session = Depends(get_session),
     org_id: int = Depends(get_current_org_id),
+    user=Depends(require_operator),
 ):
+    # 这个接口能把只读 SQL / Redis / Kafka 命令下发到客户内网，属于高权柄操作：
+    # 仅登录不够，必须 owner/operator（viewer 只应看结果，不应能主动取证）。
     if body.cmd in ("restart_container", "restart_systemd"):
         raise HTTPException(403, "重启操作必须通过审批工作流执行")
     try:

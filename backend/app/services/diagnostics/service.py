@@ -154,7 +154,7 @@ def _archive_access(session: Session, system, org_id: int):
         if not got:
             return "取回归档文件失败（不可用或超过大小限制）。"
         name, raw = got
-        token = save_artifact(name, raw)
+        token = save_artifact(name, raw, org_id=system.org_id, system_id=system.id)
         base_url = (app_settings.public_base_url or "").rstrip("/")
         url = f"{base_url}/systems/{system.id}/diagnosis-artifacts/{token}"
         return f"已取回文件 {name}（{len(raw)} 字节）。下载链接：{url}"
@@ -196,7 +196,7 @@ def _code_sandbox(system, raw_fetch):
         links = []
         base_url = (app_settings.public_base_url or "").rstrip("/")
         for name, data in (result.get("outputs") or {}).items():
-            token = save_artifact(name, data)
+            token = save_artifact(name, data, org_id=system.org_id, system_id=system.id)
             links.append(f"- {name}（{len(data)} 字节）：{base_url}/systems/{system.id}/diagnosis-artifacts/{token}")
         if links:
             parts.append("生成的产物（可直接给用户下载）：\n" + "\n".join(links))

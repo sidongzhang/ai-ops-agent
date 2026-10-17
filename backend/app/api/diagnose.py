@@ -405,16 +405,21 @@ def update_templates(
 
 @router.get("/{system_id}/diagnosis-artifacts/{token}")
 def download_diagnosis_artifact(system_id: int, token: str):
-    """下载 agent 取回的归档附件（凭不可猜的 token，免登录）。"""
+    """下载 agent 取回的归档附件。
+
+    凭不可猜的 token 访问（能力 URL），但必须与该附件签发时的 system_id 一致，
+    且受 ARTIFACT_TTL_HOURS 约束：过期、跨系统、无元数据一律 404。
+    """
     from fastapi.responses import FileResponse
 
     from ..services.diagnostics.artifacts import find_artifact
 
-    found = find_artifact(token)
+    found = find_artifact(token, system_id=system_id)
     if not found:
         raise HTTPException(404, "附件不存在或已失效")
     path, name = found
-    return FileResponse(path, filename=name, media_type="application/octet-stream")
+    headers = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+    return FileResponse(path, filename=name, media_type="application/octet-stream", headers=headers)
 
 
 @router.get('/{system_id}/diagnosis-reports/{report_id}/events')

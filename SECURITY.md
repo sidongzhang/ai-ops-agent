@@ -106,6 +106,8 @@ backups/20261017-160623/
 | 数据集查询审计 | 审计写失败 → `except: pass` | `log.exception` + `aiops_audit_write_failures_total` |
 | Kafka 兜底 | 兜底失败 → 静默走错误路径 | 记录 warning（含堆栈）后走统一错误路径 |
 | 凭据加密 | dev 无密钥时静默明文落库 | 启动时打印告警（生产已直接拒绝启动） |
+| 归档附件下载 | token 永久有效、不校验系统 | `ARTIFACT_TTL_HOURS`（默认 168h）+ `system_id` 绑定 + `no-store`；无元数据 fail-closed |
+| `collector/exec` | 只校验登录，viewer 也能下发 SQL/Redis/Kafka 命令 | 要求 owner/operator，viewer 返回 403 |
 
 ## 6. 平台自身指标
 

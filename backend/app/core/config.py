@@ -201,6 +201,8 @@ class Settings(BaseSettings):
     # 归档附件回传：下载链接对外基址；附件落盘目录（空=repo_root/.dev-stack/artifacts）
     public_base_url: str = "http://localhost"
     diagnosis_artifact_dir: str = ""
+    # 附件下载 token 的有效期（小时）。能力 URL 必须有边界，过期后 404。
+    artifact_ttl_hours: int = 168
 
     # 代码沙箱用的解释器（空=平台自身 python）。指到装了 numpy/matplotlib 的独立 venv 即可出图。
     sandbox_python: str = ""
