@@ -1,6 +1,7 @@
 # AIOps 运行目录
 
-本仓库保留当前应用、配置、依赖锁文件与运行入口。测试、评测、历史设计文档和一次性验收脚本已移出。
+本仓库包含当前应用、配置、依赖锁文件、运行入口，以及**测试与评测门禁**（`backend/tests`、`evals/`）。
+历史设计文档与一次性验收脚本已移出到 `audit/`。
 
 ## 本机启动
 
@@ -27,6 +28,28 @@
 两份Compose用途不同：根文件管理本地被监控依赖，`deploy/docker-compose.yml`管理平台PostgreSQL、Redis、API、worker、beat和Web。
 
 `backend/migrations/`仍属于启动依赖。不要删除迁移历史链、真实系统知识库或调度状态。
+
+## 测试与评测门禁
+
+```bash
+# 单元/集成测试（约 294 项）
+backend/.venv/bin/python -m pytest backend/tests -q
+
+# 评测数据集校验（不调用模型）
+backend/.venv/bin/python evals/run_eval.py --validate
+
+# 冒烟门禁：mock Agent，不花模型费，CI 每次可跑
+backend/.venv/bin/python evals/run_eval.py --dry-run --gate --thresholds evals/thresholds.smoke.json
+
+# 真实门禁：真实模型 + 真实故障注入（会 stop/start 容器，产生模型费用）
+backend/.venv/bin/python evals/run_eval.py --run --gate --thresholds evals/thresholds.json
+
+# 发布前门禁：再加 LLM 裁判（faithfulness / correctness，额外模型费用）
+backend/.venv/bin/python evals/run_eval.py --run --judge --gate --thresholds evals/thresholds.judge.json
+```
+
+口径说明：`tool_selection_f1` 只作信息指标——`required_tools` 是**最低要求**，
+额外的只读取证是期望行为；门禁看「必要工具覆盖率 recall」+「平均调用上限」。
 
 ## 运行数据与构建
 
