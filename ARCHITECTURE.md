@@ -550,7 +550,7 @@ StateGraph(WorkflowState).add_node("analyze", analyze_node)
 2. **`_sync_index` 在检索路径里同步做 embedding + DB 写**：`search_knowledge_hits` 的第一次调用可能阻塞在 embedding 请求和事务上（有 120s 失败冷却与进程内指纹缓存缓解，但没有异步化）。
 3. **`mcp.py` 在同步工具里 `asyncio.run(...)`，且每次调用起一个 stdio 子进程**（无连接复用）——依赖"线程池里没有运行中的 event loop"这一前提，且开销随调用次数线性增长。
 4. **两套 schema 之间没有集中式契约测试证据**：23 个工具的 LLM 侧 schema 由签名隐式派生，"改签名即改契约"。
-5. **`services/diagnostics/service.py` 1315 行**，`diagnose_system()` 单函数内联了十几个闭包（runbook/topology/changes/archive/sandbox/失败历史），可拆为独立 provider 模块。
+5. ~~`services/diagnostics/service.py` 1315 行~~（**部分完成**）：归档 / 代码沙箱 / 业务数据 / 远程命令 6 个 provider 已抽出到 `services/diagnostics/tool_providers.py`（service.py 降到 ~1150 行）；`diagnose_system()` 内仍有 runbook/topology/changes/失败历史等闭包待拆。
 6. ~~`runner.py` 的降级链逻辑深嵌套~~（**已抽成 `agent/diagnostics/fallback.py`**）：`decide_fallback()` 显式返回 NONE / API_MODEL / TEXT 三种决策，带图不降级、显式选择不换模型、auto 才允许切 API，均有测试覆盖。
 7. **工具类 TTL 配置与 `TOOL_CLASSES` 的新增无编译期约束**——新增工具忘记归类会静默落到 `metrics` 默认值。
 8. **`claims.py` 只覆盖 dataset 合计与健康断言**，其余量化数字只能靠 `evidence_guard` 做"有无取证"级别的粗判。
@@ -567,6 +567,7 @@ StateGraph(WorkflowState).add_node("analyze", analyze_node)
 | 工具具体实现 | `backend/app/agent/diagnostics/tools.py` |
 | 主代理编排 | `backend/app/agent/diagnostics/runner.py` |
 | 平台侧编排/终态/预算 | `backend/app/services/diagnostics/service.py` |
+| 工具 provider（归档/沙箱/业务数据） | `backend/app/services/diagnostics/tool_providers.py` |
 | 取消总线 | `backend/app/services/diagnostics/cancel_bus.py` |
 | 继续（resume） | `backend/app/services/diagnostics/resume.py` |
 | 用量账本 | `backend/app/services/diagnostics/usage.py` |
