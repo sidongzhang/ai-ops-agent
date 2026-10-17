@@ -97,6 +97,34 @@ backups/20261017-160623/
 
 ---
 
-## 5. 还剩的安全项
+## 5. 静默失效已改为显式失败
 
-见 `HEALTH-REPORT.md` 的 P1/P2：平台层 fail-open（沙箱静默降级、connector 静默回退、审计写入被吞）、平台自身指标缺失、前端无 ESLint/CI 构建校验。
+| 位置 | 以前 | 现在 |
+|---|---|---|
+| 代码沙箱 | 配置了镜像但 docker 不可用 → 静默在 API 进程内执行模型代码 | 直接拒绝并返回错误；生产未配镜像同样拒绝 |
+| 连接器工厂 | 未知 `connector` 类型 → 静默回退 `LocalConnector`（拿 127.0.0.1 探活） | 抛 `ValueError` 并列出可用类型，健康检查显示"检查失败: 未知的连接器类型 …" |
+| 数据集查询审计 | 审计写失败 → `except: pass` | `log.exception` + `aiops_audit_write_failures_total` |
+| Kafka 兜底 | 兜底失败 → 静默走错误路径 | 记录 warning（含堆栈）后走统一错误路径 |
+| 凭据加密 | dev 无密钥时静默明文落库 | 启动时打印告警（生产已直接拒绝启动） |
+
+## 6. 平台自身指标
+
+`GET /metrics`（Prometheus 文本格式）暴露控制面自己的失败信号，`prometheus/prometheus.yml`
+已加入 `aiops-control-plane` 抓取任务（容器内经 `host.docker.internal:8000`）。
+
+| 指标 | 含义 | 建议告警 |
+|---|---|---|
+| `aiops_up` | 进程存活 | `up{job="aiops-control-plane"} == 0` |
+| `aiops_db_up` | 数据库连通 | `aiops_db_up == 0` |
+| `aiops_audit_write_failures_total` | 审计写入失败 | `increase(...[10m]) > 0` |
+| `aiops_sandbox_blocked_total` | 沙箱拒绝执行 | `increase(...[10m]) > 0` |
+| `aiops_unknown_connector_total` | 未知连接器类型 | `increase(...[10m]) > 0` |
+
+需要鉴权时设置 `METRICS_TOKEN`，抓取端带 `Authorization: Bearer <token>`。
+
+## 7. 还剩的工程项
+
+- 前端缺 ESLint 配置与锁文件（`.gitignore` 忽略了 `package-lock.json`），CI 只跑后端测试与评测冒烟；
+- `services/diagnostics/service.py` 仍有 1300+ 行，`FallbackPolicy` 未抽；
+- `mcp.py` 每次调用起 stdio 子进程（无连接复用）；
+- 备份产物只落本机，需自行同步到异机/对象存储。

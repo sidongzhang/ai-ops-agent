@@ -70,6 +70,10 @@ scripts/backup.sh
 scripts/backup.sh check
 ```
 
+平台自身指标：`GET /metrics`（Prometheus 文本格式），已加入 `prometheus/prometheus.yml` 的
+`aiops-control-plane` 抓取任务；覆盖 `aiops_db_up`、`aiops_audit_write_failures_total`、
+`aiops_sandbox_blocked_total`、`aiops_unknown_connector_total`。详见 `SECURITY.md`。
+
 ## 运行数据与构建
 
 `.dev-stack/`保存PID、日志、令牌、诊断附件、沙箱环境及运行记录；真实系统知识内容在 `backend/app/agent/diagnostics/knowledge/docs/`。这些数据保留。

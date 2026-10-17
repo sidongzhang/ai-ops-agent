@@ -155,6 +155,10 @@ class Settings(BaseSettings):
     # 凭据字段加密（Fernet AES-128）；空字符串 = dev 模式跳过加密
     encryption_key: str = ""
 
+    # 平台自身 /metrics（Prometheus 抓取）。留空 = 匿名可读（仅建议内网）；
+    # 设置后要求 Authorization: Bearer <token>。
+    metrics_token: str = ""
+
     # Celery 定时巡检
     celery_broker_url: str = "redis://localhost:6380/0"
     celery_result_backend: str = "redis://localhost:6380/1"
