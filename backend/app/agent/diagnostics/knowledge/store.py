@@ -1,11 +1,12 @@
 """
-RAG 知识库 —— pgvector 向量检索（生产实现） + 关键词降级。
+RAG 知识库 —— 向量 + BM25 双路召回，RRF 融合后重排。
 
 架构：
   • 文档事实源仍是磁盘 docs/<system_id>/（md/txt），list_docs / read_doc / runbook 追加不变
   • 索引持久化在 Postgres knowledge_chunks 表（pgvector + HNSW 余弦索引）
   • 按 mtime 指纹检测文档变更，自动全量重建该系统分块（幂等 upsert，单事务）
-  • Embedding API 失败 → 语义检索不可用，自动降级关键词检索（不依赖 embedding/向量库）
+  • 检索：向量（语义）+ BM25（精确词面）→ RRF 融合 → 去重 → rerank → 字符预算
+  • Embedding API 失败时向量路为空，BM25 与关键词兜底仍可用（不依赖 embedding/向量库）
 
 多租户：检索按 system_id 过滤；system_id 归属校验由上游（require_system）保证。
 """
@@ -22,6 +23,8 @@ from sqlalchemy import text
 
 from app.agent.llm import embedding_endpoint
 from app.core.config import settings
+from .bm25 import bm25_hits, invalidate as invalidate_bm25
+from .fusion import rrf_fuse
 from .rerank import rerank_documents
 from ...harness.performance import measured
 
@@ -315,11 +318,20 @@ def get_relevant_context_with_memories(query: str, system_id: str, max_chars: in
 
 
 def search_knowledge_hits(query: str, system_id: str, max_chars: int = MAX_CHARS) -> list[dict]:
-    """检索知识库 → 去重 → 重排 → 按字符预算裁剪。返回 [{name, snippet, score}]。"""
-    hits: list[dict] = []
+    """检索知识库：向量 + BM25 → RRF 融合 → 去重 → 重排 → 按字符预算裁剪。
+
+    返回 [{name, snippet, score, retrievers?}]。
+    两路互补：向量管语义相近，BM25 管端口/错误码/专有名词这类精确信息。
+    embedding 或向量库不可用时，仅 BM25 仍能出结果；两者皆空才走关键词兜底。
+    """
+    vector: list[dict] = []
     if _sync_index(system_id):
-        hits = _vector_hits(query, system_id)
-    if not hits:
+        vector = _vector_hits(query, system_id)
+    keyword = bm25_hits(query, system_id, limit=RERANK_POOL)
+    if vector or keyword:
+        # 候选池放宽到 2×，给 rerank 更多可选项
+        hits = rrf_fuse(vector, keyword, limit=RERANK_POOL * 2)
+    else:
         hits = _keyword_hits(query, system_id)
     hits = _dedupe_hits(hits)
     hits = rerank_documents(query, hits)
@@ -492,9 +504,10 @@ def read_doc(system_id: str, name: str) -> str | None:
 
 
 def invalidate_index(system_id: str) -> None:
-    """文档变更后清除指纹缓存，下次检索时同步重建向量索引。"""
+    """文档变更后清除指纹缓存，下次检索时同步重建向量索引（BM25 缓存一并失效）。"""
     with _lock:
         _fingerprint_cache.pop(system_id, None)
+    invalidate_bm25(system_id)
 
 
 def _keyword_fallback(query: str, system_id: str, max_chars: int) -> str:

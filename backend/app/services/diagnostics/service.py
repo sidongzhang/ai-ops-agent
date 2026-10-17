@@ -10,6 +10,7 @@ from app.agent.runtime.entrypoint import diagnose_with_details
 from app.agent.runtime.contracts import RuntimeCompatibilityError, RuntimeBudgetExceeded, RuntimeExecutionError
 from app.agent.runtime.factory import get_runtime
 from app.agent.diagnostics.skill_router import match_skill
+from app.agent.diagnostics.knowledge.rewrite import rewrite_query
 from app.agent.diagnostics.knowledge.store import get_relevant_context_with_memories as get_relevant_context
 from app.repositories.systems import list_enabled_services_for_system
 from app.services.collectors.exec import select_online_collector
@@ -990,17 +991,7 @@ def diagnose_system(
     from app.agent.harness.request_profile import is_availability_question, AVAILABILITY_STEPS
 
     intent = intent_text or question
-    availability_only = is_availability_question(intent) and not images and not follow_up_report_id and not message_history
-    template = match_skill(intent, _disabled_template_names(system))
-    if availability_only and template and template["name"] == "health_check":
-        template = {**template, "steps": AVAILABILITY_STEPS}
-    else:
-        availability_only = False
-    descriptor = system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
-    # Current availability comes from live probes. Knowledge remains available
-    # through tools; detailed, historical and follow-up requests retain retrieval.
-    knowledge_context = "" if availability_only else get_relevant_context(intent, str(system.id))
-    clock_hint = _clock_hint()
+    # 会话上下文要先于检索构建：多轮追问（"那怎么办"）需要它做 Query Rewrite
     conversation_context = ""
     if follow_up_report_id:
         prev_report = session.get(DiagnosisReport, follow_up_report_id)
@@ -1010,6 +1001,19 @@ def diagnose_system(
                 f"上一轮问题: {(prev_report.question or '')[:300]}\n"
                 f"上一轮结论: {prev_answer}"
             )
+    availability_only = is_availability_question(intent) and not images and not follow_up_report_id and not message_history
+    template = match_skill(intent, _disabled_template_names(system))
+    if availability_only and template and template["name"] == "health_check":
+        template = {**template, "steps": AVAILABILITY_STEPS}
+    else:
+        availability_only = False
+    descriptor = system_to_descriptor(system, list_enabled_services_for_system(session, system.id))
+    # Current availability comes from live probes. Knowledge remains available
+    # through tools; detailed, historical and follow-up requests retain retrieval.
+    # 追问只改写"检索用的 query"，交给模型的原始问题不变。
+    retrieval_query = intent if availability_only else rewrite_query(intent, conversation_context)
+    knowledge_context = "" if availability_only else get_relevant_context(retrieval_query, str(system.id))
+    clock_hint = _clock_hint()
     dataset_query, data_catalog = _business_dataset_query(session, system, org_id, actor_id)
     archive_list, archive_read, archive_fetch, archive_raw = _archive_access(session, system, org_id)
     run_code = _code_sandbox(system, archive_raw)

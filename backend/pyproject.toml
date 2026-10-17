@@ -27,6 +27,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "websockets>=13.0",
     "mcp>=2.0",
+    "jieba>=0.42.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -34,3 +35,8 @@ include = ["app*"]
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
